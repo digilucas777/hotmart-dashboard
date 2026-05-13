@@ -110,7 +110,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
   useEffect(() => { fetchVendas() }, [fetchVendas])
 
-  // Métricas
   const approved = vendas.filter(v => v.status === 'approved')
   const refunded = vendas.filter(v => v.status === 'refunded')
   const pending = vendas.filter(v => v.status === 'pending')
@@ -125,11 +124,22 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     .reduce((s, v) => s + (v.valor ?? 0), 0)
 
   const totalConvertido = totalBRL + totalUSD * exchangeRate
-
   const avgTicket = approved.length > 0 ? totalConvertido / approved.length : 0
   const approvalRate = vendas.length > 0 ? (approved.length / vendas.length) * 100 : 0
 
-  const sum = (arr: Venda[]) => arr.reduce((s, v) => s + (v.valor ?? 0), 0)
+  // Soma respeitando moeda
+  const sumBRL = (arr: Venda[]) =>
+    arr.filter(v => v.moeda === 'BRL').reduce((s, v) => s + (v.valor ?? 0), 0)
+  const sumUSD = (arr: Venda[]) =>
+    arr.filter(v => v.moeda === 'USD').reduce((s, v) => s + (v.valor ?? 0), 0)
+
+  const formatMixed = (arr: Venda[]) => {
+    const brl = sumBRL(arr)
+    const usd = sumUSD(arr)
+    if (brl > 0 && usd > 0) return `${formatBRL(brl)} + ${formatUSD(usd)}`
+    if (usd > 0) return formatUSD(usd)
+    return formatBRL(brl)
+  }
 
   const metrics: MetricConfig[] = [
     {
@@ -137,7 +147,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       icon: DollarSign,
       label: 'Total Convertido (BRL)',
       value: formatBRL(totalConvertido),
-      subValue: `BRL + USD×R$${exchangeRate.toFixed(2)}`,
+      subValue: `Taxa do dia: R$ ${exchangeRate.toFixed(2)}/USD`,
       color: 'indigo',
     },
     {
@@ -169,7 +179,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       icon: RotateCcw,
       label: 'Reembolsos',
       value: String(refunded.length),
-      subValue: refunded.length > 0 ? formatBRL(sum(refunded)) : '—',
+      subValue: refunded.length > 0 ? formatMixed(refunded) : '—',
       color: 'red',
     },
     {
@@ -177,7 +187,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       icon: Clock,
       label: 'Pendentes',
       value: String(pending.length),
-      subValue: pending.length > 0 ? formatBRL(sum(pending)) : '—',
+      subValue: pending.length > 0 ? formatMixed(pending) : '—',
       color: 'yellow',
     },
     {
@@ -185,7 +195,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       icon: AlertTriangle,
       label: 'Cancelados',
       value: String(chargeback.length),
-      subValue: chargeback.length > 0 ? formatBRL(sum(chargeback)) : '—',
+      subValue: chargeback.length > 0 ? formatMixed(chargeback) : '—',
       color: 'orange',
     },
     {

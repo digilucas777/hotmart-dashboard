@@ -16,7 +16,6 @@ export async function POST(req: NextRequest) {
 
     if (!dados) return NextResponse.json({ error: 'Sem dados' }, { status: 400 })
 
-    // Salva produto se não existir
     const hotmart_produto_id = String(dados.product?.id)
     const nome_produto = dados.product?.name
 
@@ -28,7 +27,6 @@ export async function POST(req: NextRequest) {
       console.log('📦 Produto salvo:', hotmart_produto_id, nome_produto)
     }
 
-    // Soma todas as comissões (mesma moeda por payload)
     const comissoes = dados.commissions ?? []
     const valor = comissoes.reduce((acc: number, c: { value: number }) => acc + (c.value ?? 0), 0)
     const moeda = comissoes[0]?.currency_value ?? 'BRL'
@@ -43,6 +41,8 @@ export async function POST(req: NextRequest) {
       valor: parseFloat(valor.toFixed(2)),
       moeda,
       status: mapStatus(evento),
+      pais: dados.buyer?.address?.country ?? null,
+      forma_pagamento: dados.purchase?.payment?.type ?? null,
       data_venda: dados.purchase?.order_date
         ? new Date(dados.purchase.order_date).toISOString()
         : new Date().toISOString(),
