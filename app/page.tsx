@@ -1,226 +1,383 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  FolderOpen,
+  LayoutDashboard,
+  ArrowRight,
+} from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+import type { Projeto } from '@/lib/types'
+import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
+import { Spinner } from '@/components/ui/Spinner'
 
-type Venda = { id: string; produto: string; comprador_nome: string; comprador_email: string; valor: number; status: string; data_venda: string }
-type Produto = { id: string; hotmart_id: string; nome: string }
-type Projeto = { id: string; nome: string; descricao: string }
-
-export default function Home() {
-  const [tela, setTela] = useState<'projetos' | 'dashboard' | 'config'>('projetos')
+export default function ProjectsPage() {
   const [projetos, setProjetos] = useState<Projeto[]>([])
-  const [projetoAtivo, setProjetoAtivo] = useState<Projeto | null>(null)
-  const [produtos, setProdutos] = useState<Produto[]>([])
-  const [produtosSelecionados, setProdutosSelecionados] = useState<string[]>([])
-  const [vendas, setVendas] = useState<Venda[]>([])
-  const [novoNome, setNovoNome] = useState('')
-  const [novaDesc, setNovaDesc] = useState('')
+  const [loading, setLoading] = useState(true)
 
-  useEffect(() => { carregarProjetos() }, [])
+  const [showCreate, setShowCreate] = useState(false)
+  const [createNome, setCreateNome] = useState('')
+  const [createDesc, setCreateDesc] = useState('')
+  const [creating, setCreating] = useState(false)
 
-  async function carregarProjetos() {
-    const { data } = await supabase.from('projetos').select('*').order('data_criacao')
-    setProjetos(data || [])
+  const [editProjeto, setEditProjeto] = useState<Projeto | null>(null)
+  const [editNome, setEditNome] = useState('')
+  const [editDesc, setEditDesc] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  const fetchProjetos = async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('projetos')
+      .select('*')
+      .order('data_criacao', { ascending: false })
+    setProjetos((data ?? []) as Projeto[])
+    setLoading(false)
   }
 
-  async function criarProjeto() {
-    if (!novoNome.trim()) return
-    await supabase.from('projetos').insert({ nome: novoNome, descricao: novaDesc })
-    setNovoNome(''); setNovaDesc('')
-    carregarProjetos()
+  useEffect(() => { fetchProjetos() }, [])
+
+  const handleCreate = async () => {
+    if (!createNome.trim()) return
+    setCreating(true)
+    await supabase.from('projetos').insert({
+      nome: createNome.trim(),
+      descricao: createDesc.trim() || null,
+    })
+    setCreating(false)
+    setShowCreate(false)
+    setCreateNome('')
+    setCreateDesc('')
+    fetchProjetos()
   }
 
-  async function abrirProjeto(projeto: Projeto) {
-    setProjetoAtivo(projeto)
-
-    // Carrega produtos disponíveis
-    const { data: prods } = await supabase.from('produtos').select('*').order('nome')
-    setProdutos(prods || [])
-
-    // Carrega produtos do projeto
-    const { data: pp } = await supabase.from('projeto_produtos').select('produto_id').eq('projeto_id', projeto.id)
-    setProdutosSelecionados(pp?.map(p => p.produto_id) || [])
-
-    // Carrega vendas dos produtos do projeto
-    await carregarVendas(projeto.id)
-    setTela('dashboard')
+  const openEdit = (p: Projeto) => {
+    setEditProjeto(p)
+    setEditNome(p.nome)
+    setEditDesc(p.descricao ?? '')
   }
 
-  async function carregarVendas(projeto_id: string) {
-    const { data: pp } = await supabase.from('projeto_produtos').select('produto_id').eq('projeto_id', projeto_id)
-    const ids = pp?.map(p => p.produto_id) || []
-    if (ids.length === 0) { setVendas([]); return }
-
-    const { data: prods } = await supabase.from('produtos').select('nome').in('id', ids)
-    const nomes = prods?.map(p => p.nome) || []
-
-    const { data: vs } = await supabase.from('vendas').select('*').in('produto', nomes).order('data_venda', { ascending: false })
-    setVendas(vs || [])
+  const handleEdit = async () => {
+    if (!editProjeto || !editNome.trim()) return
+    setSaving(true)
+    await supabase
+      .from('projetos')
+      .update({ nome: editNome.trim(), descricao: editDesc.trim() || null })
+      .eq('id', editProjeto.id)
+    setSaving(false)
+    setEditProjeto(null)
+    fetchProjetos()
   }
 
-  async function salvarProdutosProjeto() {
-    if (!projetoAtivo) return
-    await supabase.from('projeto_produtos').delete().eq('projeto_id', projetoAtivo.id)
-    if (produtosSelecionados.length > 0) {
-      await supabase.from('projeto_produtos').insert(
-        produtosSelecionados.map(pid => ({ projeto_id: projetoAtivo.id, produto_id: pid }))
-      )
-    }
-    await carregarVendas(projetoAtivo.id)
-    setTela('dashboard')
+  const handleDelete = async () => {
+    if (!deleteId) return
+    setDeleting(true)
+    await supabase
+      .from('projeto_produtos')
+      .delete()
+      .eq('projeto_id', deleteId)
+    await supabase.from('projetos').delete().eq('id', deleteId)
+    setDeleting(false)
+    setDeleteId(null)
+    fetchProjetos()
   }
 
-  async function deletarProjeto(id: string) {
-    await supabase.from('projetos').delete().eq('id', id)
-    carregarProjetos()
-  }
-
-  const aprovadas = vendas.filter(v => v.status === 'approved')
-  const reembolsos = vendas.filter(v => v.status === 'refunded')
-  const pendentes = vendas.filter(v => v.status === 'pending')
-  const faturamento = aprovadas.reduce((acc, v) => acc + Number(v.valor), 0)
-  const chartData = [
-    { name: 'Aprovadas', valor: aprovadas.length },
-    { name: 'Reembolsos', valor: reembolsos.length },
-    { name: 'Pendentes', valor: pendentes.length },
-  ]
-
-  // TELA: PROJETOS
-  if (tela === 'projetos') return (
-    <div className="min-h-screen bg-gray-950 text-white p-6">
-      <h1 className="text-2xl font-bold mb-6">📊 Meus Projetos</h1>
-
-      <div className="bg-gray-900 rounded-xl p-4 mb-6">
-        <h2 className="text-lg font-semibold mb-3">Novo Projeto</h2>
-        <input className="w-full bg-gray-800 rounded p-2 mb-2 text-white" placeholder="Nome do projeto" value={novoNome} onChange={e => setNovoNome(e.target.value)} />
-        <input className="w-full bg-gray-800 rounded p-2 mb-3 text-white" placeholder="Descrição (opcional)" value={novaDesc} onChange={e => setNovaDesc(e.target.value)} />
-        <button onClick={criarProjeto} className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded font-semibold">Criar Projeto</button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {projetos.map(p => (
-          <div key={p.id} className="bg-gray-900 rounded-xl p-4 flex flex-col gap-2">
-            <h3 className="font-bold text-lg">{p.nome}</h3>
-            {p.descricao && <p className="text-gray-400 text-sm">{p.descricao}</p>}
-            <div className="flex gap-2 mt-2">
-              <button onClick={() => abrirProjeto(p)} className="flex-1 bg-indigo-600 hover:bg-indigo-700 px-3 py-2 rounded text-sm font-semibold">Abrir</button>
-              <button onClick={() => deletarProjeto(p.id)} className="bg-red-900 hover:bg-red-800 px-3 py-2 rounded text-sm">Deletar</button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-
-  // TELA: CONFIG PRODUTOS
-  if (tela === 'config') return (
-    <div className="min-h-screen bg-gray-950 text-white p-6">
-      <button onClick={() => setTela('dashboard')} className="text-gray-400 hover:text-white mb-4 text-sm">← Voltar</button>
-      <h1 className="text-2xl font-bold mb-2">Produtos — {projetoAtivo?.nome}</h1>
-      <p className="text-gray-400 text-sm mb-6">Selecione os produtos que aparecem neste projeto</p>
-
-      <div className="bg-gray-900 rounded-xl p-4 mb-4 max-h-[60vh] overflow-y-auto">
-        {produtos.length === 0 ? (
-          <p className="text-gray-400">Nenhum produto ainda. Aguarde as primeiras vendas chegarem via webhook.</p>
-        ) : produtos.map(p => (
-          <label key={p.id} className="flex items-center gap-3 p-2 hover:bg-gray-800 rounded cursor-pointer">
-            <input
-              type="checkbox"
-              checked={produtosSelecionados.includes(p.id)}
-              onChange={e => setProdutosSelecionados(prev =>
-                e.target.checked ? [...prev, p.id] : prev.filter(id => id !== p.id)
-              )}
-            />
-            <span className="text-xs text-gray-500 font-mono">{p.hotmart_id}</span>
-            <span>{p.nome}</span>
-          </label>
-        ))}
-      </div>
-
-      <button onClick={salvarProdutosProjeto} className="bg-indigo-600 hover:bg-indigo-700 px-6 py-2 rounded font-semibold">Salvar</button>
-    </div>
-  )
-
-  // TELA: DASHBOARD
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <button onClick={() => setTela('projetos')} className="text-gray-400 hover:text-white text-sm">← Projetos</button>
-          <h1 className="text-2xl font-bold">{projetoAtivo?.nome}</h1>
+    <div className="min-h-screen" style={{ background: '#0b0b14' }}>
+      {/* Header */}
+      <header
+        className="border-b"
+        style={{
+          borderColor: 'rgba(255,255,255,0.07)',
+          background: 'rgba(11,11,20,0.95)',
+        }}
+      >
+        <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between px-6">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20">
+              <LayoutDashboard size={16} className="text-indigo-400" />
+            </div>
+            <span className="text-sm font-bold text-slate-100">
+              Hotmart Dashboard
+            </span>
+          </div>
+          <Button onClick={() => setShowCreate(true)} size="sm">
+            <Plus size={14} />
+            Novo Projeto
+          </Button>
         </div>
-        <button onClick={() => setTela('config')} className="bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded text-sm">⚙️ Produtos</button>
-      </div>
+      </header>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <Card title="Faturamento" value={`R$ ${faturamento.toFixed(2)}`} color="text-green-400" />
-        <Card title="Aprovadas" value={aprovadas.length} color="text-blue-400" />
-        <Card title="Reembolsos" value={reembolsos.length} color="text-red-400" />
-        <Card title="Pendentes" value={pendentes.length} color="text-yellow-400" />
-      </div>
+      <main className="mx-auto max-w-[1400px] px-6 py-10">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-slate-100">Projetos</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Gerencie seus projetos e visualize dados de vendas Hotmart
+          </p>
+        </div>
 
-      <div className="bg-gray-900 rounded-xl p-4 mb-8">
-        <h2 className="text-lg font-semibold mb-4">Resumo de Vendas</h2>
-        <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={chartData}>
-            <XAxis dataKey="name" stroke="#aaa" />
-            <YAxis stroke="#aaa" />
-            <Tooltip />
-            <Bar dataKey="valor" fill="#6366f1" radius={[4,4,0,0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="bg-gray-900 rounded-xl p-4">
-        <h2 className="text-lg font-semibold mb-4">Últimas Vendas</h2>
-        {vendas.length === 0 ? (
-          <p className="text-gray-400">Nenhuma venda ainda. Configure os produtos deste projeto.</p>
+        {loading ? (
+          <div className="flex h-52 items-center justify-center">
+            <Spinner size={28} />
+          </div>
+        ) : projetos.length === 0 ? (
+          <div
+            className="flex h-64 flex-col items-center justify-center rounded-2xl border border-dashed text-center"
+            style={{ borderColor: 'rgba(255,255,255,0.12)' }}
+          >
+            <FolderOpen size={40} className="mb-3 text-slate-700" />
+            <p className="text-sm font-medium text-slate-500">
+              Nenhum projeto criado
+            </p>
+            <p className="mt-1 text-xs text-slate-700">
+              Clique em &ldquo;Novo Projeto&rdquo; para começar
+            </p>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-indigo-500/20 px-4 py-2 text-sm font-medium text-indigo-400 transition-colors hover:bg-indigo-500/30"
+            >
+              <Plus size={14} />
+              Criar primeiro projeto
+            </button>
+          </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-gray-400 border-b border-gray-800">
-                <th className="text-left py-2">Produto</th>
-                <th className="text-left py-2">Comprador</th>
-                <th className="text-left py-2">Valor</th>
-                <th className="text-left py-2">Status</th>
-                <th className="text-left py-2">Data</th>
-              </tr>
-            </thead>
-            <tbody>
-              {vendas.map(v => (
-                <tr key={v.id} className="border-b border-gray-800 hover:bg-gray-800">
-                  <td className="py-2">{v.produto}</td>
-                  <td className="py-2">{v.comprador_nome}</td>
-                  <td className="py-2 text-green-400">R$ {Number(v.valor).toFixed(2)}</td>
-                  <td className="py-2">
-                    <span className={`px-2 py-1 rounded text-xs font-bold ${
-                      v.status === 'approved' ? 'bg-green-900 text-green-300' :
-                      v.status === 'refunded' ? 'bg-red-900 text-red-300' :
-                      'bg-yellow-900 text-yellow-300'
-                    }`}>{v.status}</span>
-                  </td>
-                  <td className="py-2 text-gray-400">{new Date(v.data_venda).toLocaleDateString('pt-BR')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {projetos.map(p => (
+              <ProjectCard
+                key={p.id}
+                projeto={p}
+                onEdit={() => openEdit(p)}
+                onDelete={() => setDeleteId(p.id)}
+              />
+            ))}
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex min-h-[160px] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed text-slate-600 transition-all hover:border-indigo-500/40 hover:text-indigo-400"
+              style={{ borderColor: 'rgba(255,255,255,0.1)' }}
+            >
+              <Plus size={24} />
+              <span className="text-sm font-medium">Novo Projeto</span>
+            </button>
+          </div>
         )}
-      </div>
+      </main>
+
+      {/* Create Modal */}
+      <Modal
+        open={showCreate}
+        onClose={() => {
+          setShowCreate(false)
+          setCreateNome('')
+          setCreateDesc('')
+        }}
+        title="Novo Projeto"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">
+              Nome *
+            </label>
+            <input
+              autoFocus
+              type="text"
+              placeholder="Ex: Produto Principal"
+              value={createNome}
+              onChange={e => setCreateNome(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleCreate()}
+              className="w-full rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 outline-none ring-1 ring-white/10 focus:ring-indigo-500/60"
+              style={{ background: '#111120' }}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">
+              Descrição
+            </label>
+            <textarea
+              placeholder="Descrição opcional..."
+              value={createDesc}
+              onChange={e => setCreateDesc(e.target.value)}
+              rows={3}
+              className="w-full resize-none rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 outline-none ring-1 ring-white/10 focus:ring-indigo-500/60"
+              style={{ background: '#111120' }}
+            />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button
+              variant="ghost"
+              className="flex-1"
+              onClick={() => {
+                setShowCreate(false)
+                setCreateNome('')
+                setCreateDesc('')
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={handleCreate}
+              disabled={!createNome.trim() || creating}
+            >
+              {creating && <Spinner size={14} />}
+              Criar Projeto
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit Modal */}
+      <Modal
+        open={!!editProjeto}
+        onClose={() => setEditProjeto(null)}
+        title="Editar Projeto"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">
+              Nome *
+            </label>
+            <input
+              autoFocus
+              type="text"
+              value={editNome}
+              onChange={e => setEditNome(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleEdit()}
+              className="w-full rounded-xl px-4 py-2.5 text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-indigo-500/60"
+              style={{ background: '#111120' }}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">
+              Descrição
+            </label>
+            <textarea
+              value={editDesc}
+              onChange={e => setEditDesc(e.target.value)}
+              rows={3}
+              className="w-full resize-none rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 outline-none ring-1 ring-white/10 focus:ring-indigo-500/60"
+              style={{ background: '#111120' }}
+            />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button
+              variant="ghost"
+              className="flex-1"
+              onClick={() => setEditProjeto(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={handleEdit}
+              disabled={!editNome.trim() || saving}
+            >
+              {saving && <Spinner size={14} />}
+              Salvar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Modal */}
+      <Modal
+        open={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        title="Excluir Projeto"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-400">
+            Tem certeza que deseja excluir este projeto? Os dados de vendas e
+            produtos não serão afetados.
+          </p>
+          <div className="flex gap-2 pt-1">
+            <Button
+              variant="ghost"
+              className="flex-1"
+              onClick={() => setDeleteId(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="danger"
+              className="flex-1"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting && <Spinner size={14} />}
+              Excluir
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
 
-function Card({ title, value, color }: { title: string; value: any; color: string }) {
+function ProjectCard({
+  projeto,
+  onEdit,
+  onDelete,
+}: {
+  projeto: Projeto
+  onEdit: () => void
+  onDelete: () => void
+}) {
   return (
-    <div className="bg-gray-900 rounded-xl p-4">
-      <p className="text-gray-400 text-sm">{title}</p>
-      <p className={`text-2xl font-bold mt-1 ${color}`}>{value}</p>
+    <div
+      className="group relative rounded-2xl border p-5 transition-all duration-200"
+      style={{
+        background: '#191929',
+        borderColor: 'rgba(255,255,255,0.07)',
+      }}
+    >
+      {/* Action buttons */}
+      <div className="absolute right-3 top-3 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <button
+          onClick={onEdit}
+          title="Editar"
+          className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-white/10 hover:text-slate-300"
+        >
+          <Pencil size={12} />
+        </button>
+        <button
+          onClick={onDelete}
+          title="Excluir"
+          className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-red-500/15 hover:text-red-400"
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
+
+      {/* Icon */}
+      <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/15">
+        <LayoutDashboard size={18} className="text-indigo-400" />
+      </div>
+
+      {/* Info */}
+      <h3 className="text-sm font-semibold text-slate-100">{projeto.nome}</h3>
+      {projeto.descricao && (
+        <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+          {projeto.descricao}
+        </p>
+      )}
+
+      {/* Open button */}
+      <Link
+        href={`/dashboard/${projeto.id}`}
+        className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium text-slate-500 transition-all hover:bg-indigo-500/12 hover:text-indigo-400"
+        style={{ background: 'rgba(255,255,255,0.04)' }}
+      >
+        Abrir Dashboard
+        <ArrowRight size={12} />
+      </Link>
     </div>
   )
 }
