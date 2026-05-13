@@ -7,6 +7,7 @@ export type Venda = {
   comprador_nome: string
   comprador_email: string
   valor: number
+  moeda: string
   status: Status
   data_venda: string
   forma_pagamento?: string | null

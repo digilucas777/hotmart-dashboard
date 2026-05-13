@@ -110,27 +110,51 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
   useEffect(() => { fetchVendas() }, [fetchVendas])
 
-  // Metrics computation
+  // Métricas
   const approved = vendas.filter(v => v.status === 'approved')
   const refunded = vendas.filter(v => v.status === 'refunded')
   const pending = vendas.filter(v => v.status === 'pending')
   const chargeback = vendas.filter(v => v.status === 'cancelled')
-  const totalRevenue = approved.reduce((s, v) => s + (v.valor ?? 0), 0)
-  const avgTicket = approved.length > 0 ? totalRevenue / approved.length : 0
-  const approvalRate =
-    vendas.length > 0 ? (approved.length / vendas.length) * 100 : 0
 
-  const sum = (arr: Venda[]) =>
-    arr.reduce((s, v) => s + (v.valor ?? 0), 0)
+  const totalBRL = approved
+    .filter(v => v.moeda === 'BRL')
+    .reduce((s, v) => s + (v.valor ?? 0), 0)
+
+  const totalUSD = approved
+    .filter(v => v.moeda === 'USD')
+    .reduce((s, v) => s + (v.valor ?? 0), 0)
+
+  const totalConvertido = totalBRL + totalUSD * exchangeRate
+
+  const avgTicket = approved.length > 0 ? totalConvertido / approved.length : 0
+  const approvalRate = vendas.length > 0 ? (approved.length / vendas.length) * 100 : 0
+
+  const sum = (arr: Venda[]) => arr.reduce((s, v) => s + (v.valor ?? 0), 0)
 
   const metrics: MetricConfig[] = [
     {
-      id: 'revenue',
+      id: 'revenue_converted',
       icon: DollarSign,
-      label: 'Faturamento Total',
-      value: formatBRL(totalRevenue),
-      subValue: `${formatUSD(totalRevenue / exchangeRate)} · R$ ${exchangeRate.toFixed(2)}/USD`,
+      label: 'Total Convertido (BRL)',
+      value: formatBRL(totalConvertido),
+      subValue: `BRL + USD×R$${exchangeRate.toFixed(2)}`,
       color: 'indigo',
+    },
+    {
+      id: 'revenue_brl',
+      icon: DollarSign,
+      label: 'Faturamento BRL',
+      value: formatBRL(totalBRL),
+      subValue: `${approved.filter(v => v.moeda === 'BRL').length} vendas em BRL`,
+      color: 'green',
+    },
+    {
+      id: 'revenue_usd',
+      icon: DollarSign,
+      label: 'Faturamento USD',
+      value: formatUSD(totalUSD),
+      subValue: `${approved.filter(v => v.moeda === 'USD').length} vendas em USD`,
+      color: 'blue',
     },
     {
       id: 'approved',
@@ -159,7 +183,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     {
       id: 'chargeback',
       icon: AlertTriangle,
-      label: 'Chargeback',
+      label: 'Cancelados',
       value: String(chargeback.length),
       subValue: chargeback.length > 0 ? formatBRL(sum(chargeback)) : '—',
       color: 'orange',
@@ -177,10 +201,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       icon: CreditCard,
       label: 'Ticket Médio',
       value: formatBRL(avgTicket),
-      subValue:
-        approved.length > 0
-          ? `${approved.length} vendas aprovadas`
-          : 'Sem vendas aprovadas',
+      subValue: approved.length > 0 ? `${approved.length} vendas aprovadas` : 'Sem vendas aprovadas',
       color: 'purple',
     },
   ]
@@ -188,35 +209,24 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const chartData = buildChartData(vendas, period)
   const pieData = buildPieData(vendas)
 
-  // Products modal
   const openProductsModal = async () => {
-    const { data: all } = await supabase
-      .from('produtos')
-      .select('*')
-      .order('nome')
+    const { data: all } = await supabase.from('produtos').select('*').order('nome')
     const { data: linked } = await supabase
       .from('projeto_produtos')
       .select('produto_id')
       .eq('projeto_id', projectId)
     setAllProducts((all ?? []) as Produto[])
-    setLinkedIds(
-      (linked ?? []).map((r: { produto_id: string }) => r.produto_id),
-    )
+    setLinkedIds((linked ?? []).map((r: { produto_id: string }) => r.produto_id))
     setShowProducts(true)
   }
 
   const saveProducts = async () => {
     setSavingProducts(true)
-    await supabase
-      .from('projeto_produtos')
-      .delete()
-      .eq('projeto_id', projectId)
+    await supabase.from('projeto_produtos').delete().eq('projeto_id', projectId)
     if (linkedIds.length > 0) {
       await supabase
         .from('projeto_produtos')
-        .insert(
-          linkedIds.map(pid => ({ projeto_id: projectId, produto_id: pid })),
-        )
+        .insert(linkedIds.map(pid => ({ projeto_id: projectId, produto_id: pid })))
     }
     setSavingProducts(false)
     setShowProducts(false)
@@ -225,7 +235,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
   return (
     <div className="min-h-screen" style={{ background: '#0b0b14' }}>
-      {/* Sticky header */}
       <header
         className="sticky top-0 z-40 border-b"
         style={{
@@ -242,10 +251,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             <ArrowLeft size={15} />
             Projetos
           </Link>
-          <div
-            className="h-4 w-px"
-            style={{ background: 'rgba(255,255,255,0.1)' }}
-          />
+          <div className="h-4 w-px" style={{ background: 'rgba(255,255,255,0.1)' }} />
           <h1 className="truncate text-sm font-semibold text-slate-200">
             {projeto?.nome ?? '...'}
           </h1>
@@ -255,10 +261,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               title="Atualizar"
               className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-300"
             >
-              <RefreshCw
-                size={15}
-                className={loading ? 'animate-spin' : ''}
-              />
+              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
             </button>
             <Button variant="outline" size="sm" onClick={openProductsModal}>
               <Settings size={13} />
@@ -269,7 +272,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       </header>
 
       <main className="mx-auto max-w-[1400px] px-6 py-8">
-        {/* Period filter */}
         <div className="mb-8">
           <PeriodFilter value={period} onChange={setPeriod} />
         </div>
@@ -285,8 +287,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 className="mb-6 rounded-2xl border border-dashed px-6 py-5 text-center text-sm text-slate-600"
                 style={{ borderColor: 'rgba(255,255,255,0.1)' }}
               >
-                Nenhuma venda encontrada no período. Configure os produtos
-                clicando em{' '}
+                Nenhuma venda encontrada no período. Configure os produtos clicando em{' '}
                 <button
                   onClick={openProductsModal}
                   className="text-indigo-400 underline underline-offset-2 hover:text-indigo-300"
@@ -297,12 +298,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               </div>
             )}
 
-            {/* Metrics grid */}
             <div className="mb-8">
               <DraggableMetrics metrics={metrics} />
             </div>
 
-            {/* Charts */}
             <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
               <div className="lg:col-span-2">
                 <SalesLineChart data={chartData} />
@@ -310,13 +309,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               <PaymentPieChart data={pieData} />
             </div>
 
-            {/* Sales table */}
             <SalesTable vendas={vendas} exchangeRate={exchangeRate} />
           </>
         )}
       </main>
 
-      {/* Products modal */}
       <Modal
         open={showProducts}
         onClose={() => setShowProducts(false)}
@@ -325,8 +322,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-500">
-            Selecione os produtos deste projeto. Somente vendas desses produtos
-            aparecerão no dashboard.
+            Selecione os produtos deste projeto. Somente vendas desses produtos aparecerão no dashboard.
           </p>
           {allProducts.length === 0 ? (
             <p className="py-4 text-center text-sm text-slate-600">
@@ -344,36 +340,24 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                     checked={linkedIds.includes(p.id)}
                     onChange={e =>
                       setLinkedIds(prev =>
-                        e.target.checked
-                          ? [...prev, p.id]
-                          : prev.filter(id => id !== p.id),
+                        e.target.checked ? [...prev, p.id] : prev.filter(id => id !== p.id),
                       )
                     }
                     className="h-4 w-4 rounded accent-indigo-500"
                   />
                   <div>
                     <p className="text-sm text-slate-200">{p.nome}</p>
-                    <p className="font-mono text-xs text-slate-600">
-                      {p.hotmart_id}
-                    </p>
+                    <p className="font-mono text-xs text-slate-600">{p.hotmart_id}</p>
                   </div>
                 </label>
               ))}
             </div>
           )}
           <div className="flex gap-2 pt-2">
-            <Button
-              variant="ghost"
-              className="flex-1"
-              onClick={() => setShowProducts(false)}
-            >
+            <Button variant="ghost" className="flex-1" onClick={() => setShowProducts(false)}>
               Cancelar
             </Button>
-            <Button
-              className="flex-1"
-              onClick={saveProducts}
-              disabled={savingProducts}
-            >
+            <Button className="flex-1" onClick={saveProducts} disabled={savingProducts}>
               {savingProducts && <Spinner size={14} />}
               Salvar
             </Button>
