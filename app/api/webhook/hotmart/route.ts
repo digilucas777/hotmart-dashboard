@@ -1,4 +1,4 @@
- import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
 const supabase = createClient(
@@ -16,9 +16,22 @@ export async function POST(req: NextRequest) {
 
     if (!dados) return NextResponse.json({ error: 'Sem dados' }, { status: 400 })
 
+    // Salva produto se não existir
+    const hotmart_produto_id = String(dados.product?.id)
+    const nome_produto = dados.product?.name
+
+    if (hotmart_produto_id && nome_produto) {
+      await supabase.from('produtos').upsert(
+        { hotmart_id: hotmart_produto_id, nome: nome_produto },
+        { onConflict: 'hotmart_id' }
+      )
+      console.log('📦 Produto salvo:', hotmart_produto_id, nome_produto)
+    }
+
+    // Salva venda
     const venda = {
       hotmart_id: dados.purchase?.transaction,
-      produto: dados.product?.name,
+      produto: nome_produto,
       comprador_nome: dados.buyer?.name,
       comprador_email: dados.buyer?.email,
       valor: dados.purchase?.price?.value,
