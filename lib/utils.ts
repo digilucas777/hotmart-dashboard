@@ -62,7 +62,7 @@ export function statusLabel(status: string): string {
   const map: Record<string, string> = {
     approved: 'Aprovado',
     refunded: 'Reembolsado',
-    cancelled: 'Chargeback',
+    cancelled: 'Cancelado',
     pending: 'Pendente',
   }
   return map[status] ?? status

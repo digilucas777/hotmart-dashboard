@@ -24,7 +24,7 @@ const STATUS_FILTERS = [
   { value: 'approved', label: 'Aprovados' },
   { value: 'pending', label: 'Pendentes' },
   { value: 'refunded', label: 'Reembolsados' },
-  { value: 'cancelled', label: 'Chargeback' },
+  { value: 'cancelled', label: 'Cancelado' },
 ]
 
 const PAGE_SIZE = 25
