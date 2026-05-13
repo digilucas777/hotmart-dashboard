@@ -28,13 +28,20 @@ export async function POST(req: NextRequest) {
       console.log('📦 Produto salvo:', hotmart_produto_id, nome_produto)
     }
 
-    // Salva venda
+    // Soma todas as comissões (mesma moeda por payload)
+    const comissoes = dados.commissions ?? []
+    const valor = comissoes.reduce((acc: number, c: { value: number }) => acc + (c.value ?? 0), 0)
+    const moeda = comissoes[0]?.currency_value ?? 'BRL'
+
+    console.log(`💰 Comissões somadas: ${valor} ${moeda}`)
+
     const venda = {
       hotmart_id: dados.purchase?.transaction,
       produto: nome_produto,
       comprador_nome: dados.buyer?.name,
       comprador_email: dados.buyer?.email,
-      valor: dados.purchase?.price?.value,
+      valor: parseFloat(valor.toFixed(2)),
+      moeda,
       status: mapStatus(evento),
       data_venda: dados.purchase?.order_date
         ? new Date(dados.purchase.order_date).toISOString()
