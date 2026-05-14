@@ -42,6 +42,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [period, setPeriod] = useState<Period>('30d')
   const [exchangeRate, setExchangeRate] = useState(5.85)
   const [loading, setLoading] = useState(true)
+  const [custoTotal, setCustoTotal] = useState(0)
 
   const [widgets, setWidgets] = useState<WidgetConfig[]>([])
   const [loadingWidgets, setLoadingWidgets] = useState(true)
@@ -130,6 +131,19 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   }, [projectId, period])
 
   useEffect(() => { fetchVendas() }, [fetchVendas])
+
+  const fetchCustos = useCallback(async () => {
+    const { from, to } = getPeriodRange(period)
+    const { data } = await supabase
+      .from('projeto_custos')
+      .select('custo_brl')
+      .eq('projeto_id', projectId)
+      .gte('data', from.toISOString().split('T')[0])
+      .lt('data', to.toISOString().split('T')[0])
+    setCustoTotal((data ?? []).reduce((sum: number, row: { custo_brl: number }) => sum + (row.custo_brl ?? 0), 0))
+  }, [projectId, period])
+
+  useEffect(() => { fetchCustos() }, [fetchCustos])
 
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
@@ -288,6 +302,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                     vendas={vendas}
                     period={period}
                     exchangeRate={exchangeRate}
+                    custoTotal={custoTotal}
                     editMode={editMode}
                     onDelete={deleteWidget}
                   />
