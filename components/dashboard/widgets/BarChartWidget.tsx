@@ -19,6 +19,8 @@ const BAR_COLORS = {
   usd: '#6366f1',
 }
 
+const BAR_COLORS_LIST = [BAR_COLORS.brl, BAR_COLORS.usd]
+
 function CustomTooltip({
   active,
   payload,
@@ -118,7 +120,7 @@ export function BarChartWidget({
           ) : (
             <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={48}>
               {points.map((_, i) => (
-                <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
+                <Cell key={i} fill={BAR_COLORS_LIST[i % BAR_COLORS_LIST.length]} />
               ))}
             </Bar>
           )}
