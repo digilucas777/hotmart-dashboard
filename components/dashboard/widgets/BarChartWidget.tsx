@@ -8,34 +8,52 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
   Cell,
 } from 'recharts'
-import { formatBRL } from '@/lib/utils'
+import { formatBRL, formatUSD } from '@/lib/utils'
 import type { SeriesPoint } from '@/lib/utils'
 
-const BAR_COLORS = [
-  '#6366f1', '#22c55e', '#f59e0b', '#ef4444',
-  '#8b5cf6', '#06b6d4', '#f97316', '#64748b',
-]
+const BAR_COLORS = {
+  brl: '#22c55e',
+  usd: '#6366f1',
+}
 
 function CustomTooltip({
   active,
   payload,
   label,
   isBRL,
+  dualCurrency,
 }: {
   active?: boolean
-  payload?: { value: number }[]
+  payload?: { value: number; dataKey: string }[]
   label?: string
   isBRL: boolean
+  dualCurrency?: boolean
 }) {
   if (!active || !payload?.length) return null
   return (
     <div className="rounded-xl border border-white/10 bg-[#0f0f1e] px-3 py-2.5 shadow-xl">
       <p className="mb-1 text-xs text-slate-500">{label}</p>
-      <p className="text-sm font-semibold text-slate-100">
-        {isBRL ? formatBRL(payload[0].value) : payload[0].value.toLocaleString('pt-BR')}
-      </p>
+      {dualCurrency ? (
+        <>
+          {payload.find(p => p.dataKey === 'valueBRL') && (
+            <p className="text-xs font-semibold text-green-400">
+              BRL: {formatBRL(payload.find(p => p.dataKey === 'valueBRL')!.value)}
+            </p>
+          )}
+          {payload.find(p => p.dataKey === 'valueUSD') && (
+            <p className="text-xs font-semibold text-indigo-300">
+              USD: {formatUSD(payload.find(p => p.dataKey === 'valueUSD')!.value)}
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="text-sm font-semibold text-slate-100">
+          {isBRL ? formatBRL(payload[0].value) : payload[0].value.toLocaleString('pt-BR')}
+        </p>
+      )}
     </div>
   )
 }
@@ -44,10 +62,12 @@ export function BarChartWidget({
   title,
   points,
   isBRL,
+  dualCurrency,
 }: {
   title: string
   points: SeriesPoint[]
   isBRL: boolean
+  dualCurrency?: boolean
 }) {
   return (
     <div className="p-5">
@@ -67,18 +87,41 @@ export function BarChartWidget({
             axisLine={false}
             tickLine={false}
             tickFormatter={v =>
-              isBRL
+              isBRL || dualCurrency
                 ? v >= 1000 ? `R$${(v / 1000).toFixed(0)}k` : `R$${v}`
                 : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
             }
             width={55}
           />
-          <Tooltip content={<CustomTooltip isBRL={isBRL} />} />
-          <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={48}>
-            {points.map((_, i) => (
-              <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
-            ))}
-          </Bar>
+          <Tooltip content={<CustomTooltip isBRL={isBRL} dualCurrency={dualCurrency} />} />
+          {dualCurrency ? (
+            <>
+              <Legend
+                formatter={(value) => value === 'valueBRL' ? 'BRL' : 'USD'}
+                wrapperStyle={{ fontSize: 11, color: '#475569' }}
+              />
+              <Bar
+                dataKey="valueBRL"
+                name="valueBRL"
+                fill={BAR_COLORS.brl}
+                radius={[4, 4, 0, 0]}
+                maxBarSize={32}
+              />
+              <Bar
+                dataKey="valueUSD"
+                name="valueUSD"
+                fill={BAR_COLORS.usd}
+                radius={[4, 4, 0, 0]}
+                maxBarSize={32}
+              />
+            </>
+          ) : (
+            <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={48}>
+              {points.map((_, i) => (
+                <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
+              ))}
+            </Bar>
+          )}
         </BarChart>
       </ResponsiveContainer>
     </div>

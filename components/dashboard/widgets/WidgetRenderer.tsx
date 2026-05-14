@@ -91,7 +91,12 @@ export function WidgetRenderer({
         )}
 
         {config.type === 'bar' && data.kind === 'series' && (
-          <BarChartWidget title={config.title} points={data.points} isBRL={isBRL} />
+          <BarChartWidget
+            title={config.title}
+            points={data.points}
+            isBRL={isBRL}
+            dualCurrency={data.dualCurrency}
+          />
         )}
 
         {config.type === 'pie' && data.kind === 'series' && (
