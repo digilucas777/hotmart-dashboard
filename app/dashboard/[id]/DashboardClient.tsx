@@ -4,33 +4,34 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft,
-  TrendingUp,
-  CheckCircle,
-  RotateCcw,
-  Clock,
-  AlertTriangle,
-  DollarSign,
-  CreditCard,
   Settings,
   RefreshCw,
+  Plus,
+  LayoutDashboard,
+  Pencil,
+  Lock,
 } from 'lucide-react'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable'
 import { supabase } from '@/lib/supabase'
-import {
-  getPeriodRange,
-  buildChartData,
-  buildPieData,
-  formatBRL,
-  formatUSD,
-} from '@/lib/utils'
-import type { Venda, Projeto, Produto, Period } from '@/lib/types'
+import { getPeriodRange } from '@/lib/utils'
+import type { Venda, Projeto, Produto, Period, WidgetConfig } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
-import {
-  DraggableMetrics,
-  type MetricConfig,
-} from '@/components/dashboard/DraggableMetrics'
-import { SalesLineChart } from '@/components/dashboard/SalesLineChart'
-import { PaymentPieChart } from '@/components/dashboard/PaymentPieChart'
-import { SalesTable } from '@/components/dashboard/SalesTable'
+import { AddWidgetModal } from '@/components/dashboard/AddWidgetModal'
+import { WidgetRenderer } from '@/components/dashboard/widgets/WidgetRenderer'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -42,10 +43,20 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [exchangeRate, setExchangeRate] = useState(5.85)
   const [loading, setLoading] = useState(true)
 
+  const [widgets, setWidgets] = useState<WidgetConfig[]>([])
+  const [loadingWidgets, setLoadingWidgets] = useState(true)
+  const [editMode, setEditMode] = useState(false)
+  const [showAddWidget, setShowAddWidget] = useState(false)
+
   const [showProducts, setShowProducts] = useState(false)
   const [allProducts, setAllProducts] = useState<Produto[]>([])
   const [linkedIds, setLinkedIds] = useState<string[]>([])
   const [savingProducts, setSavingProducts] = useState(false)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
 
   useEffect(() => {
     fetch('/api/exchange-rate')
@@ -63,6 +74,18 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       .then(({ data }) => { if (data) setProjeto(data as Projeto) })
   }, [projectId])
 
+  useEffect(() => {
+    supabase
+      .from('dashboard_widgets')
+      .select('*')
+      .eq('projeto_id', projectId)
+      .order('position')
+      .then(({ data }) => {
+        setWidgets((data ?? []) as WidgetConfig[])
+        setLoadingWidgets(false)
+      })
+  }, [projectId])
+
   const fetchVendas = useCallback(async () => {
     setLoading(true)
     try {
@@ -71,9 +94,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         .select('produto_id')
         .eq('projeto_id', projectId)
 
-      const produtoIds = (pp ?? []).map(
-        (r: { produto_id: string }) => r.produto_id,
-      )
+      const produtoIds = (pp ?? []).map((r: { produto_id: string }) => r.produto_id)
 
       if (produtoIds.length === 0) {
         setVendas([])
@@ -110,114 +131,42 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
   useEffect(() => { fetchVendas() }, [fetchVendas])
 
-  const approved = vendas.filter(v => v.status === 'approved')
-  const refunded = vendas.filter(v => v.status === 'refunded')
-  const pending = vendas.filter(v => v.status === 'pending')
-  const chargeback = vendas.filter(v => v.status === 'cancelled')
+  const handleDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const { active, over } = event
+      if (!over || active.id === over.id) return
 
-  const totalBRL = approved
-    .filter(v => v.moeda === 'BRL')
-    .reduce((s, v) => s + (v.valor ?? 0), 0)
+      setWidgets(prev => {
+        const oldIdx = prev.findIndex(w => w.id === active.id)
+        const newIdx = prev.findIndex(w => w.id === over.id)
+        const reordered = arrayMove(prev, oldIdx, newIdx).map((w, i) => ({ ...w, position: i }))
 
-  const totalUSD = approved
-    .filter(v => v.moeda === 'USD')
-    .reduce((s, v) => s + (v.valor ?? 0), 0)
+        Promise.all(
+          reordered.map(w =>
+            supabase.from('dashboard_widgets').update({ position: w.position }).eq('id', w.id),
+          ),
+        ).catch(() => {})
 
-  const totalConvertido = totalBRL + totalUSD * exchangeRate
-  const avgTicket = approved.length > 0 ? totalConvertido / approved.length : 0
-  const approvalRate = vendas.length > 0 ? (approved.length / vendas.length) * 100 : 0
+        return reordered
+      })
+    },
+    [],
+  )
 
-  // Soma respeitando moeda
-  const sumBRL = (arr: Venda[]) =>
-    arr.filter(v => v.moeda === 'BRL').reduce((s, v) => s + (v.valor ?? 0), 0)
-  const sumUSD = (arr: Venda[]) =>
-    arr.filter(v => v.moeda === 'USD').reduce((s, v) => s + (v.valor ?? 0), 0)
-
-  const formatMixed = (arr: Venda[]) => {
-    const brl = sumBRL(arr)
-    const usd = sumUSD(arr)
-    if (brl > 0 && usd > 0) return `${formatBRL(brl)} + ${formatUSD(usd)}`
-    if (usd > 0) return formatUSD(usd)
-    return formatBRL(brl)
+  const addWidget = async (config: Omit<WidgetConfig, 'id' | 'projeto_id' | 'position'>) => {
+    const position = widgets.length
+    const { data } = await supabase
+      .from('dashboard_widgets')
+      .insert({ ...config, projeto_id: projectId, position })
+      .select()
+      .single()
+    if (data) setWidgets(prev => [...prev, data as WidgetConfig])
   }
 
-  const metrics: MetricConfig[] = [
-    {
-      id: 'revenue_converted',
-      icon: DollarSign,
-      label: 'Total Convertido (BRL)',
-      value: formatBRL(totalConvertido),
-      subValue: `Taxa do dia: R$ ${exchangeRate.toFixed(2)}/USD`,
-      color: 'indigo',
-    },
-    {
-      id: 'revenue_brl',
-      icon: DollarSign,
-      label: 'Faturamento BRL',
-      value: formatBRL(totalBRL),
-      subValue: `${approved.filter(v => v.moeda === 'BRL').length} vendas em BRL`,
-      color: 'green',
-    },
-    {
-      id: 'revenue_usd',
-      icon: DollarSign,
-      label: 'Faturamento USD',
-      value: formatUSD(totalUSD),
-      subValue: `${approved.filter(v => v.moeda === 'USD').length} vendas em USD`,
-      color: 'blue',
-    },
-    {
-      id: 'approved',
-      icon: CheckCircle,
-      label: 'Aprovadas',
-      value: String(approved.length),
-      subValue: `${approvalRate.toFixed(1)}% de aprovação`,
-      color: 'green',
-    },
-    {
-      id: 'refunded',
-      icon: RotateCcw,
-      label: 'Reembolsos',
-      value: String(refunded.length),
-      subValue: refunded.length > 0 ? formatMixed(refunded) : '—',
-      color: 'red',
-    },
-    {
-      id: 'pending',
-      icon: Clock,
-      label: 'Pendentes',
-      value: String(pending.length),
-      subValue: pending.length > 0 ? formatMixed(pending) : '—',
-      color: 'yellow',
-    },
-    {
-      id: 'chargeback',
-      icon: AlertTriangle,
-      label: 'Cancelados',
-      value: String(chargeback.length),
-      subValue: chargeback.length > 0 ? formatMixed(chargeback) : '—',
-      color: 'orange',
-    },
-    {
-      id: 'approval_rate',
-      icon: TrendingUp,
-      label: 'Taxa de Aprovação',
-      value: `${approvalRate.toFixed(1)}%`,
-      subValue: `${approved.length} de ${vendas.length} vendas`,
-      color: 'blue',
-    },
-    {
-      id: 'ticket',
-      icon: CreditCard,
-      label: 'Ticket Médio',
-      value: formatBRL(avgTicket),
-      subValue: approved.length > 0 ? `${approved.length} vendas aprovadas` : 'Sem vendas aprovadas',
-      color: 'purple',
-    },
-  ]
-
-  const chartData = buildChartData(vendas, period)
-  const pieData = buildPieData(vendas)
+  const deleteWidget = useCallback(async (id: string) => {
+    await supabase.from('dashboard_widgets').delete().eq('id', id)
+    setWidgets(prev => prev.filter(w => w.id !== id))
+  }, [])
 
   const openProductsModal = async () => {
     const { data: all } = await supabase.from('produtos').select('*').order('nome')
@@ -242,6 +191,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setShowProducts(false)
     fetchVendas()
   }
+
+  const isReady = !loading && !loadingWidgets
 
   return (
     <div className="min-h-screen" style={{ background: '#0b0b14' }}>
@@ -273,6 +224,19 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             >
               <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
             </button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditMode(v => !v)}
+              className={editMode ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300' : ''}
+            >
+              {editMode ? <Lock size={13} /> : <Pencil size={13} />}
+              {editMode ? 'Travado' : 'Editar layout'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowAddWidget(true)}>
+              <Plus size={13} />
+              Widget
+            </Button>
             <Button variant="outline" size="sm" onClick={openProductsModal}>
               <Settings size={13} />
               Produtos
@@ -286,43 +250,59 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           <PeriodFilter value={period} onChange={setPeriod} />
         </div>
 
-        {loading ? (
+        {!isReady ? (
           <div className="flex h-72 items-center justify-center">
             <Spinner size={32} />
           </div>
+        ) : widgets.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-4 py-24">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5">
+              <LayoutDashboard size={28} className="text-slate-600" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-slate-400">Nenhum widget ainda</p>
+              <p className="mt-1 text-xs text-slate-600">
+                Clique em &quot;+ Widget&quot; para criar seu primeiro gráfico ou card.
+              </p>
+            </div>
+            <Button onClick={() => setShowAddWidget(true)}>
+              <Plus size={14} />
+              Criar primeiro widget
+            </Button>
+          </div>
         ) : (
-          <>
-            {vendas.length === 0 && (
-              <div
-                className="mb-6 rounded-2xl border border-dashed px-6 py-5 text-center text-sm text-slate-600"
-                style={{ borderColor: 'rgba(255,255,255,0.1)' }}
-              >
-                Nenhuma venda encontrada no período. Configure os produtos clicando em{' '}
-                <button
-                  onClick={openProductsModal}
-                  className="text-indigo-400 underline underline-offset-2 hover:text-indigo-300"
-                >
-                  Produtos
-                </button>
-                .
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={widgets.map(w => w.id)}
+              strategy={rectSortingStrategy}
+            >
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                {widgets.map(w => (
+                  <WidgetRenderer
+                    key={w.id}
+                    config={w}
+                    vendas={vendas}
+                    period={period}
+                    exchangeRate={exchangeRate}
+                    editMode={editMode}
+                    onDelete={deleteWidget}
+                  />
+                ))}
               </div>
-            )}
-
-            <div className="mb-8">
-              <DraggableMetrics metrics={metrics} />
-            </div>
-
-            <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <div className="lg:col-span-2">
-                <SalesLineChart data={chartData} />
-              </div>
-              <PaymentPieChart data={pieData} />
-            </div>
-
-            <SalesTable vendas={vendas} exchangeRate={exchangeRate} />
-          </>
+            </SortableContext>
+          </DndContext>
         )}
       </main>
+
+      <AddWidgetModal
+        open={showAddWidget}
+        onClose={() => setShowAddWidget(false)}
+        onAdd={addWidget}
+      />
 
       <Modal
         open={showProducts}

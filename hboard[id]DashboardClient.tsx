@@ -1,0 +1,389 @@
+warning: in the working copy of 'app/dashboard/[id]/DashboardClient.tsx', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/app/dashboard/[id]/DashboardClient.tsx b/app/dashboard/[id]/DashboardClient.tsx[m
+[1mindex 28e08c8..31b87f7 100644[m
+[1m--- a/app/dashboard/[id]/DashboardClient.tsx[m
+[1m+++ b/app/dashboard/[id]/DashboardClient.tsx[m
+[36m@@ -4,33 +4,34 @@[m [mimport { useState, useEffect, useCallback } from 'react'[m
+ import Link from 'next/link'[m
+ import {[m
+   ArrowLeft,[m
+[31m-  TrendingUp,[m
+[31m-  CheckCircle,[m
+[31m-  RotateCcw,[m
+[31m-  Clock,[m
+[31m-  AlertTriangle,[m
+[31m-  DollarSign,[m
+[31m-  CreditCard,[m
+   Settings,[m
+   RefreshCw,[m
+[32m+[m[32m  Plus,[m
+[32m+[m[32m  LayoutDashboard,[m
+[32m+[m[32m  Pencil,[m
+[32m+[m[32m  Lock,[m
+ } from 'lucide-react'[m
+[31m-import { supabase } from '@/lib/supabase'[m
+ import {[m
+[31m-  getPeriodRange,[m
+[31m-  buildChartData,[m
+[31m-  buildPieData,[m
+[31m-  formatBRL,[m
+[31m-  formatUSD,[m
+[31m-} from '@/lib/utils'[m
+[31m-import type { Venda, Projeto, Produto, Period } from '@/lib/types'[m
+[31m-import { PeriodFilter } from '@/components/dashboard/PeriodFilter'[m
+[32m+[m[32m  DndContext,[m
+[32m+[m[32m  closestCenter,[m
+[32m+[m[32m  KeyboardSensor,[m
+[32m+[m[32m  PointerSensor,[m
+[32m+[m[32m  useSensor,[m
+[32m+[m[32m  useSensors,[m
+[32m+[m[32m  type DragEndEvent,[m
+[32m+[m[32m} from '@dnd-kit/core'[m
+ import {[m
+[31m-  DraggableMetrics,[m
+[31m-  type MetricConfig,[m
+[31m-} from '@/components/dashboard/DraggableMetrics'[m
+[31m-import { SalesLineChart } from '@/components/dashboard/SalesLineChart'[m
+[31m-import { PaymentPieChart } from '@/components/dashboard/PaymentPieChart'[m
+[31m-import { SalesTable } from '@/components/dashboard/SalesTable'[m
+[32m+[m[32m  arrayMove,[m
+[32m+[m[32m  SortableContext,[m
+[32m+[m[32m  sortableKeyboardCoordinates,[m
+[32m+[m[32m  rectSortingStrategy,[m
+[32m+[m[32m} from '@dnd-kit/sortable'[m
+[32m+[m[32mimport { supabase } from '@/lib/supabase'[m
+[32m+[m[32mimport { getPeriodRange } from '@/lib/utils'[m
+[32m+[m[32mimport type { Venda, Projeto, Produto, Period, WidgetConfig } from '@/lib/types'[m
+[32m+[m[32mimport { PeriodFilter } from '@/components/dashboard/PeriodFilter'[m
+[32m+[m[32mimport { AddWidgetModal } from '@/components/dashboard/AddWidgetModal'[m
+[32m+[m[32mimport { WidgetRenderer } from '@/components/dashboard/widgets/WidgetRenderer'[m
+ import { Modal } from '@/components/ui/Modal'[m
+ import { Button } from '@/components/ui/Button'[m
+ import { Spinner } from '@/components/ui/Spinner'[m
+[36m@@ -42,11 +43,21 @@[m [mexport function DashboardClient({ projectId }: { projectId: string }) {[m
+   const [exchangeRate, setExchangeRate] = useState(5.85)[m
+   const [loading, setLoading] = useState(true)[m
+ [m
+[32m+[m[32m  const [widgets, setWidgets] = useState<WidgetConfig[]>([])[m
+[32m+[m[32m  const [loadingWidgets, setLoadingWidgets] = useState(true)[m
+[32m+[m[32m  const [editMode, setEditMode] = useState(false)[m
+[32m+[m[32m  const [showAddWidget, setShowAddWidget] = useState(false)[m
+[32m+[m
+   const [showProducts, setShowProducts] = useState(false)[m
+   const [allProducts, setAllProducts] = useState<Produto[]>([])[m
+   const [linkedIds, setLinkedIds] = useState<string[]>([])[m
+   const [savingProducts, setSavingProducts] = useState(false)[m
+ [m
+[32m+[m[32m  const sensors = useSensors([m
+[32m+[m[32m    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),[m
+[32m+[m[32m    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),[m
+[32m+[m[32m  )[m
+[32m+[m
+   useEffect(() => {[m
+     fetch('/api/exchange-rate')[m
+       .then(r => r.json())[m
+[36m@@ -63,6 +74,18 @@[m [mexport function DashboardClient({ projectId }: { projectId: string }) {[m
+       .then(({ data }) => { if (data) setProjeto(data as Projeto) })[m
+   }, [projectId])[m
+ [m
+[32m+[m[32m  useEffect(() => {[m
+[32m+[m[32m    supabase[m
+[32m+[m[32m      .from('dashboard_widgets')[m
+[32m+[m[32m      .select('*')[m
+[32m+[m[32m      .eq('projeto_id', projectId)[m
+[32m+[m[32m      .order('position')[m
+[32m+[m[32m      .then(({ data }) => {[m
+[32m+[m[32m        setWidgets((data ?? []) as WidgetConfig[])[m
+[32m+[m[32m        setLoadingWidgets(false)[m
+[32m+[m[32m      })[m
+[32m+[m[32m  }, [projectId])[m
+[32m+[m
+   const fetchVendas = useCallback(async () => {[m
+     setLoading(true)[m
+     try {[m
+[36m@@ -71,9 +94,7 @@[m [mexport function DashboardClient({ projectId }: { projectId: string }) {[m
+         .select('produto_id')[m
+         .eq('projeto_id', projectId)[m
+ [m
+[31m-      const produtoIds = (pp ?? []).map([m
+[31m-        (r: { produto_id: string }) => r.produto_id,[m
+[31m-      )[m
+[32m+[m[32m      const produtoIds = (pp ?? []).map((r: { produto_id: string }) => r.produto_id)[m
+ [m
+       if (produtoIds.length === 0) {[m
+         setVendas([])[m
+[36m@@ -110,114 +131,42 @@[m [mexport function DashboardClient({ projectId }: { projectId: string }) {[m
+ [m
+   useEffect(() => { fetchVendas() }, [fetchVendas])[m
+ [m
+[31m-  const approved = vendas.filter(v => v.status === 'approved')[m
+[31m-  const refunded = vendas.filter(v => v.status === 'refunded')[m
+[31m-  const pending = vendas.filter(v => v.status === 'pending')[m
+[31m-  const chargeback = vendas.filter(v => v.status === 'cancelled')[m
+[31m-[m
+[31m-  const totalBRL = approved[m
+[31m-    .filter(v => v.moeda === 'BRL')[m
+[31m-    .reduce((s, v) => s + (v.valor ?? 0), 0)[m
+[31m-[m
+[31m-  const totalUSD = approved[m
+[31m-    .filter(v => v.moeda === 'USD')[m
+[31m-    .reduce((s, v) => s + (v.valor ?? 0), 0)[m
+[31m-[m
+[31m-  const totalConvertido = totalBRL + totalUSD * exchangeRate[m
+[31m-  const avgTicket = approved.length > 0 ? totalConvertido / approved.length : 0[m
+[31m-  const approvalRate = vendas.length > 0 ? (approved.length / vendas.length) * 100 : 0[m
+[31m-[m
+[31m-  // Soma respeitando moeda[m
+[31m-  const sumBRL = (arr: Venda[]) =>[m
+[31m-    arr.filter(v => v.moeda === 'BRL').reduce((s, v) => s + (v.valor ?? 0), 0)[m
+[31m-  const sumUSD = (arr: Venda[]) =>[m
+[31m-    arr.filter(v => v.moeda === 'USD').reduce((s, v) => s + (v.valor ?? 0), 0)[m
+[31m-[m
+[31m-  const formatMixed = (arr: Venda[]) => {[m
+[31m-    const brl = sumBRL(arr)[m
+[31m-    const usd = sumUSD(arr)[m
+[31m-    if (brl > 0 && usd > 0) return `${formatBRL(brl)} + ${formatUSD(usd)}`[m
+[31m-    if (usd > 0) return formatUSD(usd)[m
+[31m-    return formatBRL(brl)[m
+[31m-  }[m
+[32m+[m[32m  const handleDragEnd = useCallback([m
+[32m+[m[32m    async (event: DragEndEvent) => {[m
+[32m+[m[32m      const { active, over } = event[m
+[32m+[m[32m      if (!over || active.id === over.id) return[m
+ [m
+[31m-  const metrics: MetricConfig[] = [[m
+[31m-    {[m
+[31m-      id: 'revenue_converted',[m
+[31m-      icon: DollarSign,[m
+[31m-      label: 'Total Convertido (BRL)',[m
+[31m-      value: formatBRL(totalConvertido),[m
+[31m-      subValue: `Taxa do dia: R$ ${exchangeRate.toFixed(2)}/USD`,[m
+[31m-      color: 'indigo',[m
+[31m-    },[m
+[31m-    {[m
+[31m-      id: 'revenue_brl',[m
+[31m-      icon: DollarSign,[m
+[31m-      label: 'Faturamento BRL',[m
+[31m-      value: formatBRL(totalBRL),[m
+[31m-      subValue: `${approved.filter(v => v.moeda === 'BRL').length} vendas em BRL`,[m
+[31m-      color: 'green',[m
+[31m-    },[m
+[31m-    {[m
+[31m-      id: 'revenue_usd',[m
+[31m-      icon: DollarSign,[m
+[31m-      label: 'Faturamento USD',[m
+[31m-      value: formatUSD(totalUSD),[m
+[31m-      subValue: `${approved.filter(v => v.moeda === 'USD').length} vendas em USD`,[m
+[31m-      color: 'blue',[m
+[31m-    },[m
+[31m-    {[m
+[31m-      id: 'approved',[m
+[31m-      icon: CheckCircle,[m
+[31m-      label: 'Aprovadas',[m
+[31m-      value: String(approved.length),[m
+[31m-      subValue: `${approvalRate.toFixed(1)}% de aprovação`,[m
+[31m-      color: 'green',[m
+[31m-    },[m
+[31m-    {[m
+[31m-      id: 'refunded',[m
+[31m-      icon: RotateCcw,[m
+[31m-      label: 'Reembolsos',[m
+[31m-      value: String(refunded.length),[m
+[31m-      subValue: refunded.length > 0 ? formatMixed(refunded) : '—',[m
+[31m-      color: 'red',[m
+[31m-    },[m
+[31m-    {[m
+[31m-      id: 'pending',[m
+[31m-      icon: Clock,[m
+[31m-      label: 'Pendentes',[m
+[31m-      value: String(pending.length),[m
+[31m-      subValue: pending.length > 0 ? formatMixed(pending) : '—',[m
+[31m-      color: 'yellow',[m
+[31m-    },[m
+[31m-    {[m
+[31m-      id: 'chargeback',[m
+[31m-      icon: AlertTriangle,[m
+[31m-      label: 'Cancelados',[m
+[31m-      value: String(chargeback.length),[m
+[31m-      subValue: chargeback.length > 0 ? formatMixed(chargeback) : '—',[m
+[31m-      color: 'orange',[m
+[31m-    },[m
+[31m-    {[m
+[31m-      id: 'approval_rate',[m
+[31m-      icon: TrendingUp,[m
+[31m-      label: 'Taxa de Aprovação',[m
+[31m-      value: `${approvalRate.toFixed(1)}%`,[m
+[31m-      subValue: `${approved.length} de ${vendas.length} vendas`,[m
+[31m-      color: 'blue',[m
+[31m-    },[m
+[31m-    {[m
+[31m-      id: 'ticket',[m
+[31m-      icon: CreditCard,[m
+[31m-      label: 'Ticket Médio',[m
+[31m-      value: formatBRL(avgTicket),[m
+[31m-      subValue: approved.length > 0 ? `${approved.length} vendas aprovadas` : 'Sem vendas aprovadas',[m
+[31m-      color: 'purple',[m
+[32m+[m[32m      setWidgets(prev => {[m
+[32m+[m[32m        const oldIdx = prev.findIndex(w => w.id === active.id)[m
+[32m+[m[32m        const newIdx = prev.findIndex(w => w.id === over.id)[m
+[32m+[m[32m        const reordered = arrayMove(prev, oldIdx, newIdx).map((w, i) => ({ ...w, position: i }))[m
+[32m+[m
+[32m+[m[32m        Promise.all([m
+[32m+[m[32m          reordered.map(w =>[m
+[32m+[m[32m            supabase.from('dashboard_widgets').update({ position: w.position }).eq('id', w.id),[m
+[32m+[m[32m          ),[m
+[32m+[m[32m        ).catch(() => {})[m
+[32m+[m
+[32m+[m[32m        return reordered[m
+[32m+[m[32m      })[m
+     },[m
+[31m-  ][m
+[32m+[m[32m    [],[m
+[32m+[m[32m  )[m
+[32m+[m
+[32m+[m[32m  const addWidget = async (config: Omit<WidgetConfig, 'id' | 'projeto_id' | 'position'>) => {[m
+[32m+[m[32m    const position = widgets.length[m
+[32m+[m[32m    const { data } = await supabase[m
+[32m+[m[32m      .from('dashboard_widgets')[m
+[32m+[m[32m      .insert({ ...config, projeto_id: projectId, position })[m
+[32m+[m[32m      .select()[m
+[32m+[m[32m      .single()[m
+[32m+[m[32m    if (data) setWidgets(prev => [...prev, data as WidgetConfig])[m
+[32m+[m[32m  }[m
+ [m
+[31m-  const chartData = buildChartData(vendas, period)[m
+[31m-  const pieData = buildPieData(vendas)[m
+[32m+[m[32m  const deleteWidget = useCallback(async (id: string) => {[m
+[32m+[m[32m    await supabase.from('dashboard_widgets').delete().eq('id', id)[m
+[32m+[m[32m    setWidgets(prev => prev.filter(w => w.id !== id))[m
+[32m+[m[32m  }, [])[m
+ [m
+   const openProductsModal = async () => {[m
+     const { data: all } = await supabase.from('produtos').select('*').order('nome')[m
+[36m@@ -243,6 +192,8 @@[m [mexport function DashboardClient({ projectId }: { projectId: string }) {[m
+     fetchVendas()[m
+   }[m
+ [m
+[32m+[m[32m  const isReady = !loading && !loadingWidgets[m
+[32m+[m
+   return ([m
+     <div className="min-h-screen" style={{ background: '#0b0b14' }}>[m
+       <header[m
+[36m@@ -273,6 +224,19 @@[m [mexport function DashboardClient({ projectId }: { projectId: string }) {[m
+             >[m
+               <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />[m
+             </button>[m
+[32m+[m[32m            <Button[m
+[32m+[m[32m              variant="outline"[m
+[32m+[m[32m              size="sm"[m
+[32m+[m[32m              onClick={() => setEditMode(v => !v)}[m
+[32m+[m[32m              className={editMode ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300' : ''}[m
+[32m+[m[32m            >[m
+[32m+[m[32m              {editMode ? <Lock size={13} /> : <Pencil size={13} />}[m
+[32m+[m[32m              {editMode ? 'Travado' : 'Editar layout'}[m
+[32m+[m[32m            </Button>[m
+[32m+[m[32m            <Button variant="outline" size="sm" onClick={() => setShowAddWidget(true)}>[m
+[32m+[m[32m              <Plus size={13} />[m
+[32m+[m[32m              Widget[m
+[32m+[m[32m            </Button>[m
+             <Button variant="outline" size="sm" onClick={openProductsModal}>[m
+               <Settings size={13} />[m
+               Produtos[m
+[36m@@ -286,44 +250,60 @@[m [mexport function DashboardClient({ projectId }: { projectId: string }) {[m
+           <PeriodFilter value={period} onChange={setPeriod} />[m
+         </div>[m
+ [m
+[31m-        {loading ? ([m
+[32m+[m[32m        {!isReady ? ([m
+           <div className="flex h-72 items-center justify-center">[m
+             <Spinner size={32} />[m
+           </div>[m
+[31m-        ) : ([m
+[31m-          <>[m
+[31m-            {vendas.length === 0 && ([m
+[31m-              <div[m
+[31m-                className="mb-6 rounded-2xl border border-dashed px-6 py-5 text-center text-sm text-slate-600"[m
+[31m-                style={{ borderColor: 'rgba(255,255,255,0.1)' }}[m
+[31m-              >[m
+[31m-                Nenhuma venda encontrada no período. Configure os produtos clicando em{' '}[m
+[31m-                <button[m
+[31m-                  onClick={openProductsModal}[m
+[31m-                  className="text-indigo-400 underline underline-offset-2 hover:text-indigo-300"[m
+[31m-                >[m
+[31m-                  Produtos[m
+[31m-                </button>[m
+[31m-                .[m
+[31m-              </div>[m
+[31m-            )}[m
+[31m-[m
+[31m-            <div className="mb-8">[m
+[31m-              <DraggableMetrics metrics={metrics} />[m
+[32m+[m[32m        ) : widgets.length === 0 ? ([m
+[32m+[m[32m          <div className="flex flex-col items-center justify-center gap-4 py-24">[m
+[32m+[m[32m            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5">[m
+[32m+[m[32m              <LayoutDashboard size={28} className="text-slate-600" />[m
+             </div>[m
+[31m-[m
+[31m-            <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-3">[m
+[31m-              <div className="lg:col-span-2">[m
+[31m-                <SalesLineChart data={chartData} />[m
+[31m-              </div>[m
+[31m-              <PaymentPieChart data={pieData} />[m
+[32m+[m[32m            <div className="text-center">[m
+[32m+[m[32m              <p className="text-sm font-medium text-slate-400">Nenhum widget ainda</p>[m
+[32m+[m[32m              <p className="mt-1 text-xs text-slate-600">[m
+[32m+[m[32m                Clique em &quot;+ Widget&quot; para criar seu primeiro gráfico ou card.[m
+[32m+[m[32m              </p>[m
+             </div>[m
+[31m-[m
+[31m-            <SalesTable vendas={vendas} exchangeRate={exchangeRate} />[m
+[31m-          </>[m
+[32m+[m[32m            <Button onClick={() => setShowAddWidget(true)}>[m
+[32m+[m[32m              <Plus size={14} />[m
+[32m+[m[32m              Criar primeiro widget[m
+[32m+[m[32m            </Button>[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m        ) : ([m
+[32m+[m[32m          <DndContext[m
+[32m+[m[32m            sensors={sensors}[m
+[32m+[m[32m            collisionDetection={closestCenter}[m
+[32m+[m[32m            onDragEnd={handleDragEnd}[m
+[32m+[m[32m          >[m
+[32m+[m[32m            <SortableContext[m
+[32m+[m[32m              items={widgets.map(w => w.id)}[m
+[32m+[m[32m              strategy={rectSortingStrategy}[m
+[32m+[m[32m            >[m
+[32m+[m[32m              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">[m
+[32m+[m[32m                {widgets.map(w => ([m
+[32m+[m[32m                  <WidgetRenderer[m
+[32m+[m[32m                    key={w.id}[m
+[32m+[m[32m                    config={w}[m
+[32m+[m[32m                    vendas={vendas}[m
+[32m+[m[32m                    period={period}[m
+[32m+[m[32m                    exchangeRate={exchangeRate}[m
+[32m+[m[32m                    editMode={editMode}[m
+[32m+[m[32m                    onDelete={deleteWidget}[m
+[32m+[m[32m                  />[m
+[32m+[m[32m                ))}[m
+[32m+[m[32m              </div>[m
+[32m+[m[32m            </SortableContext>[m
+[32m+[m[32m          </DndContext>[m
+         )}[m
+       </main>[m
+ [m
+[32m+[m[32m      <AddWidgetModal[m
+[32m+[m[32m        open={showAddWidget}[m
+[32m+[m[32m        onClose={() => setShowAddWidget(false)}[m
+[32m+[m[32m        onAdd={addWidget}[m
+[32m+[m[32m      />[m
+[32m+[m
+       <Modal[m
+         open={showProducts}[m
+         onClose={() => setShowProducts(false)}[m
+[36m@@ -376,4 +356,4 @@[m [mexport function DashboardClient({ projectId }: { projectId: string }) {[m
+       </Modal>[m
+     </div>[m
+   )[m
+[31m-}[m
+\ No newline at end of file[m
+[32m+[m[32m}[m

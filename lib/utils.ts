@@ -1,4 +1,4 @@
-import type { Period, Venda } from './types'
+import type { Period, Venda, WidgetDataSource } from './types'
 
 export function getPeriodRange(period: Period): { from: Date; to: Date } {
   const now = new Date()
@@ -151,4 +151,143 @@ export function buildPieData(vendas: Venda[]): PiePoint[] {
     value,
     color: PIE_COLORS[name] ?? '#64748b',
   }))
+}
+
+// ---------- Widget data computation ----------
+
+export type SeriesPoint = { label: string; value: number }
+
+export type WidgetComputedData =
+  | { kind: 'metric'; value: string; subValue: string }
+  | { kind: 'series'; points: SeriesPoint[] }
+  | { kind: 'table'; vendas: Venda[] }
+
+export function getValueFormat(source: WidgetDataSource): 'brl' | 'count' {
+  const brlSources: WidgetDataSource[] = ['revenue_by_day', 'revenue_by_product']
+  return brlSources.includes(source) ? 'brl' : 'count'
+}
+
+export function computeWidgetData(
+  vendas: Venda[],
+  dataSource: WidgetDataSource,
+  period: Period,
+  exchangeRate: number,
+): WidgetComputedData {
+  const approved = vendas.filter(v => v.status === 'approved')
+  const refunded = vendas.filter(v => v.status === 'refunded')
+  const pending = vendas.filter(v => v.status === 'pending')
+  const cancelled = vendas.filter(v => v.status === 'cancelled')
+
+  const totalBRL = approved.filter(v => v.moeda === 'BRL').reduce((s, v) => s + (v.valor ?? 0), 0)
+  const totalUSD = approved.filter(v => v.moeda === 'USD').reduce((s, v) => s + (v.valor ?? 0), 0)
+  const totalConverted = totalBRL + totalUSD * exchangeRate
+  const approvalRate = vendas.length > 0 ? (approved.length / vendas.length) * 100 : 0
+  const avgTicket = approved.length > 0 ? totalConverted / approved.length : 0
+
+  const sumConverted = (arr: Venda[]) =>
+    arr.filter(v => v.moeda === 'BRL').reduce((s, v) => s + (v.valor ?? 0), 0) +
+    arr.filter(v => v.moeda === 'USD').reduce((s, v) => s + (v.valor ?? 0), 0) * exchangeRate
+
+  switch (dataSource) {
+    case 'total_converted':
+      return { kind: 'metric', value: formatBRL(totalConverted), subValue: `Taxa: R$ ${exchangeRate.toFixed(2)}/USD` }
+    case 'total_brl':
+      return { kind: 'metric', value: formatBRL(totalBRL), subValue: `${approved.filter(v => v.moeda === 'BRL').length} vendas em BRL` }
+    case 'total_usd':
+      return { kind: 'metric', value: formatUSD(totalUSD), subValue: `${approved.filter(v => v.moeda === 'USD').length} vendas em USD` }
+    case 'sales_count':
+      return { kind: 'metric', value: String(approved.length), subValue: `${approvalRate.toFixed(1)}% de aprovação` }
+    case 'approval_rate':
+      return { kind: 'metric', value: `${approvalRate.toFixed(1)}%`, subValue: `${approved.length} de ${vendas.length} vendas` }
+    case 'avg_ticket':
+      return { kind: 'metric', value: formatBRL(avgTicket), subValue: approved.length > 0 ? `${approved.length} aprovadas` : 'Sem vendas' }
+    case 'refunds_count':
+      return { kind: 'metric', value: String(refunded.length), subValue: refunded.length > 0 ? formatBRL(sumConverted(refunded)) : '—' }
+    case 'pending_count':
+      return { kind: 'metric', value: String(pending.length), subValue: pending.length > 0 ? formatBRL(sumConverted(pending)) : '—' }
+    case 'cancelled_count':
+      return { kind: 'metric', value: String(cancelled.length), subValue: cancelled.length > 0 ? formatBRL(sumConverted(cancelled)) : '—' }
+
+    case 'revenue_by_day': {
+      const base = buildChartData(vendas, period)
+      return { kind: 'series', points: base.map(p => ({ label: p.label, value: p.valor })) }
+    }
+    case 'sales_by_day': {
+      const base = buildChartData(vendas, period)
+      return { kind: 'series', points: base.map(p => ({ label: p.label, value: p.count })) }
+    }
+    case 'revenue_by_product': {
+      const groups: Record<string, number> = {}
+      approved.forEach(v => {
+        const val = v.moeda === 'USD' ? (v.valor ?? 0) * exchangeRate : (v.valor ?? 0)
+        groups[v.produto] = (groups[v.produto] ?? 0) + val
+      })
+      return {
+        kind: 'series',
+        points: Object.entries(groups)
+          .map(([label, value]) => ({ label, value }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 10),
+      }
+    }
+    case 'count_by_product': {
+      const groups: Record<string, number> = {}
+      approved.forEach(v => { groups[v.produto] = (groups[v.produto] ?? 0) + 1 })
+      return {
+        kind: 'series',
+        points: Object.entries(groups)
+          .map(([label, value]) => ({ label, value }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 10),
+      }
+    }
+    case 'by_payment': {
+      const groups: Record<string, number> = {}
+      approved.forEach(v => {
+        const key = normalizePagamento(v.forma_pagamento)
+        groups[key] = (groups[key] ?? 0) + 1
+      })
+      return {
+        kind: 'series',
+        points: Object.entries(groups)
+          .map(([label, value]) => ({ label, value }))
+          .sort((a, b) => b.value - a.value),
+      }
+    }
+    case 'by_country': {
+      const groups: Record<string, number> = {}
+      approved.forEach(v => {
+        const key = v.pais ?? 'Desconhecido'
+        groups[key] = (groups[key] ?? 0) + 1
+      })
+      return {
+        kind: 'series',
+        points: Object.entries(groups)
+          .map(([label, value]) => ({ label, value }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 10),
+      }
+    }
+    case 'by_status': {
+      const statusMap: Record<string, string> = {
+        approved: 'Aprovado',
+        refunded: 'Reembolsado',
+        cancelled: 'Cancelado',
+        pending: 'Pendente',
+      }
+      const groups: Record<string, number> = {}
+      vendas.forEach(v => {
+        const key = statusMap[v.status] ?? v.status
+        groups[key] = (groups[key] ?? 0) + 1
+      })
+      return {
+        kind: 'series',
+        points: Object.entries(groups)
+          .map(([label, value]) => ({ label, value }))
+          .sort((a, b) => b.value - a.value),
+      }
+    }
+    case 'transactions':
+      return { kind: 'table', vendas }
+  }
 }

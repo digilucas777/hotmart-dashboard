@@ -28,3 +28,36 @@ export type Produto = {
 }
 
 export type Period = 'today' | 'yesterday' | '7d' | '30d' | 'thisMonth' | 'lastMonth'
+
+export type WidgetType = 'metric' | 'line' | 'bar' | 'pie' | 'table'
+
+export type WidgetDataSource =
+  | 'total_converted'
+  | 'total_brl'
+  | 'total_usd'
+  | 'sales_count'
+  | 'approval_rate'
+  | 'avg_ticket'
+  | 'refunds_count'
+  | 'pending_count'
+  | 'cancelled_count'
+  | 'revenue_by_day'
+  | 'sales_by_day'
+  | 'revenue_by_product'
+  | 'count_by_product'
+  | 'by_payment'
+  | 'by_country'
+  | 'by_status'
+  | 'transactions'
+
+export type WidgetWidth = 'full' | 'half'
+
+export interface WidgetConfig {
+  id: string
+  projeto_id: string
+  type: WidgetType
+  data_source: WidgetDataSource
+  title: string
+  width: WidgetWidth
+  position: number
+}
