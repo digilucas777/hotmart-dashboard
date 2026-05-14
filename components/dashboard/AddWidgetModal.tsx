@@ -31,6 +31,10 @@ const METRIC_SOURCES: { value: WidgetDataSource; label: string }[] = [
   { value: 'refunds_count', label: 'Reembolsos' },
   { value: 'pending_count', label: 'Pendentes' },
   { value: 'cancelled_count', label: 'Cancelados' },
+  { value: 'lucro', label: 'Lucro (Receita − Custo Ads)' },
+  { value: 'margem_lucro', label: 'Margem de Lucro (%)' },
+  { value: 'roas', label: 'ROAS (Retorno sobre Ads)' },
+  { value: 'cpa', label: 'CPA (Custo por Aquisição)' },
 ]
 
 const LINE_SOURCES: { value: WidgetDataSource; label: string }[] = [

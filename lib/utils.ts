@@ -150,6 +150,7 @@ export function computeWidgetData(
   dataSource: WidgetDataSource,
   period: Period,
   exchangeRate: number,
+  custoTotal = 0,
 ): WidgetComputedData {
   const approved = vendas.filter(v => v.status === 'approved')
   const refunded = vendas.filter(v => v.status === 'refunded')
@@ -185,6 +186,56 @@ export function computeWidgetData(
       return { kind: 'metric', value: String(pending.length), subValue: pending.length > 0 ? formatBRL(sumConverted(pending)) : '—' }
     case 'cancelled_count':
       return { kind: 'metric', value: String(cancelled.length), subValue: cancelled.length > 0 ? formatBRL(sumConverted(cancelled)) : '—' }
+
+    case 'lucro': {
+      if (custoTotal <= 0) {
+        return { kind: 'metric', value: formatBRL(totalConverted), subValue: 'Sem custo cadastrado' }
+      }
+      const lucro = totalConverted - custoTotal
+      return {
+        kind: 'metric',
+        value: formatBRL(lucro),
+        subValue: `Receita ${formatBRL(totalConverted)} — Custo ${formatBRL(custoTotal)}`,
+      }
+    }
+    case 'margem_lucro': {
+      if (custoTotal <= 0) {
+        return { kind: 'metric', value: '—', subValue: 'Sem custo cadastrado' }
+      }
+      if (totalConverted <= 0) {
+        return { kind: 'metric', value: '0,0%', subValue: 'Sem receita no período' }
+      }
+      const margem = ((totalConverted - custoTotal) / totalConverted) * 100
+      return {
+        kind: 'metric',
+        value: `${margem.toFixed(1)}%`,
+        subValue: `Lucro ${formatBRL(totalConverted - custoTotal)}`,
+      }
+    }
+    case 'roas': {
+      if (custoTotal <= 0) {
+        return { kind: 'metric', value: '—', subValue: 'Sem custo cadastrado' }
+      }
+      const roas = custoTotal > 0 ? totalConverted / custoTotal : 0
+      return {
+        kind: 'metric',
+        value: `${roas.toFixed(2)}x`,
+        subValue: `R$ ${roas.toFixed(2)} por R$ 1 investido`,
+      }
+    }
+    case 'cpa': {
+      if (custoTotal <= 0) {
+        return { kind: 'metric', value: '—', subValue: 'Sem custo cadastrado' }
+      }
+      if (approved.length === 0) {
+        return { kind: 'metric', value: '—', subValue: 'Sem vendas aprovadas' }
+      }
+      return {
+        kind: 'metric',
+        value: formatBRL(custoTotal / approved.length),
+        subValue: `${approved.length} vendas · custo ${formatBRL(custoTotal)}`,
+      }
+    }
 
     case 'revenue_by_day': {
       const { from, to } = getPeriodRange(period)

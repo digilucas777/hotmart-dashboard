@@ -16,6 +16,7 @@ export function WidgetRenderer({
   vendas,
   period,
   exchangeRate,
+  custoTotal = 0,
   editMode,
   onDelete,
 }: {
@@ -23,13 +24,14 @@ export function WidgetRenderer({
   vendas: Venda[]
   period: Period
   exchangeRate: number
+  custoTotal?: number
   editMode: boolean
   onDelete: (id: string) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: config.id, disabled: !editMode })
 
-  const data = computeWidgetData(vendas, config.data_source, period, exchangeRate)
+  const data = computeWidgetData(vendas, config.data_source, period, exchangeRate, custoTotal)
   const isBRL = getValueFormat(config.data_source) === 'brl'
 
   const style = {

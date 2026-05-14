@@ -49,6 +49,10 @@ export type WidgetDataSource =
   | 'by_country'
   | 'by_status'
   | 'transactions'
+  | 'lucro'
+  | 'margem_lucro'
+  | 'roas'
+  | 'cpa'
 
 export type WidgetWidth = 'full' | 'half'
 
