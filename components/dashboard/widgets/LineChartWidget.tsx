@@ -8,28 +8,44 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
 } from 'recharts'
-import { formatBRL } from '@/lib/utils'
+import { formatBRL, formatUSD } from '@/lib/utils'
 import type { SeriesPoint } from '@/lib/utils'
 
 function CustomTooltip({
   active,
   payload,
   label,
-  isBRL,
+  dualCurrency,
 }: {
   active?: boolean
-  payload?: { value: number }[]
+  payload?: { value: number; dataKey: string }[]
   label?: string
-  isBRL: boolean
+  dualCurrency?: boolean
 }) {
   if (!active || !payload?.length) return null
   return (
     <div className="rounded-xl border border-white/10 bg-[#0f0f1e] px-3 py-2.5 shadow-xl">
-      <p className="mb-1 text-xs text-slate-500">{label}</p>
-      <p className="text-sm font-semibold text-slate-100">
-        {isBRL ? formatBRL(payload[0].value) : payload[0].value.toLocaleString('pt-BR')}
-      </p>
+      <p className="mb-1.5 text-xs text-slate-500">{label}</p>
+      {dualCurrency ? (
+        <>
+          {payload.find(p => p.dataKey === 'valueBRL') && (
+            <p className="text-xs font-semibold text-green-400">
+              BRL: {formatBRL(payload.find(p => p.dataKey === 'valueBRL')!.value)}
+            </p>
+          )}
+          {payload.find(p => p.dataKey === 'valueUSD') && (
+            <p className="text-xs font-semibold text-indigo-400">
+              USD: {formatUSD(payload.find(p => p.dataKey === 'valueUSD')!.value)}
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="text-sm font-semibold text-slate-100">
+          {payload[0].value.toLocaleString('pt-BR')}
+        </p>
+      )}
     </div>
   )
 }
@@ -38,10 +54,12 @@ export function LineChartWidget({
   title,
   points,
   isBRL,
+  dualCurrency,
 }: {
   title: string
   points: SeriesPoint[]
   isBRL: boolean
+  dualCurrency?: boolean
 }) {
   return (
     <div className="p-5">
@@ -61,21 +79,46 @@ export function LineChartWidget({
             axisLine={false}
             tickLine={false}
             tickFormatter={v =>
-              isBRL
+              isBRL || dualCurrency
                 ? v >= 1000 ? `R$${(v / 1000).toFixed(0)}k` : `R$${v}`
                 : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
             }
             width={55}
           />
-          <Tooltip content={<CustomTooltip isBRL={isBRL} />} />
-          <Line
-            type="monotone"
-            dataKey="value"
-            stroke="#6366f1"
-            strokeWidth={2.5}
-            dot={false}
-            activeDot={{ r: 4, fill: '#6366f1', strokeWidth: 0 }}
-          />
+          <Tooltip content={<CustomTooltip dualCurrency={dualCurrency} />} />
+          {dualCurrency ? (
+            <>
+              <Legend
+                formatter={(value) => value === 'valueBRL' ? 'BRL' : 'USD'}
+                wrapperStyle={{ fontSize: 11, color: '#475569' }}
+              />
+              <Line
+                type="monotone"
+                dataKey="valueBRL"
+                stroke="#22c55e"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4, fill: '#22c55e', strokeWidth: 0 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="valueUSD"
+                stroke="#6366f1"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4, fill: '#6366f1', strokeWidth: 0 }}
+              />
+            </>
+          ) : (
+            <Line
+              type="monotone"
+              dataKey="value"
+              stroke="#6366f1"
+              strokeWidth={2.5}
+              dot={false}
+              activeDot={{ r: 4, fill: '#6366f1', strokeWidth: 0 }}
+            />
+          )}
         </LineChart>
       </ResponsiveContainer>
     </div>

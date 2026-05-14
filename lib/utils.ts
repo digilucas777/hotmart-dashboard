@@ -35,26 +35,17 @@ export function getPeriodRange(period: Period): { from: Date; to: Date } {
 }
 
 export function formatBRL(value: number): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value)
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
 }
 
 export function formatUSD(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(value)
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)
 }
 
 export function formatDateTime(iso: string): string {
   return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
+    day: '2-digit', month: '2-digit', year: '2-digit',
+    hour: '2-digit', minute: '2-digit',
   }).format(new Date(iso))
 }
 
@@ -72,13 +63,7 @@ export function normalizePagamento(method?: string | null): string {
   if (!method) return 'Outros'
   const m = method.toLowerCase()
   if (m.includes('pix')) return 'Pix'
-  if (
-    m.includes('credit') ||
-    m.includes('card') ||
-    m.includes('cartao') ||
-    m.includes('cartão') ||
-    m.includes('debit')
-  )
+  if (m.includes('credit') || m.includes('card') || m.includes('cartao') || m.includes('cartão') || m.includes('debit'))
     return 'Cartão'
   if (m.includes('billet') || m.includes('boleto') || m.includes('bank_slip')) return 'Boleto'
   return 'Outros'
@@ -120,10 +105,7 @@ export function buildChartData(vendas: Venda[], period: Period): ChartPoint[] {
     if (d >= from && d < to) {
       const label = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`
       const point = days.find(p => p.label === label)
-      if (point) {
-        point.valor += v.valor
-        point.count += 1
-      }
+      if (point) { point.valor += v.valor; point.count += 1 }
     }
   })
 
@@ -133,10 +115,7 @@ export function buildChartData(vendas: Venda[], period: Period): ChartPoint[] {
 export type PiePoint = { name: string; value: number; color: string }
 
 const PIE_COLORS: Record<string, string> = {
-  Pix: '#22c55e',
-  Cartão: '#6366f1',
-  Boleto: '#f59e0b',
-  Outros: '#64748b',
+  Pix: '#22c55e', Cartão: '#6366f1', Boleto: '#f59e0b', Outros: '#64748b',
 }
 
 export function buildPieData(vendas: Venda[]): PiePoint[] {
@@ -147,19 +126,18 @@ export function buildPieData(vendas: Venda[]): PiePoint[] {
     groups[key] = (groups[key] ?? 0) + 1
   })
   return Object.entries(groups).map(([name, value]) => ({
-    name,
-    value,
-    color: PIE_COLORS[name] ?? '#64748b',
+    name, value, color: PIE_COLORS[name] ?? '#64748b',
   }))
 }
 
-// ---------- Widget data computation ----------
+// ---------- Widget data ----------
 
-export type SeriesPoint = { label: string; value: number }
+// SeriesPoint agora suporta valor único ou dois valores (BRL + USD)
+export type SeriesPoint = { label: string; value: number; valueBRL?: number; valueUSD?: number }
 
 export type WidgetComputedData =
   | { kind: 'metric'; value: string; subValue: string }
-  | { kind: 'series'; points: SeriesPoint[] }
+  | { kind: 'series'; points: SeriesPoint[]; dualCurrency?: boolean }
   | { kind: 'table'; vendas: Venda[] }
 
 export function getValueFormat(source: WidgetDataSource): 'brl' | 'count' {
@@ -209,9 +187,56 @@ export function computeWidgetData(
       return { kind: 'metric', value: String(cancelled.length), subValue: cancelled.length > 0 ? formatBRL(sumConverted(cancelled)) : '—' }
 
     case 'revenue_by_day': {
-      const base = buildChartData(vendas, period)
-      return { kind: 'series', points: base.map(p => ({ label: p.label, value: p.valor })) }
+      const { from, to } = getPeriodRange(period)
+      const isHourly = period === 'today' || period === 'yesterday'
+
+      // Monta buckets com BRL e USD separados
+      const buckets: Record<string, { brl: number; usd: number }> = {}
+
+      if (isHourly) {
+        for (let h = 0; h < 24; h++) {
+          const label = `${h.toString().padStart(2, '0')}h`
+          buckets[label] = { brl: 0, usd: 0 }
+        }
+        approved.forEach(v => {
+          const d = new Date(v.data_venda)
+          if (d >= from && d < to) {
+            const label = `${d.getHours().toString().padStart(2, '0')}h`
+            if (v.moeda === 'BRL') buckets[label].brl += v.valor ?? 0
+            else buckets[label].usd += v.valor ?? 0
+          }
+        })
+      } else {
+        let cursor = new Date(from)
+        while (cursor < to) {
+          const label = `${cursor.getDate().toString().padStart(2, '0')}/${(cursor.getMonth() + 1).toString().padStart(2, '0')}`
+          buckets[label] = { brl: 0, usd: 0 }
+          cursor = new Date(cursor.getTime() + 86_400_000)
+        }
+        approved.forEach(v => {
+          const d = new Date(v.data_venda)
+          if (d >= from && d < to) {
+            const label = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`
+            if (buckets[label]) {
+              if (v.moeda === 'BRL') buckets[label].brl += v.valor ?? 0
+              else buckets[label].usd += v.valor ?? 0
+            }
+          }
+        })
+      }
+
+      return {
+        kind: 'series',
+        dualCurrency: true,
+        points: Object.entries(buckets).map(([label, { brl, usd }]) => ({
+          label,
+          value: brl + usd * exchangeRate, // convertido (fallback)
+          valueBRL: brl,
+          valueUSD: usd,
+        })),
+      }
     }
+
     case 'sales_by_day': {
       const base = buildChartData(vendas, period)
       return { kind: 'series', points: base.map(p => ({ label: p.label, value: p.count })) }
@@ -249,9 +274,7 @@ export function computeWidgetData(
       })
       return {
         kind: 'series',
-        points: Object.entries(groups)
-          .map(([label, value]) => ({ label, value }))
-          .sort((a, b) => b.value - a.value),
+        points: Object.entries(groups).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value),
       }
     }
     case 'by_country': {
@@ -262,18 +285,12 @@ export function computeWidgetData(
       })
       return {
         kind: 'series',
-        points: Object.entries(groups)
-          .map(([label, value]) => ({ label, value }))
-          .sort((a, b) => b.value - a.value)
-          .slice(0, 10),
+        points: Object.entries(groups).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 10),
       }
     }
     case 'by_status': {
       const statusMap: Record<string, string> = {
-        approved: 'Aprovado',
-        refunded: 'Reembolsado',
-        cancelled: 'Cancelado',
-        pending: 'Pendente',
+        approved: 'Aprovado', refunded: 'Reembolsado', cancelled: 'Cancelado', pending: 'Pendente',
       }
       const groups: Record<string, number> = {}
       vendas.forEach(v => {
@@ -282,9 +299,7 @@ export function computeWidgetData(
       })
       return {
         kind: 'series',
-        points: Object.entries(groups)
-          .map(([label, value]) => ({ label, value }))
-          .sort((a, b) => b.value - a.value),
+        points: Object.entries(groups).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value),
       }
     }
     case 'transactions':

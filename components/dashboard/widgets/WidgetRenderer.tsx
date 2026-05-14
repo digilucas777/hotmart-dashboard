@@ -82,7 +82,12 @@ export function WidgetRenderer({
         )}
 
         {config.type === 'line' && data.kind === 'series' && (
-          <LineChartWidget title={config.title} points={data.points} isBRL={isBRL} />
+          <LineChartWidget
+            title={config.title}
+            points={data.points}
+            isBRL={isBRL}
+            dualCurrency={data.dualCurrency}
+          />
         )}
 
         {config.type === 'bar' && data.kind === 'series' && (
