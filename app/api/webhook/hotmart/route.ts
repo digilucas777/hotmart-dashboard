@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
 
     const venda = {
       hotmart_id: dados.purchase?.transaction,
+      hotmart_produto_id: hotmart_produto_id || null,
       produto: nome_produto,
       comprador_nome: dados.buyer?.name,
       comprador_email: dados.buyer?.email,

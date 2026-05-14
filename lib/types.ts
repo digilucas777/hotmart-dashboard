@@ -3,6 +3,7 @@ export type Status = 'approved' | 'refunded' | 'cancelled' | 'pending'
 export type Venda = {
   id: string
   hotmart_id: string
+  hotmart_produto_id?: string | null
   produto: string
   comprador_nome: string
   comprador_email: string

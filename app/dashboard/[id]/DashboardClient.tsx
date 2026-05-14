@@ -39,7 +39,7 @@ import { Spinner } from '@/components/ui/Spinner'
 export function DashboardClient({ projectId }: { projectId: string }) {
   const [projeto, setProjeto] = useState<Projeto | null>(null)
   const [vendas, setVendas] = useState<Venda[]>([])
-  const [period, setPeriod] = useState<Period>('30d')
+  const [period, setPeriod] = useState<Period>('today')
   const [exchangeRate, setExchangeRate] = useState(5.85)
   const [loading, setLoading] = useState(true)
   const [custoTotal, setCustoTotal] = useState(0)
@@ -104,12 +104,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
       const { data: prods } = await supabase
         .from('produtos')
-        .select('nome')
+        .select('hotmart_id')
         .in('id', produtoIds)
 
-      const nomes = (prods ?? []).map((r: { nome: string }) => r.nome)
+      const hotmartIds = (prods ?? []).map((r: { hotmart_id: string }) => r.hotmart_id)
 
-      if (nomes.length === 0) {
+      if (hotmartIds.length === 0) {
         setVendas([])
         return
       }
@@ -119,7 +119,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       const { data } = await supabase
         .from('vendas')
         .select('*')
-        .in('produto', nomes)
+        .in('hotmart_produto_id', hotmartIds)
         .gte('data_venda', from.toISOString())
         .lt('data_venda', to.toISOString())
         .order('data_venda', { ascending: false })

@@ -37,7 +37,7 @@ export function SalesTable({
   exchangeRate: number
 }) {
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('approved')
   const [page, setPage] = useState(1)
 
   const filtered = useMemo(() => {
