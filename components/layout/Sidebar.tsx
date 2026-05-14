@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutGrid,
   ShoppingCart,
@@ -10,7 +10,9 @@ import {
   Plug,
   Settings,
   LayoutDashboard,
+  LogOut,
 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 const NAV_ITEMS = [
   { icon: LayoutGrid, label: 'Dashboards', href: '/' },
@@ -27,7 +29,30 @@ function isNavActive(href: string, pathname: string): boolean {
 
 export function Sidebar() {
   const [expanded, setExpanded] = useState(false)
+  const [companyName, setCompanyName] = useState('')
   const pathname = usePathname()
+  const router = useRouter()
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      supabase
+        .from('configuracoes')
+        .select('nome_empresa')
+        .eq('id', user.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.nome_empresa) setCompanyName(data.nome_empresa as string)
+        })
+    })
+  }, [])
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
+  if (pathname === '/login') return null
 
   return (
     <aside
@@ -53,12 +78,12 @@ export function Sidebar() {
           className="whitespace-nowrap text-sm font-bold text-slate-100"
           style={{ opacity: expanded ? 1 : 0, transition: 'opacity 0.15s ease' }}
         >
-          Hotmart
+          {companyName || 'Hotmart'}
         </span>
       </div>
 
       {/* Nav */}
-      <nav className="flex flex-col gap-0.5 p-2 pt-3">
+      <nav className="flex flex-1 flex-col gap-0.5 p-2 pt-3">
         {NAV_ITEMS.map(item => {
           const active = isNavActive(item.href, pathname)
           const Icon = item.icon
@@ -85,6 +110,23 @@ export function Sidebar() {
           )
         })}
       </nav>
+
+      {/* Logout */}
+      <div className="p-2" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+        <button
+          onClick={handleLogout}
+          title={!expanded ? 'Sair' : undefined}
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-slate-500 transition-colors hover:bg-red-500/10 hover:text-red-400"
+        >
+          <LogOut size={17} className="flex-shrink-0" />
+          <span
+            className="whitespace-nowrap text-sm font-medium"
+            style={{ opacity: expanded ? 1 : 0, transition: 'opacity 0.15s ease' }}
+          >
+            Sair
+          </span>
+        </button>
+      </div>
     </aside>
   )
 }

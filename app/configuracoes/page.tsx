@@ -27,6 +27,7 @@ export default function ConfiguracoesPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
 
   const [nomeEmpresa, setNomeEmpresa] = useState('')
   const [nomeProprietario, setNomeProprietario] = useState('')
@@ -41,27 +42,32 @@ export default function ConfiguracoesPage() {
   } | null>(null)
 
   useEffect(() => {
-    supabase
-      .from('configuracoes')
-      .select('*')
-      .eq('id', 'default')
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) {
-          const config = data as Configuracoes
-          setNomeEmpresa(config.nome_empresa ?? '')
-          setNomeProprietario(config.nome_proprietario ?? '')
-          setEmail(config.email ?? '')
-        }
-        setLoading(false)
-      })
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return setLoading(false)
+      setUserId(user.id)
+      supabase
+        .from('configuracoes')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) {
+            const config = data as Configuracoes
+            setNomeEmpresa(config.nome_empresa ?? '')
+            setNomeProprietario(config.nome_proprietario ?? '')
+            setEmail(config.email ?? '')
+          }
+          setLoading(false)
+        })
+    })
   }, [])
 
   const handleSave = async () => {
+    if (!userId) return
     setSaving(true)
     setSaved(false)
     await supabase.from('configuracoes').upsert({
-      id: 'default',
+      id: userId,
       nome_empresa: nomeEmpresa.trim() || null,
       nome_proprietario: nomeProprietario.trim() || null,
       email: email.trim() || null,
@@ -176,7 +182,7 @@ export default function ConfiguracoesPage() {
                 </div>
 
                 <div className="flex items-center gap-3 pt-1">
-                  <Button onClick={handleSave} disabled={saving} size="sm">
+                  <Button onClick={handleSave} disabled={saving || !userId} size="sm">
                     {saving ? (
                       <Spinner size={14} />
                     ) : saved ? (
