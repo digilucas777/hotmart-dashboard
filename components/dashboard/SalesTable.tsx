@@ -171,10 +171,14 @@ export function SalesTable({
                     {v.pais ?? '—'}
                   </td>
                   <td className="px-5 py-3.5 text-xs font-semibold tabular-nums text-slate-200">
-                    {formatBRL(v.valor ?? 0)}
+                    {v.moeda === 'USD'
+                      ? formatBRL((v.valor ?? 0) * exchangeRate)
+                      : formatBRL(v.valor ?? 0)}
                   </td>
                   <td className="px-5 py-3.5 text-xs tabular-nums text-slate-500">
-                    {formatUSD((v.valor ?? 0) / exchangeRate)}
+                    {v.moeda === 'USD'
+                      ? formatUSD(v.valor ?? 0)
+                      : '—'}
                   </td>
                   <td className="px-5 py-3.5">
                     <Badge variant={STATUS_VARIANT[v.status] ?? 'default'}>
