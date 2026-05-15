@@ -107,23 +107,30 @@ async function fetchNetValue(
 export async function POST(req: NextRequest) {
   console.log('🚀 Handler iniciado')
   try {
+    console.log('📥 [1] Lendo body...')
     const body = await req.json()
-    console.log('📦 Webhook Hotmart recebido:', JSON.stringify(body, null, 2))
+    console.log('📥 [2] Body lido — keys:', Object.keys(body ?? {}))
 
     const evento = body?.event
     const dados = body?.data
+    console.log('📥 [3] evento:', evento, '| dados existe:', !!dados)
 
-    if (!dados) return NextResponse.json({ error: 'Sem dados' }, { status: 400 })
+    if (!dados) {
+      console.warn('⚠️ [3] dados ausente — retornando 400')
+      return NextResponse.json({ error: 'Sem dados' }, { status: 400 })
+    }
 
     const hotmart_produto_id = String(dados.product?.id)
     const nome_produto = dados.product?.name
+    console.log('📥 [4] produto_id:', hotmart_produto_id, '| nome:', nome_produto)
 
     if (hotmart_produto_id && nome_produto) {
+      console.log('📥 [5] Upserting produto...')
       await supabase.from('produtos').upsert(
         { hotmart_id: hotmart_produto_id, nome: nome_produto },
         { onConflict: 'hotmart_id' },
       )
-      console.log('📦 Produto salvo:', hotmart_produto_id, nome_produto)
+      console.log('📦 [5] Produto salvo:', hotmart_produto_id, nome_produto)
     }
 
     // Valor inicial a partir do payload do webhook (fallback)
@@ -132,8 +139,10 @@ export async function POST(req: NextRequest) {
       comissoes.reduce((acc, c) => acc + (c.value ?? 0), 0).toFixed(2),
     )
     const moedaWebhook = comissoes[0]?.currency_value ?? 'BRL'
+    console.log('💵 [6] valor:', valorWebhook, '| moeda:', moedaWebhook)
 
     const transaction: string = dados.purchase?.transaction
+    console.log('💵 [7] transaction:', transaction)
 
     const venda = {
       hotmart_id: transaction,
@@ -150,10 +159,13 @@ export async function POST(req: NextRequest) {
         ? new Date(dados.purchase.order_date).toISOString()
         : new Date().toISOString(),
     }
+    console.log('💾 [8] Objeto venda montado — hotmart_id:', venda.hotmart_id)
 
+    console.log('💾 [9] Upserting venda no Supabase...')
     const { error } = await supabase
       .from('vendas')
       .upsert(venda, { onConflict: 'hotmart_id' })
+    console.log('💾 [10] Upsert concluído — error:', error ? JSON.stringify(error) : 'null')
 
     if (error) {
       console.error('❌ Erro ao salvar venda:', error)
