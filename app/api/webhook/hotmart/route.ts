@@ -11,9 +11,18 @@ const supabase = createClient(
 async function getHotmartToken(): Promise<string | null> {
   const clientId = process.env.HOTMART_CLIENT_ID
   const clientSecret = process.env.HOTMART_CLIENT_SECRET
-  if (!clientId || !clientSecret) return null
+
+  console.log('🔑 [Hotmart] CLIENT_ID exists:', !!clientId)
+  console.log('🔑 [Hotmart] CLIENT_SECRET exists:', !!clientSecret)
+
+  if (!clientId || !clientSecret) {
+    console.warn('⚠️ [Hotmart] Credenciais ausentes — abortando busca de token')
+    return null
+  }
 
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+  console.log('🔑 [Hotmart] Chamando endpoint de token...')
+
   try {
     const res = await fetch('https://api-sec-vlc.hotmart.com/security/oauth/token', {
       method: 'POST',
@@ -23,10 +32,20 @@ async function getHotmartToken(): Promise<string | null> {
       },
       body: 'grant_type=client_credentials',
     })
-    if (!res.ok) return null
-    const data = await res.json() as { access_token?: string }
+
+    console.log('🔑 [Hotmart] Resposta do token — status:', res.status)
+
+    if (!res.ok) {
+      const body = await res.text()
+      console.error('❌ [Hotmart] Falha ao obter token:', res.status, body)
+      return null
+    }
+
+    const data = await res.json() as { access_token?: string; token_type?: string; expires_in?: number }
+    console.log('🔑 [Hotmart] Token obtido — type:', data.token_type, '| expires_in:', data.expires_in)
     return data.access_token ?? null
-  } catch {
+  } catch (err) {
+    console.error('❌ [Hotmart] Exceção ao chamar endpoint de token:', err)
     return null
   }
 }
@@ -41,20 +60,44 @@ async function fetchNetValue(
   token: string,
   transaction: string,
 ): Promise<{ valor: number; moeda: string } | null> {
+  const url = `https://developers.hotmart.com/payments/api/v1/sales/summary?transaction_id=${transaction}`
+  console.log('💰 [Hotmart] Chamando API de vendas — transaction:', transaction)
+  console.log('💰 [Hotmart] URL:', url)
+
   try {
-    const res = await fetch(
-      `https://developers.hotmart.com/payments/api/v1/sales/summary?transaction_id=${transaction}`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    )
-    if (!res.ok) return null
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    console.log('💰 [Hotmart] Resposta da API de vendas — status:', res.status)
+
+    if (!res.ok) {
+      const body = await res.text()
+      console.error('❌ [Hotmart] Falha na API de vendas:', res.status, body)
+      return null
+    }
+
     const data = await res.json() as { items?: { commissions?: HotmartCommission[] }[] }
-    const commissions = data?.items?.[0]?.commissions ?? []
+    const items = data?.items ?? []
+    console.log('💰 [Hotmart] items retornados:', items.length)
+
+    const commissions = items[0]?.commissions ?? []
+    console.log('💰 [Hotmart] commissions brutas:', JSON.stringify(commissions))
+
     const net = commissions.filter(c => c.source !== 'MARKETPLACE')
-    if (net.length === 0) return null
+    console.log('💰 [Hotmart] commissions líquidas (sem MARKETPLACE):', JSON.stringify(net))
+
+    if (net.length === 0) {
+      console.warn('⚠️ [Hotmart] Nenhuma comissão líquida encontrada')
+      return null
+    }
+
     const valor = parseFloat(net.reduce((s, c) => s + (c.value ?? 0), 0).toFixed(2))
     const moeda = net[0].currency_value ?? 'BRL'
+    console.log(`💰 [Hotmart] Valor líquido calculado: ${valor} ${moeda}`)
     return { valor, moeda }
-  } catch {
+  } catch (err) {
+    console.error('❌ [Hotmart] Exceção ao chamar API de vendas:', err)
     return null
   }
 }
@@ -120,24 +163,25 @@ export async function POST(req: NextRequest) {
 
     // Tenta enriquecer com o valor líquido real da API Hotmart
     if (transaction) {
+      console.log('🔄 [Hotmart] Iniciando busca de valor líquido para transaction:', transaction)
       try {
         const token = await getHotmartToken()
         if (token) {
           const net = await fetchNetValue(token, transaction)
           if (net) {
-            await supabase
+            const { error: updateError } = await supabase
               .from('vendas')
               .update({ valor: net.valor, moeda: net.moeda })
               .eq('hotmart_id', transaction)
-            console.log(`💰 Valor líquido atualizado: ${net.valor} ${net.moeda}`)
-          } else {
-            console.warn('⚠️ API Hotmart não retornou comissões líquidas — mantendo valor do webhook')
+            if (updateError) {
+              console.error('❌ [Hotmart] Erro ao atualizar valor líquido:', updateError)
+            } else {
+              console.log(`✅ [Hotmart] Valor líquido salvo: ${net.valor} ${net.moeda}`)
+            }
           }
-        } else {
-          console.warn('⚠️ Token Hotmart não obtido — HOTMART_CLIENT_ID/SECRET configurados?')
         }
       } catch (err) {
-        console.warn('⚠️ Falha ao buscar valor líquido da API Hotmart:', err)
+        console.warn('⚠️ [Hotmart] Falha inesperada ao buscar valor líquido:', err)
       }
     }
 
