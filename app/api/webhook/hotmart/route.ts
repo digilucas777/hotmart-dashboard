@@ -109,11 +109,14 @@ export async function POST(req: NextRequest) {
   try {
     console.log('📥 [1] Lendo body...')
     const body = await req.json()
-    console.log('📥 [2] Body lido — keys:', Object.keys(body ?? {}))
-
     const evento = body?.event
     const dados = body?.data
-    console.log('📥 [3] evento:', evento, '| dados existe:', !!dados)
+    console.log('📦 Webhook recebido:', JSON.stringify({
+      event: evento,
+      transaction: dados?.purchase?.transaction,
+      product: dados?.product?.name,
+      buyer: dados?.buyer?.email,
+    }))
 
     if (!dados) {
       console.warn('⚠️ [3] dados ausente — retornando 400')
