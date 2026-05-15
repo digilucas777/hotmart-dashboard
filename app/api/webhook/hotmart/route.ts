@@ -60,7 +60,7 @@ async function fetchNetValue(
   token: string,
   transaction: string,
 ): Promise<{ valor: number; moeda: string } | null> {
-  const url = `https://developers.hotmart.com/payments/api/v1/sales/summary?transaction_id=${transaction}`
+  const url = `https://developers.hotmart.com/payments/api/v1/sales/summary?transaction=${transaction}`
   console.log('💰 [Hotmart] Chamando API de vendas — transaction:', transaction)
   console.log('💰 [Hotmart] URL:', url)
 
