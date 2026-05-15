@@ -84,18 +84,18 @@ async function fetchNetValue(
     const commissions = items[0]?.commissions ?? []
     console.log('💰 [Hotmart] commissions sources:', commissions.map(c => `${c.source}:${c.value}`).join(', '))
 
-    // Pega apenas a comissão do PRODUTOR — exclui AFFILIATE, COPRODUCER e MARKETPLACE
-    const producer = commissions.filter(c => c.source === 'PRODUCER')
-    console.log('💰 [Hotmart] comissão PRODUCER:', JSON.stringify(producer))
+    // Total recebido = todas as comissões exceto a taxa da Hotmart (MARKETPLACE)
+    const net = commissions.filter(c => c.source !== 'MARKETPLACE')
+    console.log('💰 [Hotmart] comissões (sem MARKETPLACE):', JSON.stringify(net))
 
-    if (producer.length === 0) {
-      console.warn('⚠️ [Hotmart] Nenhuma comissão PRODUCER encontrada — sources disponíveis:', commissions.map(c => c.source).join(', '))
+    if (net.length === 0) {
+      console.warn('⚠️ [Hotmart] Nenhuma comissão encontrada — sources disponíveis:', commissions.map(c => c.source).join(', '))
       return null
     }
 
-    const valor = parseFloat(producer.reduce((s, c) => s + (c.value ?? 0), 0).toFixed(2))
-    const moeda = producer[0].currency_value ?? 'BRL'
-    console.log(`💰 [Hotmart] Valor PRODUCER: ${valor} ${moeda}`)
+    const valor = parseFloat(net.reduce((s, c) => s + (c.value ?? 0), 0).toFixed(2))
+    const moeda = net[0].currency_value ?? 'BRL'
+    console.log(`💰 [Hotmart] Valor líquido (sem taxa Hotmart): ${valor} ${moeda}`)
     return { valor, moeda }
   } catch (err) {
     console.error('❌ [Hotmart] Exceção ao chamar API de vendas:', err)
@@ -137,9 +137,9 @@ export async function POST(req: NextRequest) {
       console.log('📦 [5] Produto salvo:', hotmart_produto_id, nome_produto)
     }
 
-    // Fallback: apenas comissão PRODUCER do webhook (exclui AFFILIATE, COPRODUCER, MARKETPLACE)
+    // Fallback: total recebido = todas as comissões exceto taxa Hotmart (MARKETPLACE)
     const comissoes: HotmartCommission[] = (dados.commissions ?? []).filter(
-      (c: HotmartCommission) => c.source === 'PRODUCER',
+      (c: HotmartCommission) => c.source !== 'MARKETPLACE',
     )
     const valorWebhook = parseFloat(
       comissoes.reduce((acc, c) => acc + (c.value ?? 0), 0).toFixed(2),
