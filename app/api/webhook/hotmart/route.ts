@@ -78,6 +78,7 @@ async function fetchNetValue(
     }
 
     const data = await res.json() as { items?: { commissions?: HotmartCommission[] }[] }
+    console.log('💰 [Hotmart] Resposta:', JSON.stringify(data).substring(0, 800))
     const items = data?.items ?? []
     console.log('💰 [Hotmart] items retornados:', items.length)
 
