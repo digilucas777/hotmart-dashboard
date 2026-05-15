@@ -84,12 +84,12 @@ async function fetchNetValue(
     const commissions = items[0]?.commissions ?? []
     console.log('💰 [Hotmart] commissions sources:', commissions.map(c => `${c.source}:${c.value}`).join(', '))
 
-    // "Você recebeu" = comissão source PRODUCER (exclui afiliado, coprodutor e taxa Hotmart)
-    const net = commissions.filter(c => c.source === 'PRODUCER')
-    console.log('💰 [Hotmart] comissão PRODUCER:', JSON.stringify(net))
+    // Total recebido = todas as comissões exceto taxa Hotmart (MARKETPLACE)
+    const net = commissions.filter(c => c.source !== 'MARKETPLACE')
+    console.log('💰 [Hotmart] comissões (sem MARKETPLACE):', JSON.stringify(net))
 
     if (net.length === 0) {
-      console.warn('⚠️ [Hotmart] Nenhuma comissão PRODUCER — sources disponíveis:', commissions.map(c => c.source).join(', '))
+      console.warn('⚠️ [Hotmart] Nenhuma comissão — sources disponíveis:', commissions.map(c => c.source).join(', '))
       return null
     }
 
@@ -137,9 +137,9 @@ export async function POST(req: NextRequest) {
       console.log('📦 [5] Produto salvo:', hotmart_produto_id, nome_produto)
     }
 
-    // Fallback: "Você recebeu" = apenas comissão PRODUCER
+    // Fallback: total recebido = todas as comissões exceto taxa Hotmart (MARKETPLACE)
     const comissoes: HotmartCommission[] = (dados.commissions ?? []).filter(
-      (c: HotmartCommission) => c.source === 'PRODUCER',
+      (c: HotmartCommission) => c.source !== 'MARKETPLACE',
     )
     const valorWebhook = parseFloat(
       comissoes.reduce((acc, c) => acc + (c.value ?? 0), 0).toFixed(2),
