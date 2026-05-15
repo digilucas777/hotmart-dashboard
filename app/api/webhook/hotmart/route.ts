@@ -105,6 +105,7 @@ async function fetchNetValue(
 // ---------- Webhook handler ----------
 
 export async function POST(req: NextRequest) {
+  console.log('🚀 Handler iniciado')
   try {
     const body = await req.json()
     console.log('📦 Webhook Hotmart recebido:', JSON.stringify(body, null, 2))
@@ -187,7 +188,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true })
   } catch (err) {
-    console.error('❌ Erro no webhook:', err)
+    console.error('❌ Erro no webhook — tipo:', Object.prototype.toString.call(err))
+    console.error('❌ Erro no webhook — mensagem:', err instanceof Error ? err.message : String(err))
+    console.error('❌ Erro no webhook — stack:', err instanceof Error ? err.stack : 'N/A')
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }
