@@ -84,18 +84,18 @@ async function fetchNetValue(
     const commissions = items[0]?.commissions ?? []
     console.log('💰 [Hotmart] commissions sources:', commissions.map(c => `${c.source}:${c.value}`).join(', '))
 
-    // Total recebido = todas as comissões exceto a taxa da Hotmart (MARKETPLACE)
-    const net = commissions.filter(c => c.source !== 'MARKETPLACE')
-    console.log('💰 [Hotmart] comissões (sem MARKETPLACE):', JSON.stringify(net))
+    // "Você recebeu" = comissão source PRODUCER (exclui afiliado, coprodutor e taxa Hotmart)
+    const net = commissions.filter(c => c.source === 'PRODUCER')
+    console.log('💰 [Hotmart] comissão PRODUCER:', JSON.stringify(net))
 
     if (net.length === 0) {
-      console.warn('⚠️ [Hotmart] Nenhuma comissão encontrada — sources disponíveis:', commissions.map(c => c.source).join(', '))
+      console.warn('⚠️ [Hotmart] Nenhuma comissão PRODUCER — sources disponíveis:', commissions.map(c => c.source).join(', '))
       return null
     }
 
     const valor = parseFloat(net.reduce((s, c) => s + (c.value ?? 0), 0).toFixed(2))
     const moeda = net[0].currency_value ?? 'BRL'
-    console.log(`💰 [Hotmart] Valor líquido (sem taxa Hotmart): ${valor} ${moeda}`)
+    console.log(`💰 [Hotmart] Valor recebido (PRODUCER): ${valor} ${moeda}`)
     return { valor, moeda }
   } catch (err) {
     console.error('❌ [Hotmart] Exceção ao chamar API de vendas:', err)
@@ -137,9 +137,9 @@ export async function POST(req: NextRequest) {
       console.log('📦 [5] Produto salvo:', hotmart_produto_id, nome_produto)
     }
 
-    // Fallback: total recebido = todas as comissões exceto taxa Hotmart (MARKETPLACE)
+    // Fallback: "Você recebeu" = apenas comissão PRODUCER
     const comissoes: HotmartCommission[] = (dados.commissions ?? []).filter(
-      (c: HotmartCommission) => c.source !== 'MARKETPLACE',
+      (c: HotmartCommission) => c.source === 'PRODUCER',
     )
     const valorWebhook = parseFloat(
       comissoes.reduce((acc, c) => acc + (c.value ?? 0), 0).toFixed(2),
