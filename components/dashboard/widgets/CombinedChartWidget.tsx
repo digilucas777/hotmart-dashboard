@@ -18,7 +18,7 @@ const LEGEND_LABELS: Record<string, string> = {
   valueBRL: 'Receita BRL',
   valueUSD: 'Receita USD',
   approved: 'Aprovadas',
-  cancelled: 'Cancel./Reemb.',
+  reembolsos: 'Reembolsos',
 }
 
 function CustomTooltip({
@@ -42,7 +42,7 @@ function CustomTooltip({
               ? `USD: ${formatUSD(p.value)}`
               : p.dataKey === 'approved'
                 ? `Aprovadas: ${p.value}`
-                : `Cancel./Reemb.: ${p.value}`}
+                : `Reembolsos: ${p.value}`}
         </p>
       ))}
     </div>
@@ -125,8 +125,8 @@ export function CombinedChartWidget({
           <Line
             yAxisId="count"
             type="monotone"
-            dataKey="cancelled"
-            name="cancelled"
+            dataKey="reembolsos"
+            name="reembolsos"
             stroke="#ef4444"
             strokeWidth={2}
             dot={false}

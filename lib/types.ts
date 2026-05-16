@@ -67,7 +67,7 @@ export interface WidgetConfig {
   type: WidgetType
   data_source: WidgetDataSource
   title: string
-  width: WidgetWidth
+  width: string
   position: number
-  height?: WidgetHeight
+  height?: string
 }

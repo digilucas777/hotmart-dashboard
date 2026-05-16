@@ -156,7 +156,7 @@ export type CombinedPoint = {
   valueBRL: number
   valueUSD: number
   approved: number
-  cancelled: number
+  reembolsos: number
 }
 
 export type WidgetComputedData =
@@ -388,13 +388,13 @@ export function computeWidgetData(
       if (isHourly) {
         for (let h = 0; h < 24; h++) {
           const label = `${h.toString().padStart(2, '0')}h`
-          buckets[label] = { label, valueBRL: 0, valueUSD: 0, approved: 0, cancelled: 0 }
+          buckets[label] = { label, valueBRL: 0, valueUSD: 0, approved: 0, reembolsos: 0 }
         }
       } else {
         let cursor = new Date(from)
         while (cursor < to) {
           const label = `${cursor.getDate().toString().padStart(2, '0')}/${(cursor.getMonth() + 1).toString().padStart(2, '0')}`
-          buckets[label] = { label, valueBRL: 0, valueUSD: 0, approved: 0, cancelled: 0 }
+          buckets[label] = { label, valueBRL: 0, valueUSD: 0, approved: 0, reembolsos: 0 }
           cursor = new Date(cursor.getTime() + 86_400_000)
         }
       }
@@ -410,8 +410,8 @@ export function computeWidgetData(
           buckets[label].approved += 1
           if (v.moeda === 'BRL') buckets[label].valueBRL += v.valor ?? 0
           else buckets[label].valueUSD += v.valor ?? 0
-        } else if (v.status === 'refunded' || v.status === 'cancelled') {
-          buckets[label].cancelled += 1
+        } else if (v.status === 'refunded') {
+          buckets[label].reembolsos += 1
         }
       })
 
