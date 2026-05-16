@@ -43,7 +43,7 @@ export function WidgetRenderer({
   onDelete: (id: string) => void
   onUpdateConfig?: (id: string, updates: { width?: string; height?: string; col_span?: number; row_span?: number }) => void
   onPreviewResize?: (id: string, width: number, height: number) => void
-  onCommitResize?: (id: string) => void
+  onCommitResize?: (id: string, width: number, height: number) => void
 }) {
   // ref on the inner card to measure real dimensions for resize
   const cardRef = useRef<HTMLDivElement>(null)
@@ -82,11 +82,13 @@ export function WidgetRenderer({
       onPreviewResize?.(config.id, newW, newH)
     }
 
-    function onMouseUp() {
+    function onMouseUp(ev: MouseEvent) {
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
+      const newW = Math.max(110, startW + ev.clientX - startX)
+      const newH = Math.max(90, startH + ev.clientY - startY)
       setLiveSize(null)
-      onCommitResize?.(config.id)
+      onCommitResize?.(config.id, newW, newH)
     }
 
     window.addEventListener('mousemove', onMouseMove)

@@ -186,6 +186,45 @@ function resolveOverlaps(layout: WidgetConfig[], activeId: string) {
   return next
 }
 
+function moveWithSwap(layout: WidgetConfig[], placement: GridPlacement) {
+  const active = layout.find(w => w.id === placement.id)
+  if (!active) return layout
+
+  const original = {
+    col_start: active.col_start ?? 1,
+    row_start: active.row_start ?? 1,
+  }
+  const activeBox = {
+    col: placement.col_start,
+    row: placement.row_start,
+    colSpan: placement.col_span,
+    rowSpan: placement.row_span,
+  }
+  const target = layout.find(w => {
+    if (w.id === placement.id) return false
+    return collidesBounds(activeBox, {
+      col: w.col_start ?? 1,
+      row: w.row_start ?? 1,
+      colSpan: w.col_span ?? widthToSpan(w.width),
+      rowSpan: normalizeRowSpan(w),
+    })
+  })
+
+  const moved = layout.map(w => {
+    if (w.id === placement.id) return applyPlacement(w, placement)
+    if (target && w.id === target.id) {
+      return {
+        ...w,
+        col_start: Math.min(original.col_start, GRID_COLUMNS - (w.col_span ?? widthToSpan(w.width)) + 1),
+        row_start: original.row_start,
+      }
+    }
+    return w
+  })
+
+  return resolveOverlaps(moved, target?.id ?? placement.id)
+}
+
 function compactLayout(widgets: WidgetConfig[]) {
   const placed: { col: number; row: number; colSpan: number; rowSpan: number }[] = []
 
@@ -398,7 +437,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         1,
         Math.round(((currentRow - 1) * rowStep + delta.y) / rowStep) + 1,
       )
-      const row_start = nextAvailableRow(widgets, widget.id, col_start, intendedRow, colSpan, rowSpan)
+      const row_start = intendedRow
 
       return { id, col_start, row_start, col_span: colSpan, row_span: rowSpan }
     },
@@ -425,7 +464,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       setDragPreview(null)
       if (!placement) return
       pushHistory()
-      setWidgets(prev => resolveOverlaps(prev.map(w => applyPlacement(w, placement)), placement.id))
+      setWidgets(prev => moveWithSwap(prev, placement))
     },
     [dragPreview, getPlacementFromDelta, pushHistory],
   )
@@ -461,34 +500,38 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setWidgets(prev => resolveOverlaps(prev.map(w => w.id === id ? { ...w, ...updates } : w), id))
   }, [pushHistory])
 
-  const previewWidgetResize = useCallback((id: string, width: number, height: number) => {
+  const getResizePlacement = useCallback((id: string, width: number, height: number): GridPlacement | null => {
     const grid = gridRef.current
     const widget = widgets.find(w => w.id === id)
-    if (!grid || !widget) return
+    if (!grid || !widget) return null
 
     const rect = grid.getBoundingClientRect()
     const colWidth = rect.width / GRID_COLUMNS
     const col_span = Math.min(
       GRID_COLUMNS - (widget.col_start ?? 1) + 1,
-      Math.max(2, Math.round((width + GRID_ITEM_PADDING * 2) / colWidth)),
+      Math.max(1, Math.round((width + GRID_ITEM_PADDING * 2) / colWidth)),
     )
-    const row_span = Math.max(5, Math.round((height + GRID_ITEM_PADDING * 2) / GRID_ROW_HEIGHT))
-    setResizePreview({
+    const row_span = Math.max(4, Math.round((height + GRID_ITEM_PADDING * 2) / GRID_ROW_HEIGHT))
+    return {
       id,
       col_start: widget.col_start ?? 1,
       row_start: widget.row_start ?? 1,
       col_span,
       row_span,
-    })
+    }
   }, [widgets])
 
-  const commitWidgetResize = useCallback((id: string) => {
-    const placement = resizePreview
+  const previewWidgetResize = useCallback((id: string, width: number, height: number) => {
+    setResizePreview(getResizePlacement(id, width, height))
+  }, [getResizePlacement])
+
+  const commitWidgetResize = useCallback((id: string, width: number, height: number) => {
+    const placement = getResizePlacement(id, width, height)
     setResizePreview(null)
-    if (!placement || placement.id !== id) return
+    if (!placement) return
     pushHistory()
     setWidgets(prev => resolveOverlaps(prev.map(w => applyPlacement(w, placement)), id))
-  }, [pushHistory, resizePreview])
+  }, [getResizePlacement, pushHistory])
 
   const organizeLayout = useCallback(() => {
     pushHistory()
@@ -574,9 +617,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const previewPlacement = dragPreview ?? resizePreview
   const displayedWidgets = useMemo(
     () => previewPlacement
-      ? resolveOverlaps(widgets.map(w => applyPlacement(w, previewPlacement)), previewPlacement.id)
+      ? (dragPreview
+          ? moveWithSwap(widgets, previewPlacement)
+          : resolveOverlaps(widgets.map(w => applyPlacement(w, previewPlacement)), previewPlacement.id))
       : widgets,
-    [previewPlacement, widgets],
+    [dragPreview, previewPlacement, widgets],
   )
 
   return (
