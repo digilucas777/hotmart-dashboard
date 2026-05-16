@@ -9,6 +9,7 @@ import {
   formatDateTime,
   statusLabel,
   normalizePagamento,
+  parseOrigem,
 } from '@/lib/utils'
 import type { Venda } from '@/lib/types'
 
@@ -198,7 +199,7 @@ export function SalesTable({
                     </Badge>
                   </td>
                   <td className="px-5 py-3.5 text-xs text-slate-500">
-                    {v.origem ?? '—'}
+                    {parseOrigem(v.origem)}
                   </td>
                 </tr>
               ))

@@ -44,12 +44,14 @@ export async function POST(req: NextRequest) {
       console.log('📦 [5] Produto salvo:', hotmart_produto_id, nome_produto)
     }
 
-    const priceValue: number = dados.purchase?.price?.value ?? 0
+    // Usa original_offer_price para evitar moeda local (ARS, COP, etc.); fallback para price
+    const priceObj = dados.purchase?.original_offer_price ?? dados.purchase?.price
+    const priceValue: number = priceObj?.value ?? 0
+    const moeda: string = priceObj?.currency_value ?? 'BRL'
     const marketplaceCommission: number = ((dados.commissions ?? []) as HotmartCommission[])
       .find((c) => c.source === 'MARKETPLACE')?.value ?? 0
     const valor = parseFloat((priceValue - marketplaceCommission).toFixed(2))
-    const moeda: string = dados.purchase?.price?.currency_value ?? 'BRL'
-    console.log('💵 [6] priceValue:', priceValue, '| marketplace:', marketplaceCommission, '| valor:', valor, '| moeda:', moeda)
+    console.log('💵 [6] priceField:', dados.purchase?.original_offer_price ? 'original_offer_price' : 'price', '| priceValue:', priceValue, '| marketplace:', marketplaceCommission, '| valor:', valor, '| moeda:', moeda)
 
     // Concatena type com bandeira do cartão para melhor identificação
     const paymentType: string | null = dados.purchase?.payment?.type ?? null

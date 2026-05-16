@@ -109,13 +109,6 @@ export default function VendasPage() {
               {vendas.length} transações
             </span>
           )}
-          <button
-            onClick={fetchVendas}
-            title="Atualizar"
-            className="ml-auto rounded-lg p-2 text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-300"
-          >
-            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-          </button>
         </div>
       </header>
 
@@ -188,6 +181,13 @@ export default function VendasPage() {
                 className="rounded-lg bg-indigo-500/15 px-3 py-2 text-xs font-medium text-indigo-300 transition-colors hover:bg-indigo-500/25"
               >
                 OK
+              </button>
+              <button
+                onClick={fetchVendas}
+                className="flex items-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-600"
+              >
+                <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                Atualizar
               </button>
             </div>
           </div>

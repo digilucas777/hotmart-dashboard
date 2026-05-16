@@ -54,7 +54,8 @@ export function WidgetRenderer({
   onDelete: (id: string) => void
   onUpdateConfig?: (id: string, updates: { width?: string; height?: string }) => void
 }) {
-  const containerRef = useRef<HTMLDivElement>(null)
+  // ref on the inner card to measure real dimensions for resize
+  const cardRef = useRef<HTMLDivElement>(null)
   const [liveSize, setLiveSize] = useState<{ w: number; h: number } | null>(null)
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -64,17 +65,20 @@ export function WidgetRenderer({
   const isBRL = getValueFormat(config.data_source) === 'brl'
 
   const chartHeight = liveSize
-    ? Math.max(150, liveSize.h - 80)
+    ? Math.max(120, liveSize.h - 80)
     : config.height?.includes('px')
-      ? Math.max(150, parseInt(config.height) - 80)
+      ? Math.max(120, parseInt(config.height) - 80)
       : CHART_HEIGHT_MAP[config.height ?? 'medium'] ?? 220
 
+  // Width applied on the outer sortable wrapper
   const widthStyle = liveSize ? `${liveSize.w}px` : resolveWidth(config.width)
-  const minHeightStyle = liveSize
-    ? `${liveSize.h}px`
+
+  // Height applied directly on the inner card so h-full works correctly
+  const cardHeightStyle: React.CSSProperties = liveSize
+    ? { height: `${liveSize.h}px`, minHeight: '150px', overflow: 'hidden' }
     : config.height?.includes('px')
-      ? config.height
-      : undefined
+      ? { height: config.height, minHeight: '150px', overflow: 'hidden' }
+      : {}
 
   const dndStyle = {
     transform: CSS.Transform.toString(transform),
@@ -86,17 +90,17 @@ export function WidgetRenderer({
   function handleResizeStart(e: React.MouseEvent) {
     e.preventDefault()
     e.stopPropagation()
-    const container = containerRef.current
-    if (!container) return
+    const card = cardRef.current
+    if (!card) return
 
     const startX = e.clientX
     const startY = e.clientY
-    const startW = container.offsetWidth
-    const startH = container.offsetHeight
+    const startW = card.offsetWidth
+    const startH = card.offsetHeight
 
     function onMouseMove(ev: MouseEvent) {
       const newW = Math.max(200, startW + ev.clientX - startX)
-      const newH = Math.max(200, startH + ev.clientY - startY)
+      const newH = Math.max(150, startH + ev.clientY - startY)
       setLiveSize({ w: newW, h: newH })
     }
 
@@ -104,7 +108,7 @@ export function WidgetRenderer({
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
       const newW = Math.max(200, startW + ev.clientX - startX)
-      const newH = Math.max(200, startH + ev.clientY - startY)
+      const newH = Math.max(150, startH + ev.clientY - startY)
       setLiveSize(null)
       onUpdateConfig?.(config.id, { width: `${newW}px`, height: `${newH}px` })
     }
@@ -115,24 +119,22 @@ export function WidgetRenderer({
 
   return (
     <div
-      ref={(el: HTMLDivElement | null) => {
-        setNodeRef(el)
-        containerRef.current = el
-      }}
+      ref={setNodeRef}
       style={{
         ...dndStyle,
         width: widthStyle,
         flexShrink: 0,
         maxWidth: '100%',
-        ...(minHeightStyle ? { minHeight: minHeightStyle } : {}),
       }}
     >
       <div
-        className={`group relative h-full rounded-2xl border bg-[#191929] transition-all ${
+        ref={cardRef}
+        className={`group relative rounded-2xl border bg-[#191929] transition-all ${
           isDragging
             ? 'border-indigo-500/50 shadow-2xl shadow-indigo-500/10'
             : 'border-white/7 hover:border-white/12'
         }`}
+        style={cardHeightStyle}
       >
         {editMode && (
           <>

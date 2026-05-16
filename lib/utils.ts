@@ -59,6 +59,22 @@ export function statusLabel(status: string): string {
   return map[status] ?? status
 }
 
+export function parseOrigem(raw?: string | null): string {
+  if (!raw) return '—'
+  try {
+    const obj = JSON.parse(raw)
+    if (typeof obj === 'object' && obj !== null) {
+      if (obj.src) return String(obj.src)
+      if (obj.sck !== undefined) return 'sck'
+      const firstStr = Object.values(obj).find(v => typeof v === 'string')
+      if (firstStr) return String(firstStr)
+    }
+  } catch {
+    // not JSON
+  }
+  return raw
+}
+
 export function normalizePagamento(method?: string | null): string {
   if (!method) return 'Outros'
   const m = method.toUpperCase()
