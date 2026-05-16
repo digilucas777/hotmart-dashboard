@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Projeto, Venda, WidgetDataSource } from '@/lib/types'
-import { computeWidgetData } from '@/lib/utils'
+import { formatBRL, formatUSD } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 
@@ -98,6 +98,29 @@ function reportRange(period: string) {
   return { from: today, to: new Date(today.getTime() + day) }
 }
 
+function buildMetricValue(vendas: Venda[], metric: WidgetDataSource) {
+  const approved = vendas.filter(v => v.status === 'approved')
+  const refunded = vendas.filter(v => v.status === 'refunded')
+  const pending = vendas.filter(v => v.status === 'pending')
+  const cancelled = vendas.filter(v => v.status === 'cancelled')
+  const totalBRL = approved.filter(v => v.moeda === 'BRL').reduce((sum, v) => sum + (v.valor ?? 0), 0)
+  const totalUSD = approved.filter(v => v.moeda === 'USD').reduce((sum, v) => sum + (v.valor ?? 0), 0)
+  const totalConverted = totalBRL + totalUSD * 5.85
+
+  if (metric === 'total_converted' || metric === 'lucro') return formatBRL(totalConverted)
+  if (metric === 'total_brl') return formatBRL(totalBRL)
+  if (metric === 'total_usd') return formatUSD(totalUSD)
+  if (metric === 'sales_count') return String(approved.length)
+  if (metric === 'approval_rate') return vendas.length > 0 ? `${((approved.length / vendas.length) * 100).toFixed(1)}%` : '0.0%'
+  if (metric === 'avg_ticket') return approved.length > 0 ? formatBRL(totalConverted / approved.length) : formatBRL(0)
+  if (metric === 'refunds_count') return String(refunded.length)
+  if (metric === 'pending_count') return String(pending.length)
+  if (metric === 'cancelled_count') return String(cancelled.length)
+  if (metric === 'roas') return 'Sem custo cadastrado'
+  if (metric === 'cpa') return 'Sem custo cadastrado'
+  return ''
+}
+
 export default function RelatoriosPage() {
   const [projetos, setProjetos] = useState<Projeto[]>([])
   const [connections, setConnections] = useState<WhatsAppConnection[]>([])
@@ -121,6 +144,7 @@ export default function RelatoriosPage() {
     horario: '07:00',
     mensagem: 'Bom dia! Segue o relatório de {projeto} referente a hoje:',
   })
+  const [messageText, setMessageText] = useState('')
   const [metricas, setMetricas] = useState<WidgetDataSource[]>([
     'total_converted',
     'sales_count',
@@ -197,7 +221,7 @@ export default function RelatoriosPage() {
     loadProjectSales()
   }, [form.periodo, form.projeto_id])
 
-  const preview = useMemo(() => {
+  const generatedMessage = useMemo(() => {
     const projectName = selectedProject?.nome ?? 'Projeto'
     const lines = [
       form.mensagem.replaceAll('{projeto}', projectName),
@@ -207,14 +231,17 @@ export default function RelatoriosPage() {
 
     metricas.forEach(metric => {
       const option = METRIC_OPTIONS.find(o => o.value === metric)
-      const data = computeWidgetData(vendas, metric, 'today', 5.85)
-      if (data.kind === 'metric') lines.push(`• ${option?.label ?? metric}: ${data.value}`)
+      lines.push(`• ${option?.label ?? metric}: ${buildMetricValue(vendas, metric)}`)
     })
 
     lines.push('', `Período: ${PERIOD_OPTIONS.find(p => p.value === form.periodo)?.label ?? form.periodo}`)
     lines.push(`Envio: ${FREQUENCIES.find(f => f.value === form.frequencia)?.label ?? form.frequencia} às ${form.horario}`)
     return lines.join('\n')
   }, [form.frequencia, form.horario, form.mensagem, form.periodo, metricas, selectedProject?.nome, vendas])
+
+  useEffect(() => {
+    setMessageText(generatedMessage)
+  }, [generatedMessage])
 
   async function connectWhatsApp() {
     if (!connectionPhone.trim()) return
@@ -260,6 +287,7 @@ export default function RelatoriosPage() {
           destinatario: destinatarios[0],
           destinatarios,
           metricas,
+          mensagem: messageText,
           timezone: 'America/Sao_Paulo',
           ativo: true,
         })
@@ -290,7 +318,7 @@ export default function RelatoriosPage() {
         body: JSON.stringify({
           connectionId: form.whatsapp_connection_id,
           recipients,
-          message: preview,
+          message: messageText,
         }),
       })
       const json = await res.json()
@@ -468,10 +496,10 @@ export default function RelatoriosPage() {
                 </div>
 
                 <textarea
-                  value={form.mensagem}
-                  onChange={e => setForm(prev => ({ ...prev, mensagem: e.target.value }))}
-                  className="mb-5 min-h-24 w-full rounded-xl border border-white/10 bg-[#121221] p-3 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-indigo-500/60"
-                  placeholder="Mensagem inicial"
+                  value={messageText}
+                  onChange={e => setMessageText(e.target.value)}
+                  className="mb-5 min-h-72 w-full rounded-xl border border-white/10 bg-[#121221] p-3 text-sm leading-relaxed text-slate-200 outline-none placeholder:text-slate-600 focus:border-indigo-500/60"
+                  placeholder="Mensagem do WhatsApp"
                 />
 
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -523,7 +551,7 @@ export default function RelatoriosPage() {
                     <Send size={17} className="text-green-400" />
                   </div>
                   <div className="rounded-2xl bg-[#0d2018] p-4">
-                    <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-green-50">{preview}</pre>
+                    <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-green-50">{messageText}</pre>
                   </div>
                 </div>
 

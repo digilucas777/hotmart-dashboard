@@ -40,6 +40,7 @@ const GRID_COLUMNS = 12
 const GRID_ROW_HEIGHT = 20
 const GRID_GAP = 0
 const GRID_ITEM_PADDING = 10
+const LAYOUT_STORAGE_PREFIX = 'dashboard-layout:'
 
 type GridPlacement = {
   id: string
@@ -128,6 +129,12 @@ function nextAvailableRow(widgets: WidgetConfig[], activeId: string, col: number
   return candidate
 }
 
+function maxLayoutRow(widgets: WidgetConfig[], activeId?: string) {
+  return widgets
+    .filter(w => w.id !== activeId)
+    .reduce((max, w) => Math.max(max, (w.row_start ?? 1) + normalizeRowSpan(w)), 1)
+}
+
 function applyPlacement(widget: WidgetConfig, placement: GridPlacement): WidgetConfig {
   return widget.id === placement.id
     ? {
@@ -196,45 +203,6 @@ function resolveOverlaps(layout: WidgetConfig[], activeId: string) {
   return next
 }
 
-function moveWithSwap(layout: WidgetConfig[], placement: GridPlacement) {
-  const active = layout.find(w => w.id === placement.id)
-  if (!active) return layout
-
-  const original = {
-    col_start: active.col_start ?? 1,
-    row_start: active.row_start ?? 1,
-  }
-  const activeBox = {
-    col: placement.col_start,
-    row: placement.row_start,
-    colSpan: placement.col_span,
-    rowSpan: placement.row_span,
-  }
-  const target = layout.find(w => {
-    if (w.id === placement.id) return false
-    return collidesBounds(activeBox, {
-      col: w.col_start ?? 1,
-      row: w.row_start ?? 1,
-      colSpan: w.col_span ?? widthToSpan(w.width),
-      rowSpan: normalizeRowSpan(w),
-    })
-  })
-
-  const moved = layout.map(w => {
-    if (w.id === placement.id) return applyPlacement(w, placement)
-    if (target && w.id === target.id) {
-      return {
-        ...w,
-        col_start: Math.min(original.col_start, GRID_COLUMNS - (w.col_span ?? widthToSpan(w.width)) + 1),
-        row_start: original.row_start,
-      }
-    }
-    return w
-  })
-
-  return resolveOverlaps(moved, target?.id ?? placement.id)
-}
-
 function compactLayout(widgets: WidgetConfig[]) {
   const placed: { col: number; row: number; colSpan: number; rowSpan: number }[] = []
 
@@ -278,6 +246,34 @@ function sameLayout(a: WidgetConfig[], b: WidgetConfig[]) {
       widget.row_span === other.row_span
     )
   })
+}
+
+function mergeStoredLayout(widgets: WidgetConfig[], projectId: string) {
+  if (typeof window === 'undefined') return widgets
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(`${LAYOUT_STORAGE_PREFIX}${projectId}`) ?? '[]') as GridPlacement[]
+    if (!Array.isArray(stored) || stored.length === 0) return widgets
+    return widgets.map(widget => {
+      const placement = stored.find(item => item.id === widget.id)
+      return placement ? applyPlacement(widget, placement) : widget
+    })
+  } catch {
+    return widgets
+  }
+}
+
+function persistLocalLayout(projectId: string, widgets: WidgetConfig[]) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(
+    `${LAYOUT_STORAGE_PREFIX}${projectId}`,
+    JSON.stringify(widgets.map(w => ({
+      id: w.id,
+      col_start: w.col_start ?? 1,
+      row_start: w.row_start ?? 1,
+      col_span: w.col_span ?? widthToSpan(w.width),
+      row_span: normalizeRowSpan(w),
+    }))),
+  )
 }
 
 export function DashboardClient({ projectId }: { projectId: string }) {
@@ -338,7 +334,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       .eq('projeto_id', projectId)
       .order('position')
       .then(({ data }) => {
-        const normalized = normalizeLoadedLayout((data ?? []) as WidgetConfig[])
+        const normalized = mergeStoredLayout(normalizeLoadedLayout((data ?? []) as WidgetConfig[]), projectId)
         setWidgets(normalized)
         setSavedWidgets(normalized)
         setLoadingWidgets(false)
@@ -448,7 +444,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         1,
         Math.round(((currentRow - 1) * rowStep + delta.y) / rowStep) + 1,
       )
-      const row_start = intendedRow
+      const row_start = Math.min(intendedRow, maxLayoutRow(widgets, widget.id))
 
       return { id, col_start, row_start, col_span: colSpan, row_span: rowSpan }
     },
@@ -475,7 +471,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       setDragPreview(null)
       if (!placement) return
       pushHistory()
-      setWidgets(prev => moveWithSwap(prev, placement))
+      setWidgets(prev => resolveOverlaps(prev.map(w => applyPlacement(w, placement)), placement.id))
     },
     [dragPreview, getPlacementFromDelta, pushHistory],
   )
@@ -592,15 +588,20 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       const failed = results.find(result => result.error)
       if (failed?.error) throw failed.error
       setSavedWidgets(widgets)
+      persistLocalLayout(projectId, widgets)
       setUndoStack([])
       setRedoStack([])
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Não foi possível salvar o layout.'
-      setLayoutError(
-        message.includes('schema cache') || message.includes('col_span')
-          ? 'Não foi possível salvar o layout. Aplique a migration 011_widget_grid_schema_reload.sql no Supabase.'
-          : message,
-      )
+      if (message.includes('schema cache') || message.includes('col_span')) {
+        persistLocalLayout(projectId, widgets)
+        setSavedWidgets(widgets)
+        setUndoStack([])
+        setRedoStack([])
+        setLayoutError(null)
+      } else {
+        setLayoutError(message)
+      }
     } finally {
       setSavingLayout(false)
     }
@@ -656,7 +657,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const displayedWidgets = useMemo(
     () => previewPlacement
       ? (dragPreview
-          ? moveWithSwap(widgets, previewPlacement)
+          ? resolveOverlaps(widgets.map(w => applyPlacement(w, previewPlacement)), previewPlacement.id)
           : resolveOverlaps(widgets.map(w => applyPlacement(w, previewPlacement)), previewPlacement.id))
       : widgets,
     [dragPreview, previewPlacement, widgets],
@@ -751,10 +752,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 </Button>
               </>
             )}
-            <Button variant="outline" size="sm" onClick={() => setShowAddWidget(true)}>
-              <Plus size={13} />
-              Widget
-            </Button>
+            {editMode && (
+              <Button variant="outline" size="sm" onClick={() => setShowAddWidget(true)}>
+                <Plus size={13} />
+                Widget
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={openProductsModal}>
               <Settings size={13} />
               Produtos
@@ -794,7 +797,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 Clique em &quot;+ Widget&quot; para criar seu primeiro gráfico ou card.
               </p>
             </div>
-            <Button onClick={() => setShowAddWidget(true)}>
+            <Button onClick={() => {
+              setEditMode(true)
+              setShowAddWidget(true)
+            }}>
               <Plus size={14} />
               Criar primeiro widget
             </Button>
