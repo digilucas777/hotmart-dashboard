@@ -485,12 +485,29 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     const col_span = widthToSpan(config.width)
     const row_span = heightToRows(config.height, config.type)
     const maxRow = widgets.reduce((max, w) => Math.max(max, (w.row_start ?? 1) + (w.row_span ?? 1) - 1), 0)
+    const payload = { ...config, projeto_id: projectId, position, col_start: 1, row_start: maxRow + 1, col_span, row_span }
+    const legacyPayload = { ...config, projeto_id: projectId, position }
+
     setWidgetError(null)
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('dashboard_widgets')
-      .insert({ ...config, projeto_id: projectId, position, col_start: 1, row_start: maxRow + 1, col_span, row_span })
+      .insert(payload)
       .select()
       .single()
+
+    if (error && error.message.includes('schema cache')) {
+      const retry = await supabase
+        .from('dashboard_widgets')
+        .insert(legacyPayload)
+        .select()
+        .single()
+      data = retry.data
+      error = retry.error
+      if (!error) {
+        setWidgetError('Widget criado. Aplique a migration 011 para salvar posição e tamanho do grid.')
+      }
+    }
+
     if (error) {
       setWidgetError(error.message)
       return
@@ -578,7 +595,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       setUndoStack([])
       setRedoStack([])
     } catch (err) {
-      setLayoutError(err instanceof Error ? err.message : 'Não foi possível salvar o layout.')
+      const message = err instanceof Error ? err.message : 'Não foi possível salvar o layout.'
+      setLayoutError(
+        message.includes('schema cache') || message.includes('col_span')
+          ? 'Não foi possível salvar o layout. Aplique a migration 011_widget_grid_schema_reload.sql no Supabase.'
+          : message,
+      )
     } finally {
       setSavingLayout(false)
     }
