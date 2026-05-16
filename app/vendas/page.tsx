@@ -6,13 +6,14 @@ import { supabase } from '@/lib/supabase'
 import { SalesTable } from '@/components/dashboard/SalesTable'
 import type { Venda, Produto } from '@/lib/types'
 import { Spinner } from '@/components/ui/Spinner'
+import { MultiSelect } from '@/components/ui/MultiSelect'
 
 const STATUS_OPTIONS = [
-  { value: '', label: 'Todos os status' },
   { value: 'approved', label: 'Aprovado' },
   { value: 'pending', label: 'Pendente' },
   { value: 'refunded', label: 'Reembolsado' },
   { value: 'cancelled', label: 'Cancelado' },
+  { value: 'abandoned', label: 'Abandono' },
 ]
 
 export default function VendasPage() {
@@ -22,10 +23,10 @@ export default function VendasPage() {
   const [exchangeRate, setExchangeRate] = useState(5.85)
 
   // Filtros
-  const [produtoFilter, setProdutoFilter] = useState('')
+  const [produtoFilter, setProdutoFilter] = useState<string[]>([])
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string[]>([])
   const [origemFilter, setOrigemFilter] = useState('')
   const [origemInput, setOrigemInput] = useState('')
 
@@ -52,10 +53,11 @@ export default function VendasPage() {
         .select('*')
         .order('data_venda', { ascending: false })
 
-      if (produtoFilter) {
-        // Busca o hotmart_id do produto selecionado
-        const prod = produtos.find(p => p.id === produtoFilter)
-        if (prod) query = query.eq('hotmart_produto_id', prod.hotmart_id)
+      if (produtoFilter.length > 0) {
+        const hotmartIds = produtos
+          .filter(p => produtoFilter.includes(p.id))
+          .map(p => p.hotmart_id)
+        if (hotmartIds.length > 0) query = query.in('hotmart_produto_id', hotmartIds)
       }
 
       if (dateFrom) query = query.gte('data_venda', new Date(dateFrom).toISOString())
@@ -65,7 +67,7 @@ export default function VendasPage() {
         query = query.lt('data_venda', toDate.toISOString())
       }
 
-      if (statusFilter) query = query.eq('status', statusFilter)
+      if (statusFilter.length > 0) query = query.in('status', statusFilter)
       if (origemFilter) query = query.ilike('origem', `%${origemFilter}%`)
 
       const { data } = await query
@@ -83,8 +85,8 @@ export default function VendasPage() {
     setOrigemFilter(origemInput)
   }
 
-  const selectClass =
-    'rounded-lg bg-white/5 px-3 py-2 text-xs text-slate-200 outline-none ring-1 ring-white/8 focus:ring-indigo-500/50'
+  const inputClass =
+    'rounded-lg border border-white/10 bg-[#191929] px-3 py-2 text-xs text-slate-200 outline-none focus:border-indigo-500/60'
 
   return (
     <div className="min-h-screen">
@@ -116,17 +118,15 @@ export default function VendasPage() {
         {/* Filter bar */}
         <div className="mb-6 flex flex-wrap items-end gap-3 rounded-2xl border border-white/7 bg-[#191929] p-5">
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-500">Produto</label>
-            <select
-              value={produtoFilter}
-              onChange={e => setProdutoFilter(e.target.value)}
-              className={selectClass}
-            >
-              <option value="">Todos os produtos</option>
-              {produtos.map(p => (
-                <option key={p.id} value={p.id}>{p.nome}</option>
-              ))}
-            </select>
+            <MultiSelect
+              label="Produto"
+              options={produtos.map(p => ({ value: p.id, label: p.nome }))}
+              values={produtoFilter}
+              onChange={setProdutoFilter}
+              placeholder="Todos os produtos"
+              searchable
+              searchPlaceholder="Buscar produto..."
+            />
           </div>
 
           <div className="flex flex-col gap-1">
@@ -135,7 +135,7 @@ export default function VendasPage() {
               type="date"
               value={dateFrom}
               onChange={e => setDateFrom(e.target.value)}
-              className={selectClass}
+              className={inputClass}
             />
           </div>
 
@@ -145,21 +145,18 @@ export default function VendasPage() {
               type="date"
               value={dateTo}
               onChange={e => setDateTo(e.target.value)}
-              className={selectClass}
+              className={inputClass}
             />
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-500">Status</label>
-            <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-              className={selectClass}
-            >
-              {STATUS_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
+            <MultiSelect
+              label="Status"
+              options={STATUS_OPTIONS}
+              values={statusFilter}
+              onChange={setStatusFilter}
+              placeholder="Todos os status"
+            />
           </div>
 
           <div className="flex flex-col gap-1">
@@ -192,13 +189,13 @@ export default function VendasPage() {
             </div>
           </div>
 
-          {(produtoFilter || dateFrom || dateTo || statusFilter || origemFilter) && (
+          {(produtoFilter.length > 0 || dateFrom || dateTo || statusFilter.length > 0 || origemFilter) && (
             <button
               onClick={() => {
-                setProdutoFilter('')
+                setProdutoFilter([])
                 setDateFrom('')
                 setDateTo('')
-                setStatusFilter('')
+                setStatusFilter([])
                 setOrigemFilter('')
                 setOrigemInput('')
               }}

@@ -18,6 +18,7 @@ const STATUS_VARIANT: Record<string, BadgeVariant> = {
   refunded: 'danger',
   cancelled: 'warning',
   pending: 'info',
+  abandoned: 'default',
 }
 
 const STATUS_FILTERS = [
@@ -26,6 +27,7 @@ const STATUS_FILTERS = [
   { value: 'pending', label: 'Pendentes' },
   { value: 'refunded', label: 'Reembolsados' },
   { value: 'cancelled', label: 'Cancelado' },
+  { value: 'abandoned', label: 'Abandono' },
 ]
 
 const PAGE_SIZE = 25
@@ -172,7 +174,7 @@ export function SalesTable({
                       {v.comprador_email ?? '—'}
                     </p>
                   </td>
-                  <td className="max-w-[160px] truncate px-5 py-3.5 text-xs text-slate-400">
+                  <td className="px-5 py-3.5 text-xs text-slate-400 [word-break:break-word]">
                     {v.produto ?? '—'}
                   </td>
                   <td className="px-5 py-3.5">

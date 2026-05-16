@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo, useState } from 'react'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -11,7 +12,8 @@ import {
   Tooltip,
   Legend,
 } from 'recharts'
-import { formatBRL, formatUSD } from '@/lib/utils'
+import { computeWidgetData, formatBRL, formatUSD } from '@/lib/utils'
+import type { Period, Venda } from '@/lib/types'
 import type { CombinedPoint } from '@/lib/utils'
 
 const LEGEND_LABELS: Record<string, string> = {
@@ -51,16 +53,46 @@ function CustomTooltip({
 
 export function CombinedChartWidget({
   title,
-  points,
+  vendas,
   chartHeight = 220,
 }: {
   title: string
-  points: CombinedPoint[]
+  vendas: Venda[]
   chartHeight?: number
 }) {
+  const [internalPeriod, setInternalPeriod] = useState<Period>('7d')
+  const points = useMemo(() => {
+    const data = computeWidgetData(vendas, 'combined_by_day', internalPeriod, 1)
+    return data.kind === 'combined' ? data.points : []
+  }, [vendas, internalPeriod])
+
+  const periods: { value: Period; label: string }[] = [
+    { value: 'today', label: 'Hoje' },
+    { value: '7d', label: '7 dias' },
+    { value: '30d', label: '30 dias' },
+    { value: 'thisMonth', label: 'Este mês' },
+  ]
+
   return (
     <div className="p-5">
-      <h3 className="mb-5 text-sm font-semibold text-slate-200">{title}</h3>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-slate-200">{title}</h3>
+        <div className="flex rounded-lg bg-white/5 p-1">
+          {periods.map(option => (
+            <button
+              key={option.value}
+              onClick={() => setInternalPeriod(option.value)}
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                internalPeriod === option.value
+                  ? 'bg-indigo-500 text-white'
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <ResponsiveContainer width="100%" height={chartHeight}>
         <ComposedChart data={points} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
@@ -117,10 +149,10 @@ export function CombinedChartWidget({
             type="monotone"
             dataKey="approved"
             name="approved"
-            stroke="#f59e0b"
+            stroke="#3b82f6"
             strokeWidth={2}
             dot={false}
-            activeDot={{ r: 4, fill: '#f59e0b', strokeWidth: 0 }}
+            activeDot={{ r: 4, fill: '#3b82f6', strokeWidth: 0 }}
           />
           <Line
             yAxisId="count"

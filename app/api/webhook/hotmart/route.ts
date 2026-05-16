@@ -50,7 +50,10 @@ export async function POST(req: NextRequest) {
     const moeda: string = priceObj?.currency_value ?? 'BRL'
     const marketplaceCommission: number = ((dados.commissions ?? []) as HotmartCommission[])
       .find((c) => c.source === 'MARKETPLACE')?.value ?? 0
-    const valor = parseFloat((priceValue - marketplaceCommission).toFixed(2))
+    const status = mapStatus(evento)
+    const valor = status === 'abandoned'
+      ? 0
+      : parseFloat((priceValue - marketplaceCommission).toFixed(2))
     console.log('💵 [6] priceField:', dados.purchase?.original_offer_price ? 'original_offer_price' : 'price', '| priceValue:', priceValue, '| marketplace:', marketplaceCommission, '| valor:', valor, '| moeda:', moeda)
 
     // Concatena type com bandeira do cartão para melhor identificação
@@ -75,7 +78,7 @@ export async function POST(req: NextRequest) {
       comprador_email: dados.buyer?.email,
       valor,
       moeda,
-      status: mapStatus(evento),
+      status,
       pais: dados.buyer?.address?.country ?? null,
       forma_pagamento,
       origem,
@@ -114,6 +117,7 @@ function mapStatus(evento: string): string {
     PURCHASE_COMPLETE: 'approved',
     PURCHASE_PROTEST: 'refunded',
     PURCHASE_DELAYED: 'pending',
+    PURCHASE_OUT_OF_SHOPPING_CART: 'abandoned',
   }
   return map[evento] || 'pending'
 }

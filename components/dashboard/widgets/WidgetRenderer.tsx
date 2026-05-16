@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { useSortable } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react'
+import { useDraggable } from '@dnd-kit/core'
 import { GripVertical, Trash2 } from 'lucide-react'
 import { computeWidgetData, getValueFormat } from '@/lib/utils'
 import type { WidgetConfig, Venda, Period } from '@/lib/types'
@@ -13,31 +13,12 @@ import { PieWidget } from './PieWidget'
 import { CombinedChartWidget } from './CombinedChartWidget'
 import { SalesTable } from '@/components/dashboard/SalesTable'
 
-const CHART_HEIGHT_MAP: Record<string, number> = {
-  small: 150,
-  medium: 220,
-  large: 300,
-  extra: 400,
-}
-
-const LEGACY_WIDTHS: Record<string, string> = {
-  'full':  '100%',
-  'half':  'calc(50% - 12px)',
-  '1/2':   'calc(50% - 12px)',
-  '1/3':   'calc(33.333% - 16px)',
-  '1/4':   'calc(25% - 18px)',
-  '2/3':   'calc(66.666% - 8px)',
-  '3/4':   'calc(75% - 6px)',
-}
-
-function resolveWidth(w: string): string {
-  if (w.includes('px')) return w
-  return LEGACY_WIDTHS[w] ?? 'calc(50% - 12px)'
-}
+const GRID_ROW_HEIGHT = 120
 
 export function WidgetRenderer({
   config,
   vendas,
+  combinedVendas,
   period,
   exchangeRate,
   custoTotal = 0,
@@ -47,47 +28,34 @@ export function WidgetRenderer({
 }: {
   config: WidgetConfig
   vendas: Venda[]
+  combinedVendas?: Venda[]
   period: Period
   exchangeRate: number
   custoTotal?: number
   editMode: boolean
   onDelete: (id: string) => void
-  onUpdateConfig?: (id: string, updates: { width?: string; height?: string }) => void
+  onUpdateConfig?: (id: string, updates: { width?: string; height?: string; col_span?: number; row_span?: number }) => void
 }) {
   // ref on the inner card to measure real dimensions for resize
   const cardRef = useRef<HTMLDivElement>(null)
   const [liveSize, setLiveSize] = useState<{ w: number; h: number } | null>(null)
 
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: config.id, disabled: !editMode })
+  const { attributes, listeners, setNodeRef, isDragging } =
+    useDraggable({ id: config.id, disabled: !editMode })
 
   const data = computeWidgetData(vendas, config.data_source, period, exchangeRate, custoTotal)
   const isBRL = getValueFormat(config.data_source) === 'brl'
 
   const chartHeight = liveSize
     ? Math.max(120, liveSize.h - 80)
-    : config.height?.includes('px')
-      ? Math.max(120, parseInt(config.height) - 80)
-      : CHART_HEIGHT_MAP[config.height ?? 'medium'] ?? 220
-
-  // Width applied on the outer sortable wrapper
-  const widthStyle = liveSize ? `${liveSize.w}px` : resolveWidth(config.width)
+    : Math.max(120, (config.row_span ?? 2) * GRID_ROW_HEIGHT - 80)
 
   // Height applied directly on the inner card so h-full works correctly
-  const cardHeightStyle: React.CSSProperties = liveSize
+  const cardHeightStyle: CSSProperties = liveSize
     ? { height: `${liveSize.h}px`, minHeight: '150px', overflow: 'hidden' }
-    : config.height?.includes('px')
-      ? { height: config.height, minHeight: '150px', overflow: 'hidden' }
-      : {}
+    : { height: '100%', minHeight: '150px', overflow: 'hidden' }
 
-  const dndStyle = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-    zIndex: isDragging ? 50 : undefined,
-  }
-
-  function handleResizeStart(e: React.MouseEvent) {
+  function handleResizeStart(e: ReactMouseEvent) {
     e.preventDefault()
     e.stopPropagation()
     const card = cardRef.current
@@ -110,7 +78,9 @@ export function WidgetRenderer({
       const newW = Math.max(200, startW + ev.clientX - startX)
       const newH = Math.max(150, startH + ev.clientY - startY)
       setLiveSize(null)
-      onUpdateConfig?.(config.id, { width: `${newW}px`, height: `${newH}px` })
+      const colSpan = Math.min(12, Math.max(3, Math.round(newW / 110)))
+      const rowSpan = Math.max(1, Math.round(newH / GRID_ROW_HEIGHT))
+      onUpdateConfig?.(config.id, { col_span: colSpan, row_span: rowSpan })
     }
 
     window.addEventListener('mousemove', onMouseMove)
@@ -121,10 +91,9 @@ export function WidgetRenderer({
     <div
       ref={setNodeRef}
       style={{
-        ...dndStyle,
-        width: widthStyle,
-        flexShrink: 0,
-        maxWidth: '100%',
+        gridColumn: `${config.col_start ?? 1} / span ${config.col_span ?? 6}`,
+        gridRow: `${config.row_start ?? 1} / span ${config.row_span ?? 2}`,
+        opacity: isDragging ? 0.28 : 1,
       }}
     >
       <div
@@ -207,7 +176,7 @@ export function WidgetRenderer({
         {config.type === 'combined' && data.kind === 'combined' && (
           <CombinedChartWidget
             title={config.title}
-            points={data.points}
+            vendas={combinedVendas ?? vendas}
             chartHeight={chartHeight}
           />
         )}

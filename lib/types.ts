@@ -1,4 +1,4 @@
-export type Status = 'approved' | 'refunded' | 'cancelled' | 'pending'
+export type Status = 'approved' | 'refunded' | 'cancelled' | 'pending' | 'abandoned'
 
 export type Venda = {
   id: string
@@ -70,4 +70,8 @@ export interface WidgetConfig {
   width: string
   position: number
   height?: string
+  col_start?: number | null
+  row_start?: number | null
+  col_span?: number | null
+  row_span?: number | null
 }

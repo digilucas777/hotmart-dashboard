@@ -55,6 +55,7 @@ export function statusLabel(status: string): string {
     refunded: 'Reembolsado',
     cancelled: 'Cancelado',
     pending: 'Pendente',
+    abandoned: 'Abandono',
   }
   return map[status] ?? status
 }
@@ -381,7 +382,7 @@ export function computeWidgetData(
     }
     case 'by_status': {
       const statusMap: Record<string, string> = {
-        approved: 'Aprovado', refunded: 'Reembolsado', cancelled: 'Cancelado', pending: 'Pendente',
+        approved: 'Aprovado', refunded: 'Reembolsado', cancelled: 'Cancelado', pending: 'Pendente', abandoned: 'Abandono',
       }
       const groups: Record<string, number> = {}
       vendas.forEach(v => {
