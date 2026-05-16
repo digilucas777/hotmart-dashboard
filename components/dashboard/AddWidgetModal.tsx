@@ -131,9 +131,12 @@ export function AddWidgetModal({
   async function handleCreate() {
     if (!selectedType || !dataSource) return
     setSaving(true)
-    await onAdd({ type: selectedType, data_source: dataSource, title: title || 'Widget', width })
-    setSaving(false)
-    handleClose()
+    try {
+      await onAdd({ type: selectedType, data_source: dataSource, title: title || 'Widget', width })
+      handleClose()
+    } finally {
+      setSaving(false)
+    }
   }
 
   const sources = selectedType ? getSourcesForType(selectedType) : []

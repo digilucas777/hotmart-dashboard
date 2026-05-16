@@ -5,7 +5,7 @@ import {
   CheckCircle,
   TrendingUp,
   CreditCard,
-  RotateCcw,
+  BadgeX,
   Clock,
   AlertTriangle,
 } from 'lucide-react'
@@ -18,7 +18,7 @@ const ICON_MAP: Partial<Record<WidgetDataSource, React.ElementType>> = {
   sales_count: CheckCircle,
   approval_rate: TrendingUp,
   avg_ticket: CreditCard,
-  refunds_count: RotateCcw,
+  refunds_count: BadgeX,
   pending_count: Clock,
   cancelled_count: AlertTriangle,
 }

@@ -73,6 +73,16 @@ function normalizeRowSpan(widget: WidgetConfig) {
   return rowSpan <= 4 ? heightToRows(widget.height, widget.type) : rowSpan
 }
 
+function normalizeColSpan(span: number) {
+  if (span <= 2) return 2
+  if (span <= 3) return 3
+  if (span <= 4) return 4
+  if (span <= 6) return 6
+  if (span <= 8) return 8
+  if (span <= 9) return 9
+  return 12
+}
+
 function withGridDefaults(widget: WidgetConfig, index: number): WidgetConfig {
   const colSpan = widget.col_span ?? widthToSpan(widget.width)
   const rowSpan = normalizeRowSpan(widget)
@@ -292,6 +302,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [redoStack, setRedoStack] = useState<WidgetConfig[][]>([])
   const [savingLayout, setSavingLayout] = useState(false)
   const [layoutError, setLayoutError] = useState<string | null>(null)
+  const [widgetError, setWidgetError] = useState<string | null>(null)
   const gridRef = useRef<HTMLDivElement>(null)
 
   const [showProducts, setShowProducts] = useState(false)
@@ -474,11 +485,16 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     const col_span = widthToSpan(config.width)
     const row_span = heightToRows(config.height, config.type)
     const maxRow = widgets.reduce((max, w) => Math.max(max, (w.row_start ?? 1) + (w.row_span ?? 1) - 1), 0)
-    const { data } = await supabase
+    setWidgetError(null)
+    const { data, error } = await supabase
       .from('dashboard_widgets')
       .insert({ ...config, projeto_id: projectId, position, col_start: 1, row_start: maxRow + 1, col_span, row_span })
       .select()
       .single()
+    if (error) {
+      setWidgetError(error.message)
+      return
+    }
     if (data) {
       setWidgets(prev => {
         const next = compactLayout([...prev, withGridDefaults(data as WidgetConfig, prev.length)])
@@ -509,9 +525,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     const colWidth = rect.width / GRID_COLUMNS
     const col_span = Math.min(
       GRID_COLUMNS - (widget.col_start ?? 1) + 1,
-      Math.max(1, Math.round((width + GRID_ITEM_PADDING * 2) / colWidth)),
+      normalizeColSpan(Math.round((width + GRID_ITEM_PADDING * 2) / colWidth)),
     )
-    const row_span = Math.max(4, Math.round((height + GRID_ITEM_PADDING * 2) / GRID_ROW_HEIGHT))
+    const row_span = Math.max(7, Math.round((height + GRID_ITEM_PADDING * 2) / GRID_ROW_HEIGHT))
     return {
       id,
       col_start: widget.col_start ?? 1,
@@ -733,6 +749,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             <span className={layoutError ? 'font-semibold text-red-300' : hasUnsavedLayout ? 'font-semibold text-indigo-300' : 'text-slate-600'}>
               {layoutError ?? (hasUnsavedLayout ? 'Alterações não salvas' : 'Layout salvo')}
             </span>
+          </div>
+        )}
+        {widgetError && (
+          <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs font-semibold text-red-200">
+            Erro ao criar widget: {widgetError}
           </div>
         )}
 

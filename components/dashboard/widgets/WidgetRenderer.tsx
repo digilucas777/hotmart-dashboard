@@ -148,7 +148,25 @@ export function WidgetRenderer({
               </button>
             </div>
 
-            {/* Resize handle — bottom-right corner */}
+            <div
+              onPointerDown={e => e.stopPropagation()}
+              onMouseDown={handleResizeStart}
+              title="Ajustar largura"
+              className={`absolute right-0 top-1/2 z-10 h-16 w-3 -translate-y-1/2 cursor-ew-resize rounded-l-lg bg-white/10 transition-opacity hover:bg-white/20 ${
+                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+            />
+
+            <div
+              onPointerDown={e => e.stopPropagation()}
+              onMouseDown={handleResizeStart}
+              title="Ajustar altura"
+              className={`absolute bottom-0 left-1/2 z-10 h-3 w-16 -translate-x-1/2 cursor-ns-resize rounded-t-lg bg-white/10 transition-opacity hover:bg-white/20 ${
+                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+            />
+
+            {/* Resize handle - bottom-right corner */}
             <div
               onPointerDown={e => e.stopPropagation()}
               onMouseDown={handleResizeStart}

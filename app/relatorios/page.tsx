@@ -22,6 +22,9 @@ type WhatsAppConnection = {
   id: string
   nome: string
   telefone: string
+  phone_number_id?: string | null
+  access_token?: string | null
+  api_version?: string | null
   status: string
 }
 
@@ -31,7 +34,9 @@ type ReportSchedule = {
   projeto_id: string
   whatsapp_connection_id: string | null
   destinatario: string
+  destinatarios?: string[]
   frequencia: string
+  periodo: string
   horario: string
   metricas: string[]
   mensagem: string
@@ -59,14 +64,38 @@ const FREQUENCIES = [
   { value: 'weekly', label: 'Semanalmente' },
 ]
 
+const PERIOD_OPTIONS = [
+  { value: 'today', label: 'Hoje' },
+  { value: 'yesterday', label: 'Ontem' },
+  { value: '7d', label: 'Última semana' },
+  { value: '15d', label: '15 dias' },
+  { value: '30d', label: 'Últimos 30 dias' },
+  { value: 'lastMonth', label: 'Último mês' },
+  { value: '3m', label: '3 meses' },
+  { value: '6m', label: '6 meses' },
+  { value: '1y', label: '1 ano' },
+]
+
 const fieldClass =
   'h-10 rounded-lg border border-white/10 bg-[#121221] px-3 text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-600 focus:border-indigo-500/60'
 
-function todayRange() {
+function reportRange(period: string) {
   const now = new Date()
-  const from = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const to = new Date(from.getTime() + 86_400_000)
-  return { from, to }
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const day = 86_400_000
+  if (period === 'yesterday') return { from: new Date(today.getTime() - day), to: today }
+  if (period === '7d') return { from: new Date(today.getTime() - 6 * day), to: new Date(today.getTime() + day) }
+  if (period === '15d') return { from: new Date(today.getTime() - 14 * day), to: new Date(today.getTime() + day) }
+  if (period === '30d') return { from: new Date(today.getTime() - 29 * day), to: new Date(today.getTime() + day) }
+  if (period === 'lastMonth') {
+    const from = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const to = new Date(now.getFullYear(), now.getMonth(), 1)
+    return { from, to }
+  }
+  if (period === '3m') return { from: new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()), to: new Date(today.getTime() + day) }
+  if (period === '6m') return { from: new Date(now.getFullYear(), now.getMonth() - 6, now.getDate()), to: new Date(today.getTime() + day) }
+  if (period === '1y') return { from: new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()), to: new Date(today.getTime() + day) }
+  return { from: today, to: new Date(today.getTime() + day) }
 }
 
 export default function RelatoriosPage() {
@@ -76,14 +105,19 @@ export default function RelatoriosPage() {
   const [vendas, setVendas] = useState<Venda[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [sendResult, setSendResult] = useState<string | null>(null)
   const [connectionName, setConnectionName] = useState('WhatsApp principal')
   const [connectionPhone, setConnectionPhone] = useState('')
+  const [phoneNumberId, setPhoneNumberId] = useState('')
+  const [accessToken, setAccessToken] = useState('')
   const [form, setForm] = useState({
     nome: 'Relatório diário',
     projeto_id: '',
     whatsapp_connection_id: '',
     destinatario: '',
     frequencia: 'daily',
+    periodo: 'today',
     horario: '07:00',
     mensagem: 'Bom dia! Segue o relatório de {projeto} referente a hoje:',
   })
@@ -150,7 +184,7 @@ export default function RelatoriosPage() {
         return
       }
 
-      const { from, to } = todayRange()
+      const { from, to } = reportRange(form.periodo)
       const { data } = await supabase
         .from('vendas')
         .select('*')
@@ -161,7 +195,7 @@ export default function RelatoriosPage() {
     }
 
     loadProjectSales()
-  }, [form.projeto_id])
+  }, [form.periodo, form.projeto_id])
 
   const preview = useMemo(() => {
     const projectName = selectedProject?.nome ?? 'Projeto'
@@ -177,9 +211,10 @@ export default function RelatoriosPage() {
       if (data.kind === 'metric') lines.push(`• ${option?.label ?? metric}: ${data.value}`)
     })
 
-    lines.push('', `Envio: ${FREQUENCIES.find(f => f.value === form.frequencia)?.label ?? form.frequencia} às ${form.horario}`)
+    lines.push('', `Período: ${PERIOD_OPTIONS.find(p => p.value === form.periodo)?.label ?? form.periodo}`)
+    lines.push(`Envio: ${FREQUENCIES.find(f => f.value === form.frequencia)?.label ?? form.frequencia} às ${form.horario}`)
     return lines.join('\n')
-  }, [form.frequencia, form.horario, form.mensagem, metricas, selectedProject?.nome, vendas])
+  }, [form.frequencia, form.horario, form.mensagem, form.periodo, metricas, selectedProject?.nome, vendas])
 
   async function connectWhatsApp() {
     if (!connectionPhone.trim()) return
@@ -190,6 +225,9 @@ export default function RelatoriosPage() {
         .insert({
           nome: connectionName.trim() || 'WhatsApp',
           telefone: connectionPhone.trim(),
+          phone_number_id: phoneNumberId.trim() || null,
+          access_token: accessToken.trim() || null,
+          api_version: 'v25.0',
           status: 'connected',
         })
         .select()
@@ -198,6 +236,8 @@ export default function RelatoriosPage() {
         setConnections(prev => [data as WhatsAppConnection, ...prev])
         setForm(prev => ({ ...prev, whatsapp_connection_id: (data as WhatsAppConnection).id }))
         setConnectionPhone('')
+        setPhoneNumberId('')
+        setAccessToken('')
       }
     } finally {
       setSaving(false)
@@ -205,14 +245,20 @@ export default function RelatoriosPage() {
   }
 
   async function saveSchedule() {
-    if (!form.projeto_id || !form.destinatario.trim() || metricas.length === 0) return
+    const destinatarios = form.destinatario
+      .split(/[\n,;]/)
+      .map(v => v.trim())
+      .filter(Boolean)
+    if (!form.projeto_id || destinatarios.length === 0 || metricas.length === 0) return
     setSaving(true)
     try {
       const { data } = await supabase
         .from('whatsapp_report_schedules')
         .insert({
           ...form,
-          destinatario: form.destinatario.trim(),
+          whatsapp_connection_id: form.whatsapp_connection_id || null,
+          destinatario: destinatarios[0],
+          destinatarios,
           metricas,
           timezone: 'America/Sao_Paulo',
           ativo: true,
@@ -227,6 +273,34 @@ export default function RelatoriosPage() {
 
   function toggleMetric(metric: WidgetDataSource) {
     setMetricas(prev => prev.includes(metric) ? prev.filter(m => m !== metric) : [...prev, metric])
+  }
+
+  async function sendNow() {
+    const recipients = form.destinatario
+      .split(/[\n,;]/)
+      .map(v => v.trim())
+      .filter(Boolean)
+    if (recipients.length === 0) return
+    setSending(true)
+    setSendResult(null)
+    try {
+      const res = await fetch('/api/whatsapp/send-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          connectionId: form.whatsapp_connection_id,
+          recipients,
+          message: preview,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Falha ao enviar teste.')
+      setSendResult('Teste enviado com sucesso.')
+    } catch (err) {
+      setSendResult(err instanceof Error ? err.message : 'Falha ao enviar teste.')
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -276,13 +350,26 @@ export default function RelatoriosPage() {
                       value={connectionPhone}
                       onChange={e => setConnectionPhone(e.target.value)}
                       className={`${fieldClass} min-w-0 flex-1`}
-                      placeholder="+55 11 99999-9999"
+                      placeholder="Número exibido"
                     />
-                    <Button onClick={connectWhatsApp} disabled={saving || !connectionPhone.trim()}>
-                      <Phone size={14} />
-                      Conectar
-                    </Button>
                   </div>
+                  <input
+                    value={phoneNumberId}
+                    onChange={e => setPhoneNumberId(e.target.value)}
+                    className={`${fieldClass} w-full`}
+                    placeholder="Phone Number ID da Meta"
+                  />
+                  <input
+                    value={accessToken}
+                    onChange={e => setAccessToken(e.target.value)}
+                    className={`${fieldClass} w-full`}
+                    placeholder="Access Token WhatsApp Cloud API"
+                    type="password"
+                  />
+                  <Button onClick={connectWhatsApp} disabled={saving || !connectionPhone.trim() || !phoneNumberId.trim() || !accessToken.trim()}>
+                    <Phone size={14} />
+                    Conectar
+                  </Button>
                   {connections.length > 0 && (
                     <div className="space-y-2 pt-1">
                       {connections.map(connection => (
@@ -338,8 +425,17 @@ export default function RelatoriosPage() {
                     value={form.destinatario}
                     onChange={e => setForm(prev => ({ ...prev, destinatario: e.target.value }))}
                     className={`${fieldClass} w-full`}
-                    placeholder="WhatsApp destinatário"
+                    placeholder="Destinatários: um por linha, vírgula ou ;"
                   />
+                  <select
+                    value={form.periodo}
+                    onChange={e => setForm(prev => ({ ...prev, periodo: e.target.value }))}
+                    className={`${fieldClass} w-full`}
+                  >
+                    {PERIOD_OPTIONS.map(period => (
+                      <option key={period.value} value={period.value}>{period.label}</option>
+                    ))}
+                  </select>
                   <div className="grid grid-cols-2 gap-2">
                     <select
                       value={form.frequencia}
@@ -397,13 +493,27 @@ export default function RelatoriosPage() {
 
                 <div className="mt-5 flex justify-end">
                   <Button
+                    variant="outline"
+                    onClick={sendNow}
+                    disabled={sending || !form.destinatario.trim() || !form.whatsapp_connection_id}
+                    className="mr-2"
+                  >
+                    {sending ? <Spinner size={14} /> : <Send size={14} />}
+                    Enviar agora
+                  </Button>
+                  <Button
                     onClick={saveSchedule}
                     disabled={saving || !form.projeto_id || !form.destinatario.trim() || metricas.length === 0}
                   >
                     {saving ? <Spinner size={14} /> : <Save size={14} />}
-                    Salvar relatório
+                    Programar
                   </Button>
                 </div>
+                {sendResult && (
+                  <p className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">
+                    {sendResult}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-6">
