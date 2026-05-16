@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft,
@@ -37,8 +37,9 @@ import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 
 const GRID_COLUMNS = 12
-const GRID_ROW_HEIGHT = 120
-const GRID_GAP = 28
+const GRID_ROW_HEIGHT = 20
+const GRID_GAP = 0
+const GRID_ITEM_PADDING = 10
 
 type GridPlacement = {
   id: string
@@ -58,18 +59,23 @@ function widthToSpan(width?: string) {
 }
 
 function heightToRows(height?: string, type?: string) {
-  if (height === 'small') return 1
-  if (height === 'large') return 3
-  if (height === 'extra') return 4
-  if (type === 'metric') return 1
-  if (type === 'combined' || type === 'table') return 4
-  if (type === 'line' || type === 'bar' || type === 'pie') return 3
-  return 2
+  if (height === 'small') return 6
+  if (height === 'large') return 18
+  if (height === 'extra') return 24
+  if (type === 'metric') return 7
+  if (type === 'combined' || type === 'table') return 22
+  if (type === 'line' || type === 'bar' || type === 'pie') return 18
+  return 12
+}
+
+function normalizeRowSpan(widget: WidgetConfig) {
+  const rowSpan = widget.row_span ?? heightToRows(widget.height, widget.type)
+  return rowSpan <= 4 ? heightToRows(widget.height, widget.type) : rowSpan
 }
 
 function withGridDefaults(widget: WidgetConfig, index: number): WidgetConfig {
   const colSpan = widget.col_span ?? widthToSpan(widget.width)
-  const rowSpan = widget.row_span ?? heightToRows(widget.height, widget.type)
+  const rowSpan = normalizeRowSpan(widget)
   const perRow = Math.max(1, Math.floor(GRID_COLUMNS / colSpan))
   return {
     ...widget,
@@ -80,11 +86,17 @@ function withGridDefaults(widget: WidgetConfig, index: number): WidgetConfig {
   }
 }
 
+function normalizeLoadedLayout(rawWidgets: WidgetConfig[]) {
+  const normalized = rawWidgets.map(withGridDefaults)
+  const needsRecovery = rawWidgets.some(w => (w.row_span ?? 0) <= 4 || (w.row_start ?? 1) > 80)
+  return needsRecovery ? compactLayout(normalized) : normalized
+}
+
 function collides(a: { col: number; row: number; colSpan: number; rowSpan: number }, b: WidgetConfig) {
   const bCol = b.col_start ?? 1
   const bRow = b.row_start ?? 1
   const bColSpan = b.col_span ?? widthToSpan(b.width)
-  const bRowSpan = b.row_span ?? heightToRows(b.height, b.type)
+  const bRowSpan = normalizeRowSpan(b)
 
   return (
     a.col < bCol + bColSpan &&
@@ -118,6 +130,92 @@ function applyPlacement(widget: WidgetConfig, placement: GridPlacement): WidgetC
     : widget
 }
 
+function layoutBounds(layout: WidgetConfig[], ignoreId?: string) {
+  return layout
+    .filter(w => w.id !== ignoreId)
+    .map(w => ({
+      id: w.id,
+      col: w.col_start ?? 1,
+      row: w.row_start ?? 1,
+      colSpan: w.col_span ?? widthToSpan(w.width),
+      rowSpan: normalizeRowSpan(w),
+    }))
+}
+
+function collidesBounds(
+  a: { col: number; row: number; colSpan: number; rowSpan: number },
+  b: { col: number; row: number; colSpan: number; rowSpan: number },
+) {
+  return (
+    a.col < b.col + b.colSpan &&
+    a.col + a.colSpan > b.col &&
+    a.row < b.row + b.rowSpan &&
+    a.row + a.rowSpan > b.row
+  )
+}
+
+function resolveOverlaps(layout: WidgetConfig[], activeId: string) {
+  const active = layout.find(w => w.id === activeId)
+  if (!active) return layout
+
+  const placed = layoutBounds([active])
+  const next = layout.map(w => ({ ...w }))
+  const others = next
+    .filter(w => w.id !== activeId)
+    .sort((a, b) => ((a.row_start ?? 1) - (b.row_start ?? 1)) || ((a.col_start ?? 1) - (b.col_start ?? 1)))
+
+  for (const widget of others) {
+    const colSpan = widget.col_span ?? widthToSpan(widget.width)
+    const rowSpan = normalizeRowSpan(widget)
+    const box = {
+      col: widget.col_start ?? 1,
+      row: widget.row_start ?? 1,
+      colSpan,
+      rowSpan,
+    }
+
+    while (placed.some(p => collidesBounds(box, p))) {
+      box.row += 1
+    }
+
+    widget.row_start = box.row
+    widget.row_span = rowSpan
+    placed.push({ id: widget.id, ...box })
+  }
+
+  return next
+}
+
+function compactLayout(widgets: WidgetConfig[]) {
+  const placed: { col: number; row: number; colSpan: number; rowSpan: number }[] = []
+
+  return widgets.map((widget, index) => {
+    const colSpan = widget.col_span ?? widthToSpan(widget.width)
+    const rowSpan = normalizeRowSpan(widget)
+    let row = 1
+    let col = 1
+
+    search:
+    while (true) {
+      for (col = 1; col <= GRID_COLUMNS - colSpan + 1; col++) {
+        const box = { col, row, colSpan, rowSpan }
+        if (!placed.some(p => collidesBounds(box, p))) break search
+      }
+      row += 1
+    }
+
+    placed.push({ col, row, colSpan, rowSpan })
+    return {
+      ...widget,
+      position: index,
+      col_start: col,
+      row_start: row,
+      col_span: colSpan,
+      row_span: rowSpan,
+    }
+  })
+}
+
 function sameLayout(a: WidgetConfig[], b: WidgetConfig[]) {
   if (a.length !== b.length) return false
   return a.every((widget, index) => {
@@ -149,10 +247,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null)
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null)
   const [dragPreview, setDragPreview] = useState<GridPlacement | null>(null)
+  const [resizePreview, setResizePreview] = useState<GridPlacement | null>(null)
   const [savedWidgets, setSavedWidgets] = useState<WidgetConfig[]>([])
   const [undoStack, setUndoStack] = useState<WidgetConfig[][]>([])
   const [redoStack, setRedoStack] = useState<WidgetConfig[][]>([])
   const [savingLayout, setSavingLayout] = useState(false)
+  const [layoutError, setLayoutError] = useState<string | null>(null)
   const gridRef = useRef<HTMLDivElement>(null)
 
   const [showProducts, setShowProducts] = useState(false)
@@ -188,7 +288,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       .eq('projeto_id', projectId)
       .order('position')
       .then(({ data }) => {
-        const normalized = ((data ?? []) as WidgetConfig[]).map(withGridDefaults)
+        const normalized = normalizeLoadedLayout((data ?? []) as WidgetConfig[])
         setWidgets(normalized)
         setSavedWidgets(normalized)
         setLoadingWidgets(false)
@@ -287,7 +387,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       const colStep = colWidth + GRID_GAP
       const rowStep = GRID_ROW_HEIGHT + GRID_GAP
       const colSpan = widget.col_span ?? widthToSpan(widget.width)
-      const rowSpan = widget.row_span ?? heightToRows(widget.height, widget.type)
+      const rowSpan = normalizeRowSpan(widget)
       const currentCol = widget.col_start ?? 1
       const currentRow = widget.row_start ?? 1
       const col_start = Math.min(
@@ -325,7 +425,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       setDragPreview(null)
       if (!placement) return
       pushHistory()
-      setWidgets(prev => prev.map(w => applyPlacement(w, placement)))
+      setWidgets(prev => resolveOverlaps(prev.map(w => applyPlacement(w, placement)), placement.id))
     },
     [dragPreview, getPlacementFromDelta, pushHistory],
   )
@@ -342,7 +442,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       .single()
     if (data) {
       setWidgets(prev => {
-        const next = [...prev, withGridDefaults(data as WidgetConfig, prev.length)]
+        const next = compactLayout([...prev, withGridDefaults(data as WidgetConfig, prev.length)])
         setSavedWidgets(next)
         return next
       })
@@ -358,13 +458,48 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
   const updateWidgetConfig = useCallback((id: string, updates: { width?: string; height?: string; col_span?: number; row_span?: number }) => {
     pushHistory()
-    setWidgets(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w))
+    setWidgets(prev => resolveOverlaps(prev.map(w => w.id === id ? { ...w, ...updates } : w), id))
+  }, [pushHistory])
+
+  const previewWidgetResize = useCallback((id: string, width: number, height: number) => {
+    const grid = gridRef.current
+    const widget = widgets.find(w => w.id === id)
+    if (!grid || !widget) return
+
+    const rect = grid.getBoundingClientRect()
+    const colWidth = rect.width / GRID_COLUMNS
+    const col_span = Math.min(
+      GRID_COLUMNS - (widget.col_start ?? 1) + 1,
+      Math.max(2, Math.round((width + GRID_ITEM_PADDING * 2) / colWidth)),
+    )
+    const row_span = Math.max(5, Math.round((height + GRID_ITEM_PADDING * 2) / GRID_ROW_HEIGHT))
+    setResizePreview({
+      id,
+      col_start: widget.col_start ?? 1,
+      row_start: widget.row_start ?? 1,
+      col_span,
+      row_span,
+    })
+  }, [widgets])
+
+  const commitWidgetResize = useCallback((id: string) => {
+    const placement = resizePreview
+    setResizePreview(null)
+    if (!placement || placement.id !== id) return
+    pushHistory()
+    setWidgets(prev => resolveOverlaps(prev.map(w => applyPlacement(w, placement)), id))
+  }, [pushHistory, resizePreview])
+
+  const organizeLayout = useCallback(() => {
+    pushHistory()
+    setWidgets(prev => compactLayout(prev))
   }, [pushHistory])
 
   const saveLayout = useCallback(async () => {
     setSavingLayout(true)
+    setLayoutError(null)
     try {
-      await Promise.all(
+      const results = await Promise.all(
         widgets.map((w, index) =>
           supabase
             .from('dashboard_widgets')
@@ -373,14 +508,18 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               col_start: w.col_start ?? 1,
               row_start: w.row_start ?? 1,
               col_span: w.col_span ?? widthToSpan(w.width),
-              row_span: w.row_span ?? heightToRows(w.height, w.type),
+              row_span: w.row_span ?? normalizeRowSpan(w),
             })
             .eq('id', w.id),
         ),
       )
+      const failed = results.find(result => result.error)
+      if (failed?.error) throw failed.error
       setSavedWidgets(widgets)
       setUndoStack([])
       setRedoStack([])
+    } catch (err) {
+      setLayoutError(err instanceof Error ? err.message : 'Não foi possível salvar o layout.')
     } finally {
       setSavingLayout(false)
     }
@@ -432,6 +571,13 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
   const isReady = !loading && !loadingWidgets
   const hasUnsavedLayout = !sameLayout(widgets, savedWidgets)
+  const previewPlacement = dragPreview ?? resizePreview
+  const displayedWidgets = useMemo(
+    () => previewPlacement
+      ? resolveOverlaps(widgets.map(w => applyPlacement(w, previewPlacement)), previewPlacement.id)
+      : widgets,
+    [previewPlacement, widgets],
+  )
 
   return (
     <div className="min-h-screen bg-[#090912] text-slate-100">
@@ -455,7 +601,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           <h1 className="truncate text-sm font-semibold text-slate-200">
             {projeto?.nome ?? '...'}
           </h1>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto" />
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-[1400px] px-6 py-9">
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+          <PeriodFilter value={period} onChange={setPeriod} />
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-[#111120]/75 p-1.5 shadow-xl shadow-black/20">
             <button
               onClick={fetchVendas}
               title="Atualizar"
@@ -478,6 +631,15 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             </Button>
             {editMode && (
               <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={organizeLayout}
+                  title="Organizar widgets em sequência"
+                >
+                  <LayoutDashboard size={13} />
+                  Organizar
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -516,12 +678,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             </Button>
           </div>
         </div>
-      </header>
-
-      <main className="mx-auto max-w-[1400px] px-6 py-9">
-        <div className="mb-8">
-          <PeriodFilter value={period} onChange={setPeriod} />
-        </div>
         {editMode && (
           <div className="mb-5 flex items-center justify-between rounded-xl border border-white/10 bg-[#151525]/80 px-4 py-3 text-xs text-slate-400 shadow-xl shadow-black/20">
             <span>
@@ -529,8 +685,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 ? 'Widget selecionado. Arraste o card ou use o canto inferior direito para redimensionar.'
                 : 'Selecione um widget para editar posição e tamanho.'}
             </span>
-            <span className={hasUnsavedLayout ? 'font-semibold text-indigo-300' : 'text-slate-600'}>
-              {hasUnsavedLayout ? 'Alterações não salvas' : 'Layout salvo'}
+            <span className={layoutError ? 'font-semibold text-red-300' : hasUnsavedLayout ? 'font-semibold text-indigo-300' : 'text-slate-600'}>
+              {layoutError ?? (hasUnsavedLayout ? 'Alterações não salvas' : 'Layout salvo')}
             </span>
           </div>
         )}
@@ -576,16 +732,16 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                   gap: `${GRID_GAP}px`,
                 }}
               >
-                {dragPreview && (
+                {previewPlacement && (
                   <div
-                    className="pointer-events-none rounded-2xl border border-dashed border-white/60 bg-white/8 shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_18px_45px_rgba(99,102,241,0.18)]"
+                    className="pointer-events-none m-2.5 rounded-2xl border border-dashed border-white/70 bg-white/8 shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_18px_45px_rgba(99,102,241,0.18)]"
                     style={{
-                      gridColumn: `${dragPreview.col_start} / span ${dragPreview.col_span}`,
-                      gridRow: `${dragPreview.row_start} / span ${dragPreview.row_span}`,
+                      gridColumn: `${previewPlacement.col_start} / span ${previewPlacement.col_span}`,
+                      gridRow: `${previewPlacement.row_start} / span ${previewPlacement.row_span}`,
                     }}
                   />
                 )}
-                {widgets.map(w => (
+                {displayedWidgets.map(w => (
                   <WidgetRenderer
                     key={w.id}
                     config={w}
@@ -599,6 +755,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                     onSelect={setSelectedWidgetId}
                     onDelete={deleteWidget}
                     onUpdateConfig={updateWidgetConfig}
+                    onPreviewResize={previewWidgetResize}
+                    onCommitResize={commitWidgetResize}
                   />
                 ))}
               </div>

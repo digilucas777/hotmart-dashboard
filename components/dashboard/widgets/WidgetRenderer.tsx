@@ -13,7 +13,8 @@ import { PieWidget } from './PieWidget'
 import { CombinedChartWidget } from './CombinedChartWidget'
 import { SalesTable } from '@/components/dashboard/SalesTable'
 
-const GRID_ROW_HEIGHT = 120
+const GRID_ROW_HEIGHT = 20
+const GRID_ITEM_PADDING = 10
 
 export function WidgetRenderer({
   config,
@@ -27,6 +28,8 @@ export function WidgetRenderer({
   onSelect,
   onDelete,
   onUpdateConfig,
+  onPreviewResize,
+  onCommitResize,
 }: {
   config: WidgetConfig
   vendas: Venda[]
@@ -39,6 +42,8 @@ export function WidgetRenderer({
   onSelect: (id: string) => void
   onDelete: (id: string) => void
   onUpdateConfig?: (id: string, updates: { width?: string; height?: string; col_span?: number; row_span?: number }) => void
+  onPreviewResize?: (id: string, width: number, height: number) => void
+  onCommitResize?: (id: string) => void
 }) {
   // ref on the inner card to measure real dimensions for resize
   const cardRef = useRef<HTMLDivElement>(null)
@@ -52,12 +57,12 @@ export function WidgetRenderer({
 
   const chartHeight = liveSize
     ? Math.max(120, liveSize.h - 80)
-    : Math.max(120, (config.row_span ?? 2) * GRID_ROW_HEIGHT - 80)
+    : Math.max(120, (config.row_span ?? 12) * GRID_ROW_HEIGHT - GRID_ITEM_PADDING * 2 - 80)
 
   // Height applied directly on the inner card so h-full works correctly
   const cardHeightStyle: CSSProperties = liveSize
-    ? { height: `${liveSize.h}px`, minHeight: '150px', overflow: 'hidden' }
-    : { height: '100%', minHeight: '150px', overflow: 'hidden' }
+    ? { height: `${liveSize.h}px`, overflow: 'hidden' }
+    : { height: '100%', overflow: 'hidden' }
 
   function handleResizeStart(e: ReactMouseEvent) {
     e.preventDefault()
@@ -71,20 +76,17 @@ export function WidgetRenderer({
     const startH = card.offsetHeight
 
     function onMouseMove(ev: MouseEvent) {
-      const newW = Math.max(200, startW + ev.clientX - startX)
-      const newH = Math.max(150, startH + ev.clientY - startY)
+      const newW = Math.max(110, startW + ev.clientX - startX)
+      const newH = Math.max(90, startH + ev.clientY - startY)
       setLiveSize({ w: newW, h: newH })
+      onPreviewResize?.(config.id, newW, newH)
     }
 
-    function onMouseUp(ev: MouseEvent) {
+    function onMouseUp() {
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
-      const newW = Math.max(200, startW + ev.clientX - startX)
-      const newH = Math.max(150, startH + ev.clientY - startY)
       setLiveSize(null)
-      const colSpan = Math.min(12, Math.max(3, Math.round(newW / 110)))
-      const rowSpan = Math.max(1, Math.round(newH / GRID_ROW_HEIGHT))
-      onUpdateConfig?.(config.id, { col_span: colSpan, row_span: rowSpan })
+      onCommitResize?.(config.id)
     }
 
     window.addEventListener('mousemove', onMouseMove)
@@ -99,8 +101,9 @@ export function WidgetRenderer({
       }}
       style={{
         gridColumn: `${config.col_start ?? 1} / span ${config.col_span ?? 6}`,
-        gridRow: `${config.row_start ?? 1} / span ${config.row_span ?? 2}`,
+        gridRow: `${config.row_start ?? 1} / span ${config.row_span ?? 12}`,
         opacity: isDragging ? 0.28 : 1,
+        padding: GRID_ITEM_PADDING,
       }}
     >
       <div
