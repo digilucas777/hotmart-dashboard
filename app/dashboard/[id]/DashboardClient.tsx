@@ -591,6 +591,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       persistLocalLayout(projectId, widgets)
       setUndoStack([])
       setRedoStack([])
+      setEditMode(false)
+      setSelectedWidgetId(null)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Não foi possível salvar o layout.'
       if (message.includes('schema cache') || message.includes('col_span')) {
@@ -599,6 +601,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         setUndoStack([])
         setRedoStack([])
         setLayoutError(null)
+        setEditMode(false)
+        setSelectedWidgetId(null)
       } else {
         setLayoutError(message)
       }

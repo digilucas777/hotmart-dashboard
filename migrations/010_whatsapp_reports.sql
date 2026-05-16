@@ -2,17 +2,25 @@ CREATE TABLE IF NOT EXISTS whatsapp_connections (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   nome TEXT NOT NULL,
   telefone TEXT NOT NULL,
+  provider TEXT NOT NULL DEFAULT 'cloud',
   phone_number_id TEXT,
   access_token TEXT,
   api_version TEXT NOT NULL DEFAULT 'v25.0',
+  evolution_url TEXT,
+  evolution_api_key TEXT,
+  evolution_instance TEXT,
   status TEXT NOT NULL DEFAULT 'connected',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 ALTER TABLE whatsapp_connections
+  ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'cloud',
   ADD COLUMN IF NOT EXISTS phone_number_id TEXT,
   ADD COLUMN IF NOT EXISTS access_token TEXT,
-  ADD COLUMN IF NOT EXISTS api_version TEXT NOT NULL DEFAULT 'v25.0';
+  ADD COLUMN IF NOT EXISTS api_version TEXT NOT NULL DEFAULT 'v25.0',
+  ADD COLUMN IF NOT EXISTS evolution_url TEXT,
+  ADD COLUMN IF NOT EXISTS evolution_api_key TEXT,
+  ADD COLUMN IF NOT EXISTS evolution_instance TEXT;
 
 ALTER TABLE whatsapp_connections ENABLE ROW LEVEL SECURITY;
 

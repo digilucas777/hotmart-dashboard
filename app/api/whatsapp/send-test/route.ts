@@ -21,6 +21,41 @@ export async function POST(req: NextRequest) {
       ? await supabase.from('whatsapp_connections').select('*').eq('id', connectionId).single()
       : { data: null }
 
+    if (connection?.provider === 'evolution') {
+      const baseUrl = String(connection.evolution_url ?? process.env.EVOLUTION_API_URL ?? '').replace(/\/$/, '')
+      const apiKey = String(connection.evolution_api_key ?? process.env.EVOLUTION_API_KEY ?? '')
+      const instance = String(connection.evolution_instance ?? '')
+
+      if (!baseUrl || !apiKey || !instance) {
+        return NextResponse.json(
+          { error: 'Conexão Evolution incompleta. Gere o QR Code novamente com URL, API key e instância.' },
+          { status: 400 },
+        )
+      }
+
+      const results = await Promise.all(
+        recipients
+          .map(r => r.replace(/\D/g, ''))
+          .filter(Boolean)
+          .map(async number => {
+            const res = await fetch(`${baseUrl}/message/sendText/${encodeURIComponent(instance)}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                apikey: apiKey,
+              },
+              body: JSON.stringify({ number, text: message }),
+            })
+            const json = await res.json().catch(() => ({}))
+            return { to: number, ok: res.ok, response: json }
+          }),
+      )
+
+      const failed = results.find(r => !r.ok)
+      if (failed) return NextResponse.json({ error: 'Falha ao enviar pela Evolution API.', results }, { status: 502 })
+      return NextResponse.json({ ok: true, results })
+    }
+
     const phoneNumberId =
       connection?.phone_number_id ??
       process.env.WHATSAPP_PHONE_NUMBER_ID

@@ -22,9 +22,13 @@ type WhatsAppConnection = {
   id: string
   nome: string
   telefone: string
+  provider?: string | null
   phone_number_id?: string | null
   access_token?: string | null
   api_version?: string | null
+  evolution_url?: string | null
+  evolution_api_key?: string | null
+  evolution_instance?: string | null
   status: string
 }
 
@@ -134,6 +138,12 @@ export default function RelatoriosPage() {
   const [connectionPhone, setConnectionPhone] = useState('')
   const [phoneNumberId, setPhoneNumberId] = useState('')
   const [accessToken, setAccessToken] = useState('')
+  const [evolutionUrl, setEvolutionUrl] = useState('')
+  const [evolutionApiKey, setEvolutionApiKey] = useState('')
+  const [evolutionInstance, setEvolutionInstance] = useState('hotmart-dashboard')
+  const [qrImage, setQrImage] = useState<string | null>(null)
+  const [pairingCode, setPairingCode] = useState<string | null>(null)
+  const [qrError, setQrError] = useState<string | null>(null)
   const [form, setForm] = useState({
     nome: 'Relatório diário',
     projeto_id: '',
@@ -252,6 +262,7 @@ export default function RelatoriosPage() {
         .insert({
           nome: connectionName.trim() || 'WhatsApp',
           telefone: connectionPhone.trim(),
+          provider: 'cloud',
           phone_number_id: phoneNumberId.trim() || null,
           access_token: accessToken.trim() || null,
           api_version: 'v25.0',
@@ -266,6 +277,54 @@ export default function RelatoriosPage() {
         setPhoneNumberId('')
         setAccessToken('')
       }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function generateQrCode() {
+    if (!evolutionUrl.trim() || !evolutionApiKey.trim() || !evolutionInstance.trim()) return
+    setSaving(true)
+    setQrError(null)
+    setQrImage(null)
+    setPairingCode(null)
+    try {
+      const res = await fetch('/api/whatsapp/evolution-qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          baseUrl: evolutionUrl.trim(),
+          apiKey: evolutionApiKey.trim(),
+          instanceName: evolutionInstance.trim(),
+          number: connectionPhone.trim(),
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Não foi possível gerar o QR Code.')
+
+      setQrImage(json.base64 ?? null)
+      setPairingCode(json.pairingCode ?? null)
+
+      const { data } = await supabase
+        .from('whatsapp_connections')
+        .insert({
+          nome: connectionName.trim() || evolutionInstance.trim(),
+          telefone: connectionPhone.trim() || evolutionInstance.trim(),
+          provider: 'evolution',
+          evolution_url: evolutionUrl.trim(),
+          evolution_api_key: evolutionApiKey.trim(),
+          evolution_instance: evolutionInstance.trim(),
+          status: 'connected',
+        })
+        .select()
+        .single()
+
+      if (data) {
+        setConnections(prev => [data as WhatsAppConnection, ...prev])
+        setForm(prev => ({ ...prev, whatsapp_connection_id: (data as WhatsAppConnection).id }))
+      }
+    } catch (err) {
+      setQrError(err instanceof Error ? err.message : 'Não foi possível gerar o QR Code.')
     } finally {
       setSaving(false)
     }
@@ -362,8 +421,8 @@ export default function RelatoriosPage() {
                     <MessageCircle size={18} />
                   </div>
                   <div>
-                    <h2 className="text-sm font-bold text-slate-100">Conectar WhatsApp</h2>
-                    <p className="text-xs text-slate-500">Cadastre o número que enviará os relatórios.</p>
+                    <h2 className="text-sm font-bold text-slate-100">Conectar via QR Code</h2>
+                    <p className="text-xs text-slate-500">Use Evolution API para escanear pelo WhatsApp.</p>
                   </div>
                 </div>
                 <div className="space-y-3">
@@ -378,8 +437,48 @@ export default function RelatoriosPage() {
                       value={connectionPhone}
                       onChange={e => setConnectionPhone(e.target.value)}
                       className={`${fieldClass} min-w-0 flex-1`}
-                      placeholder="Número exibido"
+                      placeholder="Número do WhatsApp"
                     />
+                  </div>
+                  <input
+                    value={evolutionUrl}
+                    onChange={e => setEvolutionUrl(e.target.value)}
+                    className={`${fieldClass} w-full`}
+                    placeholder="URL Evolution API. Ex: https://evo.seudominio.com"
+                  />
+                  <input
+                    value={evolutionApiKey}
+                    onChange={e => setEvolutionApiKey(e.target.value)}
+                    className={`${fieldClass} w-full`}
+                    placeholder="API key da Evolution"
+                    type="password"
+                  />
+                  <input
+                    value={evolutionInstance}
+                    onChange={e => setEvolutionInstance(e.target.value)}
+                    className={`${fieldClass} w-full`}
+                    placeholder="Nome da instância"
+                  />
+                  <Button onClick={generateQrCode} disabled={saving || !evolutionUrl.trim() || !evolutionApiKey.trim() || !evolutionInstance.trim()}>
+                    <MessageCircle size={14} />
+                    Gerar QR Code
+                  </Button>
+                  {(qrImage || pairingCode || qrError) && (
+                    <div className="rounded-xl border border-white/10 bg-[#10101d] p-3">
+                      {qrImage && (
+                        <img src={qrImage} alt="QR Code WhatsApp" className="mx-auto h-48 w-48 rounded-lg bg-white p-2" />
+                      )}
+                      {pairingCode && (
+                        <p className="mt-2 text-center text-sm font-bold text-slate-100">Código: {pairingCode}</p>
+                      )}
+                      {qrError && <p className="text-xs font-semibold text-red-300">{qrError}</p>}
+                      <p className="mt-2 text-center text-xs text-slate-500">
+                        Abra WhatsApp &gt; Aparelhos conectados &gt; Conectar aparelho.
+                      </p>
+                    </div>
+                  )}
+                  <div className="border-t border-white/10 pt-3">
+                    <p className="mb-2 text-xs font-semibold text-slate-500">Ou conectar pela Cloud API oficial</p>
                   </div>
                   <input
                     value={phoneNumberId}
