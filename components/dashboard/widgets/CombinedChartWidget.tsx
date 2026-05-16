@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react'
 import {
   ResponsiveContainer,
   ComposedChart,
-  Bar,
   Line,
   XAxis,
   YAxis,
@@ -12,15 +11,23 @@ import {
   Tooltip,
   Legend,
 } from 'recharts'
+import { TrendingUp } from 'lucide-react'
 import { computeWidgetData, formatBRL, formatUSD } from '@/lib/utils'
 import type { Period, Venda } from '@/lib/types'
 import type { CombinedPoint } from '@/lib/utils'
 
 const LEGEND_LABELS: Record<string, string> = {
-  valueBRL: 'Receita BRL',
-  valueUSD: 'Receita USD',
+  valueBRL: 'Faturamento BRL',
+  valueUSD: 'Faturamento USD',
   approved: 'Aprovadas',
   reembolsos: 'Reembolsos',
+}
+
+const SERIES_COLORS: Record<string, string> = {
+  valueBRL: '#22c55e',
+  valueUSD: '#a855f7',
+  approved: '#0ea5e9',
+  reembolsos: '#ef4444',
 }
 
 function CustomTooltip({
@@ -34,17 +41,20 @@ function CustomTooltip({
 }) {
   if (!active || !payload?.length) return null
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0f0f1e] px-3 py-2.5 shadow-xl">
-      <p className="mb-1.5 text-xs text-slate-500">{label}</p>
+    <div className="rounded-xl border border-white/15 bg-[#f8f7f4] px-3 py-2.5 text-right shadow-xl shadow-black/30">
+      <p className="mb-1.5 text-xs font-bold text-slate-950">{label}</p>
       {payload.map((p, i) => (
-        <p key={i} className="text-xs font-semibold" style={{ color: p.color }}>
+        <p key={i} className="text-xs font-medium text-slate-950">
+          <span>{LEGEND_LABELS[p.dataKey] ?? p.dataKey} </span>
+          <span className="font-bold" style={{ color: p.color }}>
           {p.dataKey === 'valueBRL'
-            ? `BRL: ${formatBRL(p.value)}`
+            ? formatBRL(p.value)
             : p.dataKey === 'valueUSD'
-              ? `USD: ${formatUSD(p.value)}`
+              ? formatUSD(p.value)
               : p.dataKey === 'approved'
-                ? `Aprovadas: ${p.value}`
-                : `Reembolsos: ${p.value}`}
+                ? p.value
+                : p.value}
+          </span>
         </p>
       ))}
     </div>
@@ -74,9 +84,17 @@ export function CombinedChartWidget({
   ]
 
   return (
-    <div className="p-5">
+    <div className="flex h-full flex-col p-5">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-slate-200">{title}</h3>
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500/12 text-orange-400">
+            <TrendingUp size={17} />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-100">{title}</h3>
+            <p className="text-xs text-slate-500">Desempenho diário de vendas</p>
+          </div>
+        </div>
         <div className="flex rounded-lg bg-white/5 p-1">
           {periods.map(option => (
             <button
@@ -93,12 +111,14 @@ export function CombinedChartWidget({
           ))}
         </div>
       </div>
-      <ResponsiveContainer width="100%" height={chartHeight}>
-        <ComposedChart data={points} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+      <div className="min-h-0 flex-1 rounded-xl border border-white/10 bg-[#111120]/70 p-4 shadow-inner shadow-black/20">
+        <p className="mb-4 text-sm font-semibold text-slate-100">Vendas</p>
+        <ResponsiveContainer width="100%" height={Math.max(180, chartHeight - 70)}>
+        <ComposedChart data={points} margin={{ top: 8, right: 14, left: 0, bottom: 0 }}>
+          <CartesianGrid stroke="rgba(148,163,184,0.18)" vertical={false} />
           <XAxis
             dataKey="label"
-            tick={{ fill: '#475569', fontSize: 11 }}
+            tick={{ fill: '#94a3b8', fontSize: 11 }}
             axisLine={false}
             tickLine={false}
             interval="preserveStartEnd"
@@ -106,7 +126,7 @@ export function CombinedChartWidget({
           <YAxis
             yAxisId="revenue"
             orientation="left"
-            tick={{ fill: '#475569', fontSize: 11 }}
+            tick={{ fill: '#94a3b8', fontSize: 11 }}
             axisLine={false}
             tickLine={false}
             tickFormatter={v => v >= 1000 ? `R$${(v / 1000).toFixed(0)}k` : `R$${v}`}
@@ -115,57 +135,66 @@ export function CombinedChartWidget({
           <YAxis
             yAxisId="count"
             orientation="right"
-            tick={{ fill: '#475569', fontSize: 11 }}
+            tick={{ fill: '#94a3b8', fontSize: 11 }}
             axisLine={false}
             tickLine={false}
             width={30}
           />
           <Tooltip content={<CustomTooltip />} />
           <Legend
+            verticalAlign="top"
+            align="left"
+            iconType="circle"
+            wrapperStyle={{ paddingBottom: 16 }}
             formatter={value => (
-              <span style={{ color: '#64748b', fontSize: 11 }}>
+              <span style={{ color: '#cbd5e1', fontSize: 12 }}>
                 {LEGEND_LABELS[value] ?? value}
               </span>
             )}
           />
-          <Bar
+          <Line
             yAxisId="revenue"
+            type="monotone"
             dataKey="valueBRL"
             name="valueBRL"
-            fill="#22c55e"
-            radius={[4, 4, 0, 0]}
-            maxBarSize={32}
+            stroke={SERIES_COLORS.valueBRL}
+            strokeWidth={3}
+            dot={{ r: 3, fill: SERIES_COLORS.valueBRL, strokeWidth: 0 }}
+            activeDot={{ r: 6, fill: SERIES_COLORS.valueBRL, stroke: '#d1fae5', strokeWidth: 2 }}
           />
-          <Bar
+          <Line
             yAxisId="revenue"
+            type="monotone"
             dataKey="valueUSD"
             name="valueUSD"
-            fill="#6366f1"
-            radius={[4, 4, 0, 0]}
-            maxBarSize={32}
+            stroke={SERIES_COLORS.valueUSD}
+            strokeWidth={2.5}
+            dot={{ r: 3, fill: SERIES_COLORS.valueUSD, strokeWidth: 0 }}
+            activeDot={{ r: 5, fill: SERIES_COLORS.valueUSD, stroke: '#f3e8ff', strokeWidth: 2 }}
           />
           <Line
             yAxisId="count"
             type="monotone"
             dataKey="approved"
             name="approved"
-            stroke="#3b82f6"
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4, fill: '#3b82f6', strokeWidth: 0 }}
+            stroke={SERIES_COLORS.approved}
+            strokeWidth={2.5}
+            dot={{ r: 3, fill: SERIES_COLORS.approved, strokeWidth: 0 }}
+            activeDot={{ r: 5, fill: SERIES_COLORS.approved, stroke: '#e0f2fe', strokeWidth: 2 }}
           />
           <Line
             yAxisId="count"
             type="monotone"
             dataKey="reembolsos"
             name="reembolsos"
-            stroke="#ef4444"
+            stroke={SERIES_COLORS.reembolsos}
             strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4, fill: '#ef4444', strokeWidth: 0 }}
+            dot={{ r: 3, fill: SERIES_COLORS.reembolsos, strokeWidth: 0 }}
+            activeDot={{ r: 5, fill: SERIES_COLORS.reembolsos, stroke: '#fee2e2', strokeWidth: 2 }}
           />
         </ComposedChart>
       </ResponsiveContainer>
+      </div>
     </div>
   )
 }

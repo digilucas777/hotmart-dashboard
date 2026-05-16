@@ -10,6 +10,9 @@ import {
   LayoutDashboard,
   Pencil,
   Lock,
+  Save,
+  Undo2,
+  Redo2,
 } from 'lucide-react'
 import {
   DndContext,
@@ -19,6 +22,7 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragMoveEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
@@ -34,7 +38,15 @@ import { Spinner } from '@/components/ui/Spinner'
 
 const GRID_COLUMNS = 12
 const GRID_ROW_HEIGHT = 120
-const GRID_GAP = 24
+const GRID_GAP = 28
+
+type GridPlacement = {
+  id: string
+  col_start: number
+  row_start: number
+  col_span: number
+  row_span: number
+}
 
 function widthToSpan(width?: string) {
   if (width === 'full') return 12
@@ -45,16 +57,19 @@ function widthToSpan(width?: string) {
   return 6
 }
 
-function heightToRows(height?: string) {
+function heightToRows(height?: string, type?: string) {
   if (height === 'small') return 1
   if (height === 'large') return 3
   if (height === 'extra') return 4
+  if (type === 'metric') return 1
+  if (type === 'combined' || type === 'table') return 4
+  if (type === 'line' || type === 'bar' || type === 'pie') return 3
   return 2
 }
 
 function withGridDefaults(widget: WidgetConfig, index: number): WidgetConfig {
   const colSpan = widget.col_span ?? widthToSpan(widget.width)
-  const rowSpan = widget.row_span ?? heightToRows(widget.height)
+  const rowSpan = widget.row_span ?? heightToRows(widget.height, widget.type)
   const perRow = Math.max(1, Math.floor(GRID_COLUMNS / colSpan))
   return {
     ...widget,
@@ -69,7 +84,7 @@ function collides(a: { col: number; row: number; colSpan: number; rowSpan: numbe
   const bCol = b.col_start ?? 1
   const bRow = b.row_start ?? 1
   const bColSpan = b.col_span ?? widthToSpan(b.width)
-  const bRowSpan = b.row_span ?? heightToRows(b.height)
+  const bRowSpan = b.row_span ?? heightToRows(b.height, b.type)
 
   return (
     a.col < bCol + bColSpan &&
@@ -91,6 +106,33 @@ function nextAvailableRow(widgets: WidgetConfig[], activeId: string, col: number
   return candidate
 }
 
+function applyPlacement(widget: WidgetConfig, placement: GridPlacement): WidgetConfig {
+  return widget.id === placement.id
+    ? {
+        ...widget,
+        col_start: placement.col_start,
+        row_start: placement.row_start,
+        col_span: placement.col_span,
+        row_span: placement.row_span,
+      }
+    : widget
+}
+
+function sameLayout(a: WidgetConfig[], b: WidgetConfig[]) {
+  if (a.length !== b.length) return false
+  return a.every((widget, index) => {
+    const other = b[index]
+    return (
+      other &&
+      widget.id === other.id &&
+      widget.col_start === other.col_start &&
+      widget.row_start === other.row_start &&
+      widget.col_span === other.col_span &&
+      widget.row_span === other.row_span
+    )
+  })
+}
+
 export function DashboardClient({ projectId }: { projectId: string }) {
   const [projeto, setProjeto] = useState<Projeto | null>(null)
   const [vendas, setVendas] = useState<Venda[]>([])
@@ -105,6 +147,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [editMode, setEditMode] = useState(false)
   const [showAddWidget, setShowAddWidget] = useState(false)
   const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null)
+  const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null)
+  const [dragPreview, setDragPreview] = useState<GridPlacement | null>(null)
+  const [savedWidgets, setSavedWidgets] = useState<WidgetConfig[]>([])
+  const [undoStack, setUndoStack] = useState<WidgetConfig[][]>([])
+  const [redoStack, setRedoStack] = useState<WidgetConfig[][]>([])
+  const [savingLayout, setSavingLayout] = useState(false)
   const gridRef = useRef<HTMLDivElement>(null)
 
   const [showProducts, setShowProducts] = useState(false)
@@ -140,7 +188,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       .eq('projeto_id', projectId)
       .order('position')
       .then(({ data }) => {
-        setWidgets(((data ?? []) as WidgetConfig[]).map(withGridDefaults))
+        const normalized = ((data ?? []) as WidgetConfig[]).map(withGridDefaults)
+        setWidgets(normalized)
+        setSavedWidgets(normalized)
         setLoadingWidgets(false)
       })
   }, [projectId])
@@ -220,74 +270,141 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
   useEffect(() => { fetchCustos() }, [fetchCustos])
 
-  const handleDragStart = useCallback((event: DragStartEvent) => {
-    setActiveWidgetId(String(event.active.id))
-  }, [])
+  const pushHistory = useCallback(() => {
+    setUndoStack(prev => [...prev, widgets])
+    setRedoStack([])
+  }, [widgets])
 
-  const handleDragEnd = useCallback(
-    async (event: DragEndEvent) => {
-      setActiveWidgetId(null)
+  const getPlacementFromDelta = useCallback(
+    (id: string, delta: { x: number; y: number }): GridPlacement | null => {
       const grid = gridRef.current
-      if (!grid) return
-      const widget = widgets.find(w => w.id === event.active.id)
-      if (!widget) return
+      if (!grid) return null
+      const widget = widgets.find(w => w.id === id)
+      if (!widget) return null
 
       const rect = grid.getBoundingClientRect()
       const colWidth = (rect.width - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS
       const colStep = colWidth + GRID_GAP
       const rowStep = GRID_ROW_HEIGHT + GRID_GAP
       const colSpan = widget.col_span ?? widthToSpan(widget.width)
-      const rowSpan = widget.row_span ?? heightToRows(widget.height)
+      const rowSpan = widget.row_span ?? heightToRows(widget.height, widget.type)
       const currentCol = widget.col_start ?? 1
       const currentRow = widget.row_start ?? 1
-      const nextCol = Math.min(
+      const col_start = Math.min(
         GRID_COLUMNS - colSpan + 1,
-        Math.max(1, Math.round(((currentCol - 1) * colStep + event.delta.x) / colStep) + 1),
+        Math.max(1, Math.round(((currentCol - 1) * colStep + delta.x) / colStep) + 1),
       )
       const intendedRow = Math.max(
         1,
-        Math.round(((currentRow - 1) * rowStep + event.delta.y) / rowStep) + 1,
+        Math.round(((currentRow - 1) * rowStep + delta.y) / rowStep) + 1,
       )
-      const nextRow = nextAvailableRow(widgets, widget.id, nextCol, intendedRow, colSpan, rowSpan)
+      const row_start = nextAvailableRow(widgets, widget.id, col_start, intendedRow, colSpan, rowSpan)
 
-      setWidgets(prev => {
-        return prev.map(w =>
-          w.id === widget.id
-            ? { ...w, col_start: nextCol, row_start: nextRow, col_span: colSpan, row_span: rowSpan }
-            : w,
-        )
-      })
-
-      await supabase
-        .from('dashboard_widgets')
-        .update({ col_start: nextCol, row_start: nextRow, col_span: colSpan, row_span: rowSpan })
-        .eq('id', widget.id)
+      return { id, col_start, row_start, col_span: colSpan, row_span: rowSpan }
     },
     [widgets],
+  )
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const id = String(event.active.id)
+    setActiveWidgetId(id)
+    setSelectedWidgetId(id)
+  }, [])
+
+  const handleDragMove = useCallback(
+    (event: DragMoveEvent) => {
+      setDragPreview(getPlacementFromDelta(String(event.active.id), event.delta))
+    },
+    [getPlacementFromDelta],
+  )
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      setActiveWidgetId(null)
+      const placement = dragPreview ?? getPlacementFromDelta(String(event.active.id), event.delta)
+      setDragPreview(null)
+      if (!placement) return
+      pushHistory()
+      setWidgets(prev => prev.map(w => applyPlacement(w, placement)))
+    },
+    [dragPreview, getPlacementFromDelta, pushHistory],
   )
 
   const addWidget = async (config: Omit<WidgetConfig, 'id' | 'projeto_id' | 'position'>) => {
     const position = widgets.length
     const col_span = widthToSpan(config.width)
-    const row_span = heightToRows(config.height)
+    const row_span = heightToRows(config.height, config.type)
     const maxRow = widgets.reduce((max, w) => Math.max(max, (w.row_start ?? 1) + (w.row_span ?? 1) - 1), 0)
     const { data } = await supabase
       .from('dashboard_widgets')
       .insert({ ...config, projeto_id: projectId, position, col_start: 1, row_start: maxRow + 1, col_span, row_span })
       .select()
       .single()
-    if (data) setWidgets(prev => [...prev, withGridDefaults(data as WidgetConfig, prev.length)])
+    if (data) {
+      setWidgets(prev => {
+        const next = [...prev, withGridDefaults(data as WidgetConfig, prev.length)]
+        setSavedWidgets(next)
+        return next
+      })
+    }
   }
 
   const deleteWidget = useCallback(async (id: string) => {
     await supabase.from('dashboard_widgets').delete().eq('id', id)
     setWidgets(prev => prev.filter(w => w.id !== id))
+    setSavedWidgets(prev => prev.filter(w => w.id !== id))
+    setSelectedWidgetId(prev => prev === id ? null : prev)
   }, [])
 
-  const updateWidgetConfig = useCallback(async (id: string, updates: { width?: string; height?: string; col_span?: number; row_span?: number }) => {
-    await supabase.from('dashboard_widgets').update(updates).eq('id', id)
+  const updateWidgetConfig = useCallback((id: string, updates: { width?: string; height?: string; col_span?: number; row_span?: number }) => {
+    pushHistory()
     setWidgets(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w))
-  }, [])
+  }, [pushHistory])
+
+  const saveLayout = useCallback(async () => {
+    setSavingLayout(true)
+    try {
+      await Promise.all(
+        widgets.map((w, index) =>
+          supabase
+            .from('dashboard_widgets')
+            .update({
+              position: index,
+              col_start: w.col_start ?? 1,
+              row_start: w.row_start ?? 1,
+              col_span: w.col_span ?? widthToSpan(w.width),
+              row_span: w.row_span ?? heightToRows(w.height, w.type),
+            })
+            .eq('id', w.id),
+        ),
+      )
+      setSavedWidgets(widgets)
+      setUndoStack([])
+      setRedoStack([])
+    } finally {
+      setSavingLayout(false)
+    }
+  }, [widgets])
+
+  const undoLayout = useCallback(() => {
+    setUndoStack(prev => {
+      const previous = prev.at(-1)
+      if (!previous) return prev
+      setRedoStack(stack => [...stack, widgets])
+      setWidgets(previous)
+      return prev.slice(0, -1)
+    })
+  }, [widgets])
+
+  const redoLayout = useCallback(() => {
+    setRedoStack(prev => {
+      const next = prev.at(-1)
+      if (!next) return prev
+      setUndoStack(stack => [...stack, widgets])
+      setWidgets(next)
+      return prev.slice(0, -1)
+    })
+  }, [widgets])
 
   const openProductsModal = async () => {
     const { data: all } = await supabase.from('produtos').select('*').order('nome')
@@ -314,14 +431,15 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   }
 
   const isReady = !loading && !loadingWidgets
+  const hasUnsavedLayout = !sameLayout(widgets, savedWidgets)
 
   return (
-    <div className="min-h-screen" style={{ background: '#0b0b14' }}>
+    <div className="min-h-screen bg-[#090912] text-slate-100">
       <header
-        className="sticky top-0 z-40 border-b"
+        className="sticky top-0 z-40 border-b shadow-2xl shadow-black/20"
         style={{
           borderColor: 'rgba(255,255,255,0.07)',
-          background: 'rgba(11,11,20,0.85)',
+          background: 'rgba(9,9,18,0.88)',
           backdropFilter: 'blur(20px)',
         }}
       >
@@ -349,12 +467,45 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setEditMode(v => !v)}
+              onClick={() => {
+                setEditMode(v => !v)
+                setSelectedWidgetId(null)
+              }}
               className={editMode ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300' : ''}
             >
               {editMode ? <Lock size={13} /> : <Pencil size={13} />}
               {editMode ? 'Travado' : 'Editar layout'}
             </Button>
+            {editMode && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={undoLayout}
+                  disabled={undoStack.length === 0}
+                  title="Desfazer última edição"
+                >
+                  <Undo2 size={13} />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={redoLayout}
+                  disabled={redoStack.length === 0}
+                  title="Refazer edição"
+                >
+                  <Redo2 size={13} />
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={saveLayout}
+                  disabled={!hasUnsavedLayout || savingLayout}
+                >
+                  {savingLayout ? <Spinner size={13} /> : <Save size={13} />}
+                  Salvar
+                </Button>
+              </>
+            )}
             <Button variant="outline" size="sm" onClick={() => setShowAddWidget(true)}>
               <Plus size={13} />
               Widget
@@ -367,10 +518,22 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1400px] px-6 py-8">
+      <main className="mx-auto max-w-[1400px] px-6 py-9">
         <div className="mb-8">
           <PeriodFilter value={period} onChange={setPeriod} />
         </div>
+        {editMode && (
+          <div className="mb-5 flex items-center justify-between rounded-xl border border-white/10 bg-[#151525]/80 px-4 py-3 text-xs text-slate-400 shadow-xl shadow-black/20">
+            <span>
+              {selectedWidgetId
+                ? 'Widget selecionado. Arraste o card ou use o canto inferior direito para redimensionar.'
+                : 'Selecione um widget para editar posição e tamanho.'}
+            </span>
+            <span className={hasUnsavedLayout ? 'font-semibold text-indigo-300' : 'text-slate-600'}>
+              {hasUnsavedLayout ? 'Alterações não salvas' : 'Layout salvo'}
+            </span>
+          </div>
+        )}
 
         {!isReady ? (
           <div className="flex h-72 items-center justify-center">
@@ -396,18 +559,32 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           <DndContext
             sensors={sensors}
             onDragStart={handleDragStart}
+            onDragMove={handleDragMove}
             onDragEnd={handleDragEnd}
-            onDragCancel={() => setActiveWidgetId(null)}
+            onDragCancel={() => {
+              setActiveWidgetId(null)
+              setDragPreview(null)
+            }}
           >
               <div
                 ref={gridRef}
-                className="grid gap-6"
+                className="relative grid"
                 style={{
                   gridTemplateColumns: 'repeat(12, minmax(0, 1fr))',
                   gridAutoRows: `${GRID_ROW_HEIGHT}px`,
                   gridAutoFlow: 'row dense',
+                  gap: `${GRID_GAP}px`,
                 }}
               >
+                {dragPreview && (
+                  <div
+                    className="pointer-events-none rounded-2xl border border-dashed border-white/60 bg-white/8 shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_18px_45px_rgba(99,102,241,0.18)]"
+                    style={{
+                      gridColumn: `${dragPreview.col_start} / span ${dragPreview.col_span}`,
+                      gridRow: `${dragPreview.row_start} / span ${dragPreview.row_span}`,
+                    }}
+                  />
+                )}
                 {widgets.map(w => (
                   <WidgetRenderer
                     key={w.id}
@@ -418,6 +595,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                     exchangeRate={exchangeRate}
                     custoTotal={custoTotal}
                     editMode={editMode}
+                    selected={selectedWidgetId === w.id}
+                    onSelect={setSelectedWidgetId}
                     onDelete={deleteWidget}
                     onUpdateConfig={updateWidgetConfig}
                   />
@@ -425,7 +604,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               </div>
               <DragOverlay dropAnimation={null}>
                 {activeWidgetId ? (
-                  <div className="max-w-56 rounded-xl border border-indigo-400/40 bg-[#191929]/75 px-4 py-3 text-sm font-semibold text-slate-200 shadow-2xl shadow-indigo-500/20 backdrop-blur">
+                  <div className="rounded-2xl border border-white/35 bg-[#1d1d31]/80 px-5 py-4 text-sm font-semibold text-slate-100 shadow-2xl shadow-indigo-500/25 backdrop-blur">
                     {widgets.find(w => w.id === activeWidgetId)?.title}
                   </div>
                 ) : null}

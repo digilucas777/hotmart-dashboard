@@ -23,6 +23,8 @@ export function WidgetRenderer({
   exchangeRate,
   custoTotal = 0,
   editMode,
+  selected,
+  onSelect,
   onDelete,
   onUpdateConfig,
 }: {
@@ -33,6 +35,8 @@ export function WidgetRenderer({
   exchangeRate: number
   custoTotal?: number
   editMode: boolean
+  selected: boolean
+  onSelect: (id: string) => void
   onDelete: (id: string) => void
   onUpdateConfig?: (id: string, updates: { width?: string; height?: string; col_span?: number; row_span?: number }) => void
 }) {
@@ -90,6 +94,9 @@ export function WidgetRenderer({
   return (
     <div
       ref={setNodeRef}
+      onPointerDown={() => {
+        if (editMode) onSelect(config.id)
+      }}
       style={{
         gridColumn: `${config.col_start ?? 1} / span ${config.col_span ?? 6}`,
         gridRow: `${config.row_start ?? 1} / span ${config.row_span ?? 2}`,
@@ -98,28 +105,39 @@ export function WidgetRenderer({
     >
       <div
         ref={cardRef}
-        className={`group relative rounded-2xl border bg-[#191929] transition-all ${
+        {...(editMode ? attributes : {})}
+        {...(editMode ? listeners : {})}
+        className={`group relative h-full overflow-hidden rounded-2xl border bg-[#191929] shadow-[0_18px_50px_rgba(0,0,0,0.24)] transition-all duration-200 ${
           isDragging
             ? 'border-indigo-500/50 shadow-2xl shadow-indigo-500/10'
-            : 'border-white/7 hover:border-white/12'
-        }`}
+            : selected
+              ? 'border-white/75 shadow-[0_0_0_1px_rgba(255,255,255,0.25),0_24px_60px_rgba(0,0,0,0.35)]'
+              : 'border-white/10 hover:border-white/20 hover:shadow-[0_22px_55px_rgba(0,0,0,0.32)]'
+        } ${editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
         style={cardHeightStyle}
       >
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.055),transparent_36%,rgba(99,102,241,0.06))]" />
         {editMode && (
           <>
-            <div className="absolute right-3 top-3 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <div
+              className={`absolute right-3 top-3 z-10 flex items-center gap-1 transition-opacity ${
+                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+              onPointerDown={e => e.stopPropagation()}
+            >
               <button
-                onClick={() => onDelete(config.id)}
+                onClick={e => {
+                  e.stopPropagation()
+                  onDelete(config.id)
+                }}
                 title="Remover widget"
                 className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-red-500/10 hover:text-red-400"
               >
                 <Trash2 size={13} />
               </button>
               <button
-                {...attributes}
-                {...listeners}
                 title="Arrastar"
-                className="cursor-grab rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-white/5 hover:text-slate-400 active:cursor-grabbing"
+                className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-white/5 hover:text-slate-400"
               >
                 <GripVertical size={13} />
               </button>
@@ -127,12 +145,15 @@ export function WidgetRenderer({
 
             {/* Resize handle — bottom-right corner */}
             <div
+              onPointerDown={e => e.stopPropagation()}
               onMouseDown={handleResizeStart}
               title="Arrastar para redimensionar"
-              className="absolute bottom-1.5 right-1.5 z-10 cursor-se-resize opacity-0 transition-opacity group-hover:opacity-100"
+              className={`absolute bottom-2 right-2 z-10 cursor-se-resize rounded-md border border-white/10 bg-[#111120]/80 p-1 transition-opacity ${
+                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
               style={{
-                width: 14,
-                height: 14,
+                width: 20,
+                height: 20,
                 backgroundImage: 'radial-gradient(circle, #475569 1.5px, transparent 1.5px)',
                 backgroundSize: '4px 4px',
               }}

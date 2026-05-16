@@ -52,13 +52,14 @@ export function MetricWidget({
   const colors = COLOR_MAP[dataSource] ?? DEFAULT_COLORS
 
   return (
-    <div className="flex flex-col gap-3 p-5">
-      <div className={`inline-flex h-9 w-9 items-center justify-center rounded-xl ${colors.bg}`}>
+    <div className="relative flex h-full flex-col justify-between gap-3 p-5">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
+      <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl shadow-lg shadow-black/20 ${colors.bg}`}>
         <Icon size={17} className={colors.icon} />
       </div>
       <div>
         <p className="text-xs font-medium text-slate-500">{title}</p>
-        <p className="mt-1 text-[1.6rem] font-bold leading-tight tracking-tight text-slate-100">
+        <p className="mt-1 text-[1.65rem] font-extrabold leading-tight text-white drop-shadow">
           {value}
         </p>
         {subValue && <p className="mt-0.5 text-xs text-slate-600">{subValue}</p>}
