@@ -28,7 +28,7 @@ import {
 } from '@dnd-kit/sortable'
 import { supabase } from '@/lib/supabase'
 import { getPeriodRange } from '@/lib/utils'
-import type { Venda, Projeto, Produto, Period, WidgetConfig } from '@/lib/types'
+import type { Venda, Projeto, Produto, Period, WidgetConfig, WidgetWidth, WidgetHeight } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
 import { AddWidgetModal } from '@/components/dashboard/AddWidgetModal'
 import { WidgetRenderer } from '@/components/dashboard/widgets/WidgetRenderer'
@@ -182,6 +182,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setWidgets(prev => prev.filter(w => w.id !== id))
   }, [])
 
+  const updateWidgetConfig = useCallback(async (id: string, updates: { width?: WidgetWidth; height?: WidgetHeight }) => {
+    await supabase.from('dashboard_widgets').update(updates).eq('id', id)
+    setWidgets(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w))
+  }, [])
+
   const openProductsModal = async () => {
     const { data: all } = await supabase.from('produtos').select('*').order('nome')
     const { data: linked } = await supabase
@@ -294,7 +299,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               items={widgets.map(w => w.id)}
               strategy={rectSortingStrategy}
             >
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
                 {widgets.map(w => (
                   <WidgetRenderer
                     key={w.id}
@@ -305,6 +310,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                     custoTotal={custoTotal}
                     editMode={editMode}
                     onDelete={deleteWidget}
+                    onUpdateConfig={updateWidgetConfig}
                   />
                 ))}
               </div>

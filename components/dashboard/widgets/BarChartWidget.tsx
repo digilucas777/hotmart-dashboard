@@ -65,16 +65,18 @@ export function BarChartWidget({
   points,
   isBRL,
   dualCurrency,
+  chartHeight = 220,
 }: {
   title: string
   points: SeriesPoint[]
   isBRL: boolean
   dualCurrency?: boolean
+  chartHeight?: number
 }) {
   return (
     <div className="p-5">
       <h3 className="mb-5 text-sm font-semibold text-slate-200">{title}</h3>
-      <ResponsiveContainer width="100%" height={220}>
+      <ResponsiveContainer width="100%" height={chartHeight}>
         <BarChart data={points} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
           <XAxis

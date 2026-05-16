@@ -1,16 +1,33 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { ShoppingCart } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { ShoppingCart, RefreshCw, Search } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { SalesTable } from '@/components/dashboard/SalesTable'
-import type { Venda } from '@/lib/types'
+import type { Venda, Produto } from '@/lib/types'
 import { Spinner } from '@/components/ui/Spinner'
+
+const STATUS_OPTIONS = [
+  { value: '', label: 'Todos os status' },
+  { value: 'approved', label: 'Aprovado' },
+  { value: 'pending', label: 'Pendente' },
+  { value: 'refunded', label: 'Reembolsado' },
+  { value: 'cancelled', label: 'Cancelado' },
+]
 
 export default function VendasPage() {
   const [vendas, setVendas] = useState<Venda[]>([])
+  const [produtos, setProdutos] = useState<Produto[]>([])
   const [loading, setLoading] = useState(true)
   const [exchangeRate, setExchangeRate] = useState(5.85)
+
+  // Filtros
+  const [produtoFilter, setProdutoFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [origemFilter, setOrigemFilter] = useState('')
+  const [origemInput, setOrigemInput] = useState('')
 
   useEffect(() => {
     fetch('/api/exchange-rate')
@@ -21,14 +38,53 @@ export default function VendasPage() {
 
   useEffect(() => {
     supabase
-      .from('vendas')
+      .from('produtos')
       .select('*')
-      .order('data_venda', { ascending: false })
-      .then(({ data }) => {
-        setVendas((data ?? []) as Venda[])
-        setLoading(false)
-      })
+      .order('nome')
+      .then(({ data }) => setProdutos((data ?? []) as Produto[]))
   }, [])
+
+  const fetchVendas = useCallback(async () => {
+    setLoading(true)
+    try {
+      let query = supabase
+        .from('vendas')
+        .select('*')
+        .order('data_venda', { ascending: false })
+
+      if (produtoFilter) {
+        // Busca o hotmart_id do produto selecionado
+        const prod = produtos.find(p => p.id === produtoFilter)
+        if (prod) query = query.eq('hotmart_produto_id', prod.hotmart_id)
+      }
+
+      if (dateFrom) query = query.gte('data_venda', new Date(dateFrom).toISOString())
+      if (dateTo) {
+        const toDate = new Date(dateTo)
+        toDate.setDate(toDate.getDate() + 1)
+        query = query.lt('data_venda', toDate.toISOString())
+      }
+
+      if (statusFilter) query = query.eq('status', statusFilter)
+      if (origemFilter) query = query.ilike('origem', `%${origemFilter}%`)
+
+      const { data } = await query
+      setVendas((data ?? []) as Venda[])
+    } finally {
+      setLoading(false)
+    }
+  }, [produtoFilter, dateFrom, dateTo, statusFilter, origemFilter, produtos])
+
+  useEffect(() => {
+    fetchVendas()
+  }, [fetchVendas])
+
+  function applyOrigem() {
+    setOrigemFilter(origemInput)
+  }
+
+  const selectClass =
+    'rounded-lg bg-white/5 px-3 py-2 text-xs text-slate-200 outline-none ring-1 ring-white/8 focus:ring-indigo-500/50'
 
   return (
     <div className="min-h-screen">
@@ -53,16 +109,116 @@ export default function VendasPage() {
               {vendas.length} transações
             </span>
           )}
+          <button
+            onClick={fetchVendas}
+            title="Atualizar"
+            className="ml-auto rounded-lg p-2 text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-300"
+          >
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+          </button>
         </div>
       </header>
 
       <main className="mx-auto max-w-[1400px] px-6 py-8">
+        {/* Filter bar */}
+        <div className="mb-6 flex flex-wrap items-end gap-3 rounded-2xl border border-white/7 bg-[#191929] p-5">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-slate-500">Produto</label>
+            <select
+              value={produtoFilter}
+              onChange={e => setProdutoFilter(e.target.value)}
+              className={selectClass}
+            >
+              <option value="">Todos os produtos</option>
+              {produtos.map(p => (
+                <option key={p.id} value={p.id}>{p.nome}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-slate-500">De</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={e => setDateFrom(e.target.value)}
+              className={selectClass}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-slate-500">Até</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={e => setDateTo(e.target.value)}
+              className={selectClass}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-slate-500">Status</label>
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className={selectClass}
+            >
+              {STATUS_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-slate-500">Origem</label>
+            <div className="flex items-center gap-1">
+              <div className="relative">
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-600" />
+                <input
+                  type="text"
+                  placeholder="ex: google"
+                  value={origemInput}
+                  onChange={e => setOrigemInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && applyOrigem()}
+                  className="w-32 rounded-lg bg-white/5 py-2 pl-8 pr-3 text-xs text-slate-200 placeholder-slate-600 outline-none ring-1 ring-white/8 focus:ring-indigo-500/50"
+                />
+              </div>
+              <button
+                onClick={applyOrigem}
+                className="rounded-lg bg-indigo-500/15 px-3 py-2 text-xs font-medium text-indigo-300 transition-colors hover:bg-indigo-500/25"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+
+          {(produtoFilter || dateFrom || dateTo || statusFilter || origemFilter) && (
+            <button
+              onClick={() => {
+                setProdutoFilter('')
+                setDateFrom('')
+                setDateTo('')
+                setStatusFilter('')
+                setOrigemFilter('')
+                setOrigemInput('')
+              }}
+              className="rounded-lg bg-white/5 px-3 py-2 text-xs text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+            >
+              Limpar filtros
+            </button>
+          )}
+        </div>
+
         {loading ? (
           <div className="flex h-52 items-center justify-center">
             <Spinner size={28} />
           </div>
         ) : (
-          <SalesTable vendas={vendas} exchangeRate={exchangeRate} />
+          <SalesTable
+            vendas={vendas}
+            exchangeRate={exchangeRate}
+            initialStatusFilter="all"
+          />
         )}
       </main>
     </div>

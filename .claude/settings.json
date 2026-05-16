@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:developers.hotmart.com)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\User\\\\hotmart-dashboard\\\\components\\\\dashboard\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object Name)",
+      "PowerShell(Write-Host \"=== components/dashboard ===\" ; Get-ChildItem -Path \"c:\\\\Users\\\\User\\\\hotmart-dashboard\\\\components\\\\dashboard\" -Force | ForEach-Object { Write-Host $_.Name })",
+      "PowerShell(Write-Host \"=== app ===\" ; Get-ChildItem -Path \"c:\\\\Users\\\\User\\\\hotmart-dashboard\\\\app\" -Directory | ForEach-Object { Write-Host $_.Name })"
+    ]
+  }
+}

@@ -31,7 +31,15 @@ function CustomTooltip({
   )
 }
 
-export function PieWidget({ title, points }: { title: string; points: SeriesPoint[] }) {
+export function PieWidget({
+  title,
+  points,
+  chartHeight = 220,
+}: {
+  title: string
+  points: SeriesPoint[]
+  chartHeight?: number
+}) {
   if (points.length === 0) {
     return (
       <div className="flex min-h-[280px] items-center justify-center p-5">
@@ -45,7 +53,7 @@ export function PieWidget({ title, points }: { title: string; points: SeriesPoin
   return (
     <div className="p-5">
       <h3 className="mb-5 text-sm font-semibold text-slate-200">{title}</h3>
-      <ResponsiveContainer width="100%" height={220}>
+      <ResponsiveContainer width="100%" height={chartHeight}>
         <PieChart>
           <Pie
             data={data}

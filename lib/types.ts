@@ -13,6 +13,7 @@ export type Venda = {
   data_venda: string
   forma_pagamento?: string | null
   pais?: string | null
+  origem?: string | null
 }
 
 export type Projeto = {
@@ -30,7 +31,7 @@ export type Produto = {
 
 export type Period = 'today' | 'yesterday' | '7d' | '30d' | 'thisMonth' | 'lastMonth'
 
-export type WidgetType = 'metric' | 'line' | 'bar' | 'pie' | 'table'
+export type WidgetType = 'metric' | 'line' | 'bar' | 'pie' | 'table' | 'combined'
 
 export type WidgetDataSource =
   | 'total_converted'
@@ -54,8 +55,11 @@ export type WidgetDataSource =
   | 'margem_lucro'
   | 'roas'
   | 'cpa'
+  | 'combined_by_day'
 
-export type WidgetWidth = 'full' | 'half'
+export type WidgetWidth = 'full' | 'half' | '1/4' | '1/3' | '1/2' | '2/3' | '3/4'
+
+export type WidgetHeight = 'small' | 'medium' | 'large' | 'extra'
 
 export interface WidgetConfig {
   id: string
@@ -65,4 +69,5 @@ export interface WidgetConfig {
   title: string
   width: WidgetWidth
   position: number
+  height?: WidgetHeight
 }

@@ -32,12 +32,14 @@ const PAGE_SIZE = 25
 export function SalesTable({
   vendas,
   exchangeRate,
+  initialStatusFilter = 'approved',
 }: {
   vendas: Venda[]
   exchangeRate: number
+  initialStatusFilter?: string
 }) {
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('approved')
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
   const [page, setPage] = useState(1)
 
   const filtered = useMemo(() => {
@@ -47,7 +49,8 @@ export function SalesTable({
         !q ||
         v.comprador_nome?.toLowerCase().includes(q) ||
         v.comprador_email?.toLowerCase().includes(q) ||
-        v.produto?.toLowerCase().includes(q)
+        v.produto?.toLowerCase().includes(q) ||
+        v.hotmart_id?.toLowerCase().includes(q)
       const matchStatus =
         statusFilter === 'all' || v.status === statusFilter
       return matchSearch && matchStatus
@@ -73,6 +76,7 @@ export function SalesTable({
 
   const COLS = [
     'Data/hora',
+    'Código HP',
     'Comprador',
     'Produto',
     'Pagamento',
@@ -80,6 +84,7 @@ export function SalesTable({
     'Valor BRL',
     'Valor USD',
     'Status',
+    'Origem',
   ]
 
   return (
@@ -119,7 +124,7 @@ export function SalesTable({
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[860px]">
+        <table className="w-full min-w-[1100px]">
           <thead>
             <tr className="border-b border-white/5">
               {COLS.map(col => (
@@ -136,7 +141,7 @@ export function SalesTable({
             {paginated.length === 0 ? (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={10}
                   className="px-5 py-12 text-center text-sm text-slate-600"
                 >
                   Nenhuma transação encontrada
@@ -150,6 +155,13 @@ export function SalesTable({
                 >
                   <td className="px-5 py-3.5 font-mono text-xs text-slate-500">
                     {formatDateTime(v.data_venda)}
+                  </td>
+                  <td className="px-5 py-3.5 font-mono text-xs text-slate-500">
+                    {v.hotmart_id ? (
+                      <span title={v.hotmart_id} className="block max-w-[100px] truncate">
+                        {v.hotmart_id}
+                      </span>
+                    ) : '—'}
                   </td>
                   <td className="px-5 py-3.5">
                     <p className="text-xs font-medium text-slate-200">
@@ -184,6 +196,9 @@ export function SalesTable({
                     <Badge variant={STATUS_VARIANT[v.status] ?? 'default'}>
                       {statusLabel(v.status)}
                     </Badge>
+                  </td>
+                  <td className="px-5 py-3.5 text-xs text-slate-500">
+                    {v.origem ?? '—'}
                   </td>
                 </tr>
               ))

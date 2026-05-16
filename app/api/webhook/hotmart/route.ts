@@ -51,6 +51,17 @@ export async function POST(req: NextRequest) {
     const moeda: string = dados.purchase?.price?.currency_value ?? 'BRL'
     console.log('💵 [6] priceValue:', priceValue, '| marketplace:', marketplaceCommission, '| valor:', valor, '| moeda:', moeda)
 
+    // Concatena type com bandeira do cartão para melhor identificação
+    const paymentType: string | null = dados.purchase?.payment?.type ?? null
+    const cardBrand: string | null = dados.purchase?.payment?.card_type ?? dados.purchase?.payment?.brand ?? null
+    const forma_pagamento = cardBrand ? `${paymentType}|${cardBrand}` : paymentType
+
+    // Origem via UTM ou campo origin
+    const origem: string | null =
+      dados.purchase?.tracking_parameters?.utm_source ??
+      dados.purchase?.origin ??
+      null
+
     const transaction: string = dados.purchase?.transaction
     console.log('💵 [7] transaction:', transaction)
 
@@ -64,7 +75,8 @@ export async function POST(req: NextRequest) {
       moeda,
       status: mapStatus(evento),
       pais: dados.buyer?.address?.country ?? null,
-      forma_pagamento: dados.purchase?.payment?.type ?? null,
+      forma_pagamento,
+      origem,
       data_venda: dados.purchase?.order_date
         ? new Date(dados.purchase.order_date).toISOString()
         : new Date().toISOString(),

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { BarChart2, LineChart, PieChart, Table2, Hash, ArrowLeft } from 'lucide-react'
+import { BarChart2, LineChart, PieChart, Table2, Hash, ArrowLeft, Layers } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import type { WidgetType, WidgetDataSource, WidgetWidth } from '@/lib/types'
@@ -19,6 +19,7 @@ const WIDGET_TYPES: { type: WidgetType; icon: React.ElementType; label: string; 
   { type: 'bar', icon: BarChart2, label: 'Barras', description: 'Comparação entre categorias' },
   { type: 'pie', icon: PieChart, label: 'Pizza', description: 'Proporção entre categorias' },
   { type: 'table', icon: Table2, label: 'Tabela', description: 'Lista detalhada de transações' },
+  { type: 'combined', icon: Layers, label: 'Combinado', description: 'Faturamento + volume por dia' },
 ]
 
 const METRIC_SOURCES: { value: WidgetDataSource; label: string }[] = [
@@ -66,6 +67,10 @@ const TABLE_SOURCES: { value: WidgetDataSource; label: string }[] = [
   { value: 'transactions', label: 'Transações Detalhadas' },
 ]
 
+const COMBINED_SOURCES: { value: WidgetDataSource; label: string }[] = [
+  { value: 'combined_by_day', label: 'Faturamento + Vendas por Dia' },
+]
+
 function getSourcesForType(type: WidgetType) {
   switch (type) {
     case 'metric': return METRIC_SOURCES
@@ -73,6 +78,7 @@ function getSourcesForType(type: WidgetType) {
     case 'bar': return BAR_SOURCES
     case 'pie': return PIE_SOURCES
     case 'table': return TABLE_SOURCES
+    case 'combined': return COMBINED_SOURCES
   }
 }
 

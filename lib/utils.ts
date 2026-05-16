@@ -61,11 +61,18 @@ export function statusLabel(status: string): string {
 
 export function normalizePagamento(method?: string | null): string {
   if (!method) return 'Outros'
-  const m = method.toLowerCase()
-  if (m.includes('pix')) return 'Pix'
-  if (m.includes('credit') || m.includes('card') || m.includes('cartao') || m.includes('cartão') || m.includes('debit'))
+  const m = method.toUpperCase()
+  if (m.includes('PAYPAL')) return 'PayPal'
+  if (m.includes('APPLE_PAY') || m.includes('APPLEPAY')) return 'Apple Pay'
+  if (m.includes('YAPE')) return 'Yape'
+  if (m.includes('OXXO')) return 'Oxxo'
+  if (m.includes('PIX')) return 'Pix'
+  if (m.includes('VISA')) return 'Visa'
+  if (m.includes('MASTERCARD') || m.includes('MASTER_CARD')) return 'Mastercard'
+  if (m.includes('AMEX') || m.includes('AMERICAN_EXPRESS')) return 'Amex'
+  if (m.includes('BOLETO') || m.includes('BILLET') || m.includes('BANK_SLIP')) return 'Boleto'
+  if (m.includes('CREDIT') || m.includes('CARD') || m.includes('CARTAO') || m.includes('CARTÃO') || m.includes('DEBIT'))
     return 'Cartão'
-  if (m.includes('billet') || m.includes('boleto') || m.includes('bank_slip')) return 'Boleto'
   return 'Outros'
 }
 
@@ -115,7 +122,17 @@ export function buildChartData(vendas: Venda[], period: Period): ChartPoint[] {
 export type PiePoint = { name: string; value: number; color: string }
 
 const PIE_COLORS: Record<string, string> = {
-  Pix: '#22c55e', Cartão: '#6366f1', Boleto: '#f59e0b', Outros: '#64748b',
+  Pix: '#22c55e',
+  Cartão: '#6366f1',
+  Boleto: '#f59e0b',
+  PayPal: '#3b82f6',
+  Visa: '#1d4ed8',
+  Mastercard: '#dc2626',
+  Amex: '#0ea5e9',
+  'Apple Pay': '#64748b',
+  Yape: '#7c3aed',
+  Oxxo: '#ea580c',
+  Outros: '#475569',
 }
 
 export function buildPieData(vendas: Venda[]): PiePoint[] {
@@ -132,13 +149,21 @@ export function buildPieData(vendas: Venda[]): PiePoint[] {
 
 // ---------- Widget data ----------
 
-// SeriesPoint agora suporta valor único ou dois valores (BRL + USD)
 export type SeriesPoint = { label: string; value: number; valueBRL?: number; valueUSD?: number }
+
+export type CombinedPoint = {
+  label: string
+  valueBRL: number
+  valueUSD: number
+  approved: number
+  cancelled: number
+}
 
 export type WidgetComputedData =
   | { kind: 'metric'; value: string; subValue: string }
   | { kind: 'series'; points: SeriesPoint[]; dualCurrency?: boolean }
   | { kind: 'table'; vendas: Venda[] }
+  | { kind: 'combined'; points: CombinedPoint[] }
 
 export function getValueFormat(source: WidgetDataSource): 'brl' | 'count' {
   const brlSources: WidgetDataSource[] = ['revenue_by_day', 'revenue_by_product']
@@ -241,7 +266,6 @@ export function computeWidgetData(
       const { from, to } = getPeriodRange(period)
       const isHourly = period === 'today' || period === 'yesterday'
 
-      // Monta buckets com BRL e USD separados
       const buckets: Record<string, { brl: number; usd: number }> = {}
 
       if (isHourly) {
@@ -281,7 +305,7 @@ export function computeWidgetData(
         dualCurrency: true,
         points: Object.entries(buckets).map(([label, { brl, usd }]) => ({
           label,
-          value: brl + usd * exchangeRate, // convertido (fallback)
+          value: brl + usd * exchangeRate,
           valueBRL: brl,
           valueUSD: usd,
         })),
@@ -355,5 +379,43 @@ export function computeWidgetData(
     }
     case 'transactions':
       return { kind: 'table', vendas }
+
+    case 'combined_by_day': {
+      const { from, to } = getPeriodRange(period)
+      const isHourly = period === 'today' || period === 'yesterday'
+      const buckets: Record<string, CombinedPoint> = {}
+
+      if (isHourly) {
+        for (let h = 0; h < 24; h++) {
+          const label = `${h.toString().padStart(2, '0')}h`
+          buckets[label] = { label, valueBRL: 0, valueUSD: 0, approved: 0, cancelled: 0 }
+        }
+      } else {
+        let cursor = new Date(from)
+        while (cursor < to) {
+          const label = `${cursor.getDate().toString().padStart(2, '0')}/${(cursor.getMonth() + 1).toString().padStart(2, '0')}`
+          buckets[label] = { label, valueBRL: 0, valueUSD: 0, approved: 0, cancelled: 0 }
+          cursor = new Date(cursor.getTime() + 86_400_000)
+        }
+      }
+
+      vendas.forEach(v => {
+        const d = new Date(v.data_venda)
+        if (d < from || d >= to) return
+        const label = isHourly
+          ? `${d.getHours().toString().padStart(2, '0')}h`
+          : `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`
+        if (!buckets[label]) return
+        if (v.status === 'approved') {
+          buckets[label].approved += 1
+          if (v.moeda === 'BRL') buckets[label].valueBRL += v.valor ?? 0
+          else buckets[label].valueUSD += v.valor ?? 0
+        } else if (v.status === 'refunded' || v.status === 'cancelled') {
+          buckets[label].cancelled += 1
+        }
+      })
+
+      return { kind: 'combined', points: Object.values(buckets) }
+    }
   }
 }
