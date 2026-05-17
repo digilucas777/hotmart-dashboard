@@ -29,7 +29,7 @@ export type Produto = {
   nome: string
 }
 
-export type Period = 'today' | 'yesterday' | '7d' | '30d' | 'thisMonth' | 'lastMonth'
+export type Period = 'today' | 'yesterday' | '7d' | '30d' | '90d' | '180d' | '365d' | 'thisMonth' | 'lastMonth'
 
 export type WidgetType = 'metric' | 'line' | 'bar' | 'pie' | 'table' | 'combined'
 

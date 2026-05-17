@@ -14,7 +14,6 @@ import {
 import { TrendingUp } from 'lucide-react'
 import { computeWidgetData, formatBRL, formatUSD } from '@/lib/utils'
 import type { Period, Venda } from '@/lib/types'
-import type { CombinedPoint } from '@/lib/utils'
 
 const LEGEND_LABELS: Record<string, string> = {
   valueBRL: 'Faturamento BRL',
@@ -80,6 +79,9 @@ export function CombinedChartWidget({
     { value: 'today', label: 'Hoje' },
     { value: '7d', label: '7 dias' },
     { value: '30d', label: '30 dias' },
+    { value: '90d', label: '3 meses' },
+    { value: '180d', label: '6 meses' },
+    { value: '365d', label: '1 ano' },
     { value: 'thisMonth', label: 'Este mês' },
   ]
 

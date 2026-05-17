@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { Badge, type BadgeVariant } from '@/components/ui/Badge'
 import {
   formatBRL,
@@ -30,8 +30,6 @@ const STATUS_FILTERS = [
   { value: 'abandoned', label: 'Abandono' },
 ]
 
-const PAGE_SIZE = 25
-
 export function SalesTable({
   vendas,
   exchangeRate,
@@ -43,7 +41,6 @@ export function SalesTable({
 }) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
-  const [page, setPage] = useState(1)
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
@@ -60,21 +57,12 @@ export function SalesTable({
     })
   }, [vendas, search, statusFilter])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const safePage = Math.min(page, totalPages)
-  const paginated = filtered.slice(
-    (safePage - 1) * PAGE_SIZE,
-    safePage * PAGE_SIZE,
-  )
-
   function changeStatus(s: string) {
     setStatusFilter(s)
-    setPage(1)
   }
 
   function changeSearch(v: string) {
     setSearch(v)
-    setPage(1)
   }
 
   const COLS = [
@@ -91,9 +79,9 @@ export function SalesTable({
   ]
 
   return (
-    <div className="rounded-2xl border border-white/7 bg-[#191929]">
+    <div className="flex h-full min-h-0 flex-col rounded-2xl border border-white/7 bg-[#191929]">
       {/* Toolbar */}
-      <div className="flex flex-col gap-3 border-b border-white/7 p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex shrink-0 flex-col gap-3 border-b border-white/7 p-5 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-sm font-semibold text-slate-200">Transações</h3>
         <div className="flex flex-wrap items-center gap-2">
           {STATUS_FILTERS.map(f => (
@@ -126,9 +114,9 @@ export function SalesTable({
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto">
+      <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full min-w-[1100px]">
-          <thead>
+          <thead className="sticky top-0 z-10 bg-[#191929]">
             <tr className="border-b border-white/5">
               {COLS.map(col => (
                 <th
@@ -141,7 +129,7 @@ export function SalesTable({
             </tr>
           </thead>
           <tbody>
-            {paginated.length === 0 ? (
+            {filtered.length === 0 ? (
               <tr>
                 <td
                   colSpan={10}
@@ -151,7 +139,7 @@ export function SalesTable({
                 </td>
               </tr>
             ) : (
-              paginated.map(v => (
+              filtered.map(v => (
                 <tr
                   key={v.id}
                   className="border-b border-white/4 transition-colors last:border-0 hover:bg-white/2"
@@ -210,32 +198,10 @@ export function SalesTable({
         </table>
       </div>
 
-      {/* Pagination */}
-      <div className="flex items-center justify-between border-t border-white/7 px-5 py-3">
+      <div className="shrink-0 border-t border-white/7 px-5 py-3">
         <p className="text-xs text-slate-600">
           {filtered.length} transaç{filtered.length === 1 ? 'ão' : 'ões'}
         </p>
-        {totalPages > 1 && (
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={safePage === 1}
-              className="rounded p-1 text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-300 disabled:opacity-30"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <span className="px-1 text-xs text-slate-500">
-              {safePage} / {totalPages}
-            </span>
-            <button
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={safePage === totalPages}
-              className="rounded p-1 text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-300 disabled:opacity-30"
-            >
-              <ChevronRight size={14} />
-            </button>
-          </div>
-        )}
       </div>
     </div>
   )

@@ -7,6 +7,9 @@ const PERIODS: { value: Period; label: string }[] = [
   { value: 'yesterday', label: 'Ontem' },
   { value: '7d', label: '7 dias' },
   { value: '30d', label: '30 dias' },
+  { value: '90d', label: '3 meses' },
+  { value: '180d', label: '6 meses' },
+  { value: '365d', label: '1 ano' },
   { value: 'thisMonth', label: 'Este mês' },
   { value: 'lastMonth', label: 'Mês anterior' },
 ]

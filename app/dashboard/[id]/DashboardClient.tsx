@@ -11,6 +11,7 @@ import {
   Pencil,
   Lock,
   Save,
+  Search,
   Undo2,
   Redo2,
 } from 'lucide-react'
@@ -304,6 +305,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [showProducts, setShowProducts] = useState(false)
   const [allProducts, setAllProducts] = useState<Produto[]>([])
   const [linkedIds, setLinkedIds] = useState<string[]>([])
+  const [productSearch, setProductSearch] = useState('')
   const [savingProducts, setSavingProducts] = useState(false)
 
   const sensors = useSensors(
@@ -639,6 +641,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       .eq('projeto_id', projectId)
     setAllProducts((all ?? []) as Produto[])
     setLinkedIds((linked ?? []).map((r: { produto_id: string }) => r.produto_id))
+    setProductSearch('')
     setShowProducts(true)
   }
 
@@ -658,6 +661,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const isReady = !loading && !loadingWidgets
   const hasUnsavedLayout = !sameLayout(widgets, savedWidgets)
   const previewPlacement = dragPreview ?? resizePreview
+  const filteredProducts = useMemo(() => {
+    const query = productSearch.trim().toLowerCase()
+    if (!query) return allProducts
+    return allProducts.filter(product =>
+      product.nome.toLowerCase().includes(query) ||
+      product.hotmart_id.toLowerCase().includes(query),
+    )
+  }, [allProducts, productSearch])
   const displayedWidgets = useMemo(
     () => previewPlacement
       ? (dragPreview
@@ -885,13 +896,30 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           <p className="text-sm text-slate-500">
             Selecione os produtos deste projeto. Somente vendas desses produtos aparecerão no dashboard.
           </p>
+          <div className="relative">
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600"
+            />
+            <input
+              type="text"
+              value={productSearch}
+              onChange={e => setProductSearch(e.target.value)}
+              placeholder="Pesquisar produto pelo nome..."
+              className="h-10 w-full rounded-xl border border-white/10 bg-[#10101d] pl-9 pr-3 text-sm text-slate-200 placeholder-slate-600 outline-none transition-colors focus:border-indigo-500/60"
+            />
+          </div>
           {allProducts.length === 0 ? (
             <p className="py-4 text-center text-sm text-slate-600">
               Nenhum produto cadastrado. Aguarde os webhooks da Hotmart.
             </p>
+          ) : filteredProducts.length === 0 ? (
+            <p className="py-4 text-center text-sm text-slate-600">
+              Nenhum produto encontrado.
+            </p>
           ) : (
             <div className="max-h-60 space-y-1 overflow-y-auto">
-              {allProducts.map(p => (
+              {filteredProducts.map(p => (
                 <label
                   key={p.id}
                   className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-white/5"

@@ -21,6 +21,21 @@ export function getPeriodRange(period: Period): { from: Date; to: Date } {
         from: new Date(todayStart.getTime() - 29 * 86_400_000),
         to: new Date(todayStart.getTime() + 86_400_000),
       }
+    case '90d':
+      return {
+        from: new Date(todayStart.getTime() - 89 * 86_400_000),
+        to: new Date(todayStart.getTime() + 86_400_000),
+      }
+    case '180d':
+      return {
+        from: new Date(todayStart.getTime() - 179 * 86_400_000),
+        to: new Date(todayStart.getTime() + 86_400_000),
+      }
+    case '365d':
+      return {
+        from: new Date(todayStart.getTime() - 364 * 86_400_000),
+        to: new Date(todayStart.getTime() + 86_400_000),
+      }
     case 'thisMonth': {
       const first = new Date(now.getFullYear(), now.getMonth(), 1)
       const last = new Date(now.getFullYear(), now.getMonth() + 1, 0)
