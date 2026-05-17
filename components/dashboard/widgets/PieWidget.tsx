@@ -8,6 +8,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
+import { Gauge } from 'lucide-react'
 import type { SeriesPoint } from '@/lib/utils'
 
 const PIE_COLORS = [
@@ -49,20 +50,33 @@ export function PieWidget({
   }
 
   const data = points.map(p => ({ name: p.label, value: p.value }))
+  const total = data.reduce((sum, item) => sum + item.value, 0)
+  const top = data.reduce((best, item) => item.value > best.value ? item : best, data[0])
+  const topPercent = total > 0 ? Math.round((top.value / total) * 100) : 0
 
   return (
     <div className="relative z-[1] p-5">
       <h3 className="mb-5 text-sm font-semibold text-[var(--dash-text)]">{title}</h3>
-      <ResponsiveContainer width="100%" height={chartHeight}>
-        <PieChart>
+      <div className="relative">
+        <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full bg-[var(--dash-panel-strong)] p-4 text-center shadow-[0_0_30px_var(--dash-glow-blue)]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-violet-500 text-white">
+            <Gauge size={18} />
+          </div>
+          <p className="mt-2 text-lg font-black text-[var(--dash-text)]">{topPercent}%</p>
+          <p className="max-w-20 truncate text-[10px] text-[var(--dash-faint)]">{top.name}</p>
+        </div>
+        <ResponsiveContainer width="100%" height={chartHeight}>
+          <PieChart>
           <Pie
             data={data}
             cx="50%"
             cy="50%"
-            innerRadius={58}
+            innerRadius={64}
             outerRadius={88}
             paddingAngle={3}
             dataKey="value"
+            label={({ percent }) => percent ? `${Math.round(percent * 100)}%` : ''}
+            labelLine={false}
           >
             {data.map((_, i) => (
               <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
@@ -76,8 +90,9 @@ export function PieWidget({
               <span style={{ color: '#64748b', fontSize: 12 }}>{value}</span>
             )}
           />
-        </PieChart>
-      </ResponsiveContainer>
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   )
 }

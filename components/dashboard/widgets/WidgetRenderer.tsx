@@ -15,6 +15,7 @@ import { SalesTable } from '@/components/dashboard/SalesTable'
 
 const GRID_ROW_HEIGHT = 20
 const GRID_ITEM_PADDING = 10
+type ResizeDirection = 'right' | 'left' | 'bottom' | 'corner'
 
 export function WidgetRenderer({
   config,
@@ -64,7 +65,7 @@ export function WidgetRenderer({
     ? { height: `${liveSize.h}px`, overflow: 'hidden' }
     : { height: '100%', overflow: 'hidden' }
 
-  function handleResizeStart(e: ReactMouseEvent) {
+  function handleResizeStart(e: ReactMouseEvent, direction: ResizeDirection) {
     e.preventDefault()
     e.stopPropagation()
     const card = cardRef.current
@@ -76,8 +77,14 @@ export function WidgetRenderer({
     const startH = card.offsetHeight
 
     function onMouseMove(ev: MouseEvent) {
-      const newW = Math.max(110, startW + ev.clientX - startX)
-      const newH = Math.max(90, startH + ev.clientY - startY)
+      const deltaX = ev.clientX - startX
+      const deltaY = ev.clientY - startY
+      const newW = direction === 'bottom'
+        ? startW
+        : Math.max(110, startW + (direction === 'left' ? -deltaX : deltaX))
+      const newH = direction === 'left' || direction === 'right'
+        ? startH
+        : Math.max(90, startH + deltaY)
       setLiveSize({ w: newW, h: newH })
       onPreviewResize?.(config.id, newW, newH)
     }
@@ -85,8 +92,14 @@ export function WidgetRenderer({
     function onMouseUp(ev: MouseEvent) {
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
-      const newW = Math.max(110, startW + ev.clientX - startX)
-      const newH = Math.max(90, startH + ev.clientY - startY)
+      const deltaX = ev.clientX - startX
+      const deltaY = ev.clientY - startY
+      const newW = direction === 'bottom'
+        ? startW
+        : Math.max(110, startW + (direction === 'left' ? -deltaX : deltaX))
+      const newH = direction === 'left' || direction === 'right'
+        ? startH
+        : Math.max(90, startH + deltaY)
       setLiveSize(null)
       onCommitResize?.(config.id, newW, newH)
     }
@@ -128,6 +141,12 @@ export function WidgetRenderer({
         {editMode && (
           <>
             <div
+              className={`absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-cyan-400/10 to-transparent transition-opacity ${
+                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+              title="Arraste o card"
+            />
+            <div
               className={`absolute right-3 top-3 z-10 flex items-center gap-1 transition-opacity ${
                 selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
               }`}
@@ -153,7 +172,16 @@ export function WidgetRenderer({
 
             <div
               onPointerDown={e => e.stopPropagation()}
-              onMouseDown={handleResizeStart}
+              onMouseDown={e => handleResizeStart(e, 'left')}
+              title="Ajustar largura pelo lado esquerdo"
+              className={`absolute left-0 top-1/2 z-20 h-16 w-3 -translate-y-1/2 cursor-ew-resize rounded-r-lg bg-white/10 transition-opacity hover:bg-white/20 ${
+                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+            />
+
+            <div
+              onPointerDown={e => e.stopPropagation()}
+              onMouseDown={e => handleResizeStart(e, 'right')}
               title="Ajustar largura"
               className={`absolute right-0 top-1/2 z-10 h-16 w-3 -translate-y-1/2 cursor-ew-resize rounded-l-lg bg-white/10 transition-opacity hover:bg-white/20 ${
                 selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
@@ -162,7 +190,7 @@ export function WidgetRenderer({
 
             <div
               onPointerDown={e => e.stopPropagation()}
-              onMouseDown={handleResizeStart}
+              onMouseDown={e => handleResizeStart(e, 'bottom')}
               title="Ajustar altura"
               className={`absolute bottom-0 left-1/2 z-10 h-3 w-16 -translate-x-1/2 cursor-ns-resize rounded-t-lg bg-white/10 transition-opacity hover:bg-white/20 ${
                 selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
@@ -172,7 +200,7 @@ export function WidgetRenderer({
             {/* Resize handle - bottom-right corner */}
             <div
               onPointerDown={e => e.stopPropagation()}
-              onMouseDown={handleResizeStart}
+              onMouseDown={e => handleResizeStart(e, 'corner')}
               title="Arrastar para redimensionar"
               className={`absolute bottom-2 right-2 z-10 cursor-se-resize rounded-md border border-white/10 bg-[#111120]/80 p-1 transition-opacity ${
                 selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'

@@ -31,11 +31,30 @@
 }
 
 body {
-  background-color: #0b0b14;
-  color: #f1f5f9;
+  background-color: var(--dash-bg);
+  color: var(--dash-text);
   font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+:root[data-dashboard-theme='light'] {
+  color-scheme: light;
+  --dash-bg: #f7f8fc;
+  --dash-bg-soft: #eef2ff;
+  --dash-panel: rgba(255, 255, 255, 0.9);
+  --dash-panel-strong: rgba(255, 255, 255, 0.98);
+  --dash-border: rgba(15, 23, 42, 0.12);
+  --dash-border-strong: rgba(14, 165, 233, 0.32);
+  --dash-text: #111827;
+  --dash-muted: #475569;
+  --dash-faint: #64748b;
+  --dash-neon: #0284c7;
+  --dash-purple: #7c3aed;
+  --dash-accent: #2563eb;
+  --dash-glow-blue: rgba(14, 165, 233, 0.18);
+  --dash-glow-purple: rgba(124, 58, 237, 0.14);
+  --dash-shadow: 0 22px 60px rgba(15, 23, 42, 0.12);
 }
 
 /* Scrollbar */

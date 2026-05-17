@@ -8,7 +8,7 @@ const VARIANT_STYLES: Record<ButtonVariant, string> = {
   ghost: 'bg-transparent hover:bg-white/5 text-slate-400 hover:text-slate-200',
   danger: 'bg-red-500/15 hover:bg-red-500/25 text-red-400',
   outline:
-    'border border-white/10 hover:border-white/20 bg-transparent text-slate-200 hover:bg-white/5',
+    'border border-[var(--dash-border,rgba(255,255,255,0.1))] hover:border-[var(--dash-border-strong,rgba(255,255,255,0.2))] bg-transparent text-[var(--dash-text,#e2e8f0)] hover:bg-white/5',
 }
 
 const SIZE_STYLES: Record<ButtonSize, string> = {

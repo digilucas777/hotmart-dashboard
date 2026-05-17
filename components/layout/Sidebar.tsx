@@ -15,7 +15,7 @@ import {
 import { supabase } from '@/lib/supabase'
 
 const NAV_ITEMS = [
-  { icon: LayoutGrid, label: 'Dashboards', href: '/' },
+  { icon: LayoutGrid, label: 'Dashboards', href: '/dashboard' },
   { icon: ShoppingCart, label: 'Vendas', href: '/vendas' },
   { icon: FileText, label: 'Relatórios', href: '/relatorios' },
   { icon: Plug, label: 'Integrações', href: '/integracoes' },
@@ -23,7 +23,7 @@ const NAV_ITEMS = [
 ]
 
 function isNavActive(href: string, pathname: string): boolean {
-  if (href === '/') return pathname === '/' || pathname.startsWith('/dashboard')
+  if (href === '/dashboard') return pathname === '/dashboard' || pathname.startsWith('/dashboard/')
   return pathname.startsWith(href)
 }
 

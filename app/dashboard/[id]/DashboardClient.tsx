@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
   Settings,
@@ -9,7 +10,6 @@ import {
   Plus,
   LayoutDashboard,
   Pencil,
-  Lock,
   Moon,
   Rocket,
   Save,
@@ -17,6 +17,7 @@ import {
   Sun,
   Undo2,
   Redo2,
+  X,
 } from 'lucide-react'
 import {
   DndContext,
@@ -284,7 +285,9 @@ function persistLocalLayout(projectId: string, widgets: WidgetConfig[]) {
 }
 
 export function DashboardClient({ projectId }: { projectId: string }) {
+  const router = useRouter()
   const [projeto, setProjeto] = useState<Projeto | null>(null)
+  const [dashboardOptions, setDashboardOptions] = useState<Projeto[]>([])
   const [vendas, setVendas] = useState<Venda[]>([])
   const [combinedVendas, setCombinedVendas] = useState<Venda[]>([])
   const [period, setPeriod] = useState<Period>('today')
@@ -336,6 +339,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setTheme(current => {
       const next = current === 'dark' ? 'light' : 'dark'
       window.localStorage.setItem(THEME_STORAGE_KEY, next)
+      document.documentElement.dataset.dashboardTheme = next
+      window.dispatchEvent(new Event('dash-theme-change'))
       return next
     })
   }
@@ -348,6 +353,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       .single()
       .then(({ data }) => { if (data) setProjeto(data as Projeto) })
   }, [projectId])
+
+  useEffect(() => {
+    supabase
+      .from('projetos')
+      .select('*')
+      .order('data_criacao', { ascending: false })
+      .then(({ data }) => setDashboardOptions((data ?? []) as Projeto[]))
+  }, [])
 
   useEffect(() => {
     supabase
@@ -581,13 +594,22 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setResizePreview(null)
     if (!placement) return
     pushHistory()
-    setWidgets(prev => resolveOverlaps(prev.map(w => applyPlacement(w, placement)), id))
+    setWidgets(prev => compactLayout(resolveOverlaps(prev.map(w => applyPlacement(w, placement)), id)))
   }, [getResizePlacement, pushHistory])
 
   const organizeLayout = useCallback(() => {
     pushHistory()
     setWidgets(prev => compactLayout(prev))
   }, [pushHistory])
+
+  const cancelLayout = useCallback(() => {
+    setWidgets(savedWidgets)
+    setUndoStack([])
+    setRedoStack([])
+    setLayoutError(null)
+    setEditMode(false)
+    setSelectedWidgetId(null)
+  }, [savedWidgets])
 
   const saveLayout = useCallback(async () => {
     setSavingLayout(true)
@@ -705,11 +727,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       >
         <div className="mx-auto flex min-h-16 max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
           <Link
-            href="/"
+            href="/dashboard"
             className="flex items-center gap-1.5 text-sm text-[var(--dash-faint)] transition-colors hover:text-[var(--dash-text)]"
           >
             <ArrowLeft size={15} />
-            Projetos
+            Dashboards
           </Link>
           <div className="hidden h-5 w-px bg-[var(--dash-border)] sm:block" />
           <div className="dashboard-topbar flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-3 py-2 sm:px-4">
@@ -727,6 +749,20 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             <div className="ml-auto hidden rounded-full bg-gradient-to-r from-cyan-400/15 to-violet-500/15 px-3 py-1 text-xs font-semibold text-[var(--dash-muted)] sm:block">
               Geral
             </div>
+            {dashboardOptions.length > 0 && (
+              <select
+                value={projectId}
+                onChange={event => router.push(`/dashboard/${event.target.value}`)}
+                className="min-w-0 rounded-xl border border-[var(--dash-border)] bg-white/5 px-3 py-2 text-xs font-bold text-[var(--dash-text)] outline-none transition-colors hover:border-[var(--dash-border-strong)] sm:min-w-48"
+                title="Trocar dashboard"
+              >
+                {dashboardOptions.map(option => (
+                  <option key={option.id} value={option.id}>
+                    {option.nome}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           <div className="ml-auto" />
           <button
@@ -740,9 +776,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       </header>
 
       <main className="dashboard-main mx-auto max-w-[1400px] px-6 py-8">
-        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
           <PeriodFilter value={period} onChange={setPeriod} />
-          <div className="dashboard-action-bar dashboard-panel flex flex-wrap items-center gap-2 rounded-2xl p-1.5">
+          <div className="dashboard-action-bar dashboard-panel flex flex-wrap items-center justify-end gap-2 rounded-2xl p-1.5">
             <button
               onClick={fetchVendas}
               title="Atualizar"
@@ -755,13 +791,17 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               variant="outline"
               size="sm"
               onClick={() => {
-                setEditMode(v => !v)
+                if (editMode) {
+                  cancelLayout()
+                  return
+                }
+                setEditMode(true)
                 setSelectedWidgetId(null)
               }}
-              className={editMode ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300' : ''}
+              className={editMode ? 'border-red-400/30 bg-red-500/10 text-red-300' : ''}
             >
-              {editMode ? <Lock size={13} /> : <Pencil size={13} />}
-              {editMode ? 'Travado' : 'Editar layout'}
+              {editMode ? <X size={13} /> : <Pencil size={13} />}
+              {editMode ? 'Cancelar' : 'Editar layout'}
             </Button>
             {editMode && (
               <>
@@ -793,6 +833,15 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                   <Redo2 size={13} />
                 </Button>
                 <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={cancelLayout}
+                  title="Cancelar edições e voltar ao layout salvo"
+                >
+                  <X size={13} />
+                  Cancelar
+                </Button>
+                <Button
                   size="sm"
                   onClick={saveLayout}
                   disabled={!hasUnsavedLayout || savingLayout}
@@ -815,13 +864,13 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           </div>
         </div>
         {editMode && (
-          <div className="mb-5 flex items-center justify-between rounded-xl border border-white/10 bg-[#151525]/80 px-4 py-3 text-xs text-slate-400 shadow-xl shadow-black/20">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--dash-border)] bg-[var(--dash-panel)] px-4 py-3 text-xs text-[var(--dash-muted)] shadow-xl shadow-black/20">
             <span>
               {selectedWidgetId
                 ? 'Widget selecionado. Arraste o card ou use o canto inferior direito para redimensionar.'
                 : 'Selecione um widget para editar posição e tamanho.'}
             </span>
-            <span className={layoutError ? 'font-semibold text-red-300' : hasUnsavedLayout ? 'font-semibold text-indigo-300' : 'text-slate-600'}>
+            <span className={layoutError ? 'font-semibold text-red-300' : hasUnsavedLayout ? 'font-semibold text-[var(--dash-neon)]' : 'text-[var(--dash-faint)]'}>
               {layoutError ?? (hasUnsavedLayout ? 'Alterações não salvas' : 'Layout salvo')}
             </span>
           </div>

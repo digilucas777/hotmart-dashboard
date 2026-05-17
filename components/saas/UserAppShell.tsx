@@ -27,6 +27,8 @@ const navItems = [
   { label: 'Configurações', icon: Settings, href: '/configuracoes' },
 ]
 
+const FOUNDER_EMAILS = ['gestor.digitalcomlucas@gmail.com']
+
 export function UserAppShell() {
   const router = useRouter()
   const [name, setName] = useState('Usuário')
@@ -130,6 +132,8 @@ export function UserAppShell() {
     [dashboards.length, widgetsCount],
   )
 
+  const isFounder = FOUNDER_EMAILS.includes(email.toLowerCase()) || email.toLowerCase().startsWith('gestor.digitalcomlucas@')
+
   return (
     <div className="min-h-screen bg-[#07080d] text-white">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-white/10 bg-[#0b0d14]/90 p-5 backdrop-blur-2xl lg:block">
@@ -150,7 +154,7 @@ export function UserAppShell() {
         </nav>
         <div className="absolute inset-x-5 bottom-5 rounded-3xl border border-white/10 bg-white/[0.04] p-4">
           <p className="text-xs text-slate-500">Plano atual</p>
-          <p className="mt-1 font-black">Pro placeholder</p>
+          <p className="mt-1 font-black">{isFounder ? 'Founder ilimitado' : 'Pro placeholder'}</p>
           <Link href="/pricing" className="mt-3 inline-flex text-sm font-bold text-cyan-200 hover:text-white">
             Gerenciar assinatura
           </Link>
@@ -242,7 +246,7 @@ export function UserAppShell() {
             ) : (
               <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {dashboards.map((dashboard, index) => (
-                  <div key={dashboard.id} className="rounded-3xl border border-white/10 bg-[#0b0d14] p-5 transition-colors hover:border-cyan-300/30">
+                  <div key={dashboard.id} className="rounded-3xl border border-white/10 bg-[#0b0d14] p-5 transition-all hover:-translate-y-1 hover:border-cyan-300/30 hover:shadow-[0_22px_60px_rgba(0,212,255,0.12)]">
                     <div className="mb-6 h-28 rounded-2xl bg-[linear-gradient(135deg,rgba(0,212,255,0.2),rgba(167,139,250,0.14))] p-4">
                       <div className="flex h-full items-end justify-between">
                         <div className="h-10 w-20 rounded-xl bg-white/10" />
@@ -257,15 +261,15 @@ export function UserAppShell() {
                     <p className="mt-1 line-clamp-2 min-h-10 text-sm text-slate-500">
                       {dashboard.descricao || (index === 0 ? 'Dashboard principal da operação' : 'Dashboard pronto para configurar')}
                     </p>
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      <Link href={`/dashboard/${dashboard.id}`} className="inline-flex items-center gap-1 rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white">
+                    <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                      <Link href={`/dashboard/${dashboard.id}`} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3 text-sm font-black text-white shadow-[0_0_28px_rgba(0,212,255,0.22)] transition-transform hover:-translate-y-0.5">
                         Abrir dashboard
-                        <ExternalLink size={12} />
+                        <ExternalLink size={14} />
                       </Link>
-                      <Link href={`/dashboard/${dashboard.id}`} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white">
+                      <Link href={`/dashboard/${dashboard.id}`} className="inline-flex items-center justify-center rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white">
                         Editar layout
                       </Link>
-                      <Link href={`/dashboard/${dashboard.id}`} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white">
+                      <Link href={`/dashboard/${dashboard.id}`} className="inline-flex items-center justify-center rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white">
                         Widgets
                       </Link>
                     </div>

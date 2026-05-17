@@ -89,12 +89,12 @@ export function CombinedChartWidget({
     <div className="flex h-full flex-col p-5">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500/12 text-orange-400">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/12 text-cyan-300">
             <TrendingUp size={17} />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-100">{title}</h3>
-            <p className="text-xs text-slate-500">Desempenho diário de vendas</p>
+            <h3 className="text-base font-bold text-[var(--dash-text)]">{title}</h3>
+            <p className="text-xs text-[var(--dash-faint)]">Desempenho diário de vendas</p>
           </div>
         </div>
         <div className="flex rounded-lg bg-white/5 p-1">
@@ -104,8 +104,8 @@ export function CombinedChartWidget({
               onClick={() => setInternalPeriod(option.value)}
               className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                 internalPeriod === option.value
-                  ? 'bg-indigo-500 text-white'
-                  : 'text-slate-500 hover:text-slate-300'
+                  ? 'bg-gradient-to-r from-cyan-500 to-violet-500 text-white'
+                  : 'text-[var(--dash-faint)] hover:text-[var(--dash-text)]'
               }`}
             >
               {option.label}
@@ -113,8 +113,8 @@ export function CombinedChartWidget({
           ))}
         </div>
       </div>
-      <div className="min-h-0 flex-1 rounded-xl border border-white/10 bg-[#111120]/70 p-4 shadow-inner shadow-black/20">
-        <p className="mb-4 text-sm font-semibold text-slate-100">Vendas</p>
+      <div className="min-h-0 flex-1 rounded-xl border border-[var(--dash-border)] bg-[var(--dash-panel-strong)] p-4 shadow-inner shadow-black/10">
+        <p className="mb-4 text-sm font-semibold text-[var(--dash-text)]">Vendas</p>
         <ResponsiveContainer width="100%" height={Math.max(180, chartHeight - 70)}>
         <ComposedChart data={points} margin={{ top: 8, right: 14, left: 0, bottom: 0 }}>
           <CartesianGrid stroke="rgba(148,163,184,0.18)" vertical={false} />
