@@ -15,7 +15,15 @@ import { SalesTable } from '@/components/dashboard/SalesTable'
 
 const GRID_ROW_HEIGHT = 20
 const GRID_ITEM_PADDING = 10
-type ResizeDirection = 'right' | 'left' | 'bottom' | 'corner'
+export type ResizeDirection =
+  | 'left'
+  | 'right'
+  | 'top'
+  | 'bottom'
+  | 'top-left'
+  | 'top-right'
+  | 'bottom-left'
+  | 'bottom-right'
 
 export function WidgetRenderer({
   config,
@@ -28,7 +36,6 @@ export function WidgetRenderer({
   selected,
   onSelect,
   onDelete,
-  onUpdateConfig,
   onPreviewResize,
   onCommitResize,
 }: {
@@ -42,9 +49,8 @@ export function WidgetRenderer({
   selected: boolean
   onSelect: (id: string) => void
   onDelete: (id: string) => void
-  onUpdateConfig?: (id: string, updates: { width?: string; height?: string; col_span?: number; row_span?: number }) => void
-  onPreviewResize?: (id: string, width: number, height: number) => void
-  onCommitResize?: (id: string, width: number, height: number) => void
+  onPreviewResize?: (id: string, width: number, height: number, direction: ResizeDirection, deltaX: number, deltaY: number) => void
+  onCommitResize?: (id: string, width: number, height: number, direction: ResizeDirection, deltaX: number, deltaY: number) => void
 }) {
   // ref on the inner card to measure real dimensions for resize
   const cardRef = useRef<HTMLDivElement>(null)
@@ -76,17 +82,22 @@ export function WidgetRenderer({
     const startW = card.offsetWidth
     const startH = card.offsetHeight
 
+    const affectsLeft = direction.includes('left')
+    const affectsRight = direction.includes('right')
+    const affectsTop = direction.includes('top')
+    const affectsBottom = direction.includes('bottom')
+
     function onMouseMove(ev: MouseEvent) {
       const deltaX = ev.clientX - startX
       const deltaY = ev.clientY - startY
-      const newW = direction === 'bottom'
+      const newW = !affectsLeft && !affectsRight
         ? startW
-        : Math.max(110, startW + (direction === 'left' ? -deltaX : deltaX))
-      const newH = direction === 'left' || direction === 'right'
+        : Math.max(110, startW + (affectsLeft ? -deltaX : deltaX))
+      const newH = !affectsTop && !affectsBottom
         ? startH
-        : Math.max(90, startH + deltaY)
+        : Math.max(90, startH + (affectsTop ? -deltaY : deltaY))
       setLiveSize({ w: newW, h: newH })
-      onPreviewResize?.(config.id, newW, newH)
+      onPreviewResize?.(config.id, newW, newH, direction, deltaX, deltaY)
     }
 
     function onMouseUp(ev: MouseEvent) {
@@ -94,14 +105,14 @@ export function WidgetRenderer({
       window.removeEventListener('mouseup', onMouseUp)
       const deltaX = ev.clientX - startX
       const deltaY = ev.clientY - startY
-      const newW = direction === 'bottom'
+      const newW = !affectsLeft && !affectsRight
         ? startW
-        : Math.max(110, startW + (direction === 'left' ? -deltaX : deltaX))
-      const newH = direction === 'left' || direction === 'right'
+        : Math.max(110, startW + (affectsLeft ? -deltaX : deltaX))
+      const newH = !affectsTop && !affectsBottom
         ? startH
-        : Math.max(90, startH + deltaY)
+        : Math.max(90, startH + (affectsTop ? -deltaY : deltaY))
       setLiveSize(null)
-      onCommitResize?.(config.id, newW, newH)
+      onCommitResize?.(config.id, newW, newH, direction, deltaX, deltaY)
     }
 
     window.addEventListener('mousemove', onMouseMove)
@@ -145,6 +156,14 @@ export function WidgetRenderer({
                 selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
               }`}
               title="Arraste o card"
+            />
+            <div
+              onPointerDown={e => e.stopPropagation()}
+              onMouseDown={e => handleResizeStart(e, 'top')}
+              title="Ajustar altura pelo topo"
+              className={`absolute left-1/2 top-0 z-20 h-3 w-16 -translate-x-1/2 cursor-ns-resize rounded-b-lg bg-white/10 transition-opacity hover:bg-white/20 ${
+                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
             />
             <div
               className={`absolute right-3 top-3 z-10 flex items-center gap-1 transition-opacity ${
@@ -197,10 +216,36 @@ export function WidgetRenderer({
               }`}
             />
 
-            {/* Resize handle - bottom-right corner */}
             <div
               onPointerDown={e => e.stopPropagation()}
-              onMouseDown={e => handleResizeStart(e, 'corner')}
+              onMouseDown={e => handleResizeStart(e, 'top-left')}
+              title="Redimensionar pelo canto superior esquerdo"
+              className={`absolute left-2 top-2 z-20 h-5 w-5 cursor-nwse-resize rounded-md border border-white/10 bg-[#111120]/80 transition-opacity hover:bg-white/20 ${
+                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+            />
+
+            <div
+              onPointerDown={e => e.stopPropagation()}
+              onMouseDown={e => handleResizeStart(e, 'top-right')}
+              title="Redimensionar pelo canto superior direito"
+              className={`absolute right-10 top-2 z-20 h-5 w-5 cursor-nesw-resize rounded-md border border-white/10 bg-[#111120]/80 transition-opacity hover:bg-white/20 ${
+                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+            />
+
+            <div
+              onPointerDown={e => e.stopPropagation()}
+              onMouseDown={e => handleResizeStart(e, 'bottom-left')}
+              title="Redimensionar pelo canto inferior esquerdo"
+              className={`absolute bottom-2 left-2 z-20 h-5 w-5 cursor-nesw-resize rounded-md border border-white/10 bg-[#111120]/80 transition-opacity hover:bg-white/20 ${
+                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+            />
+
+            <div
+              onPointerDown={e => e.stopPropagation()}
+              onMouseDown={e => handleResizeStart(e, 'bottom-right')}
               title="Arrastar para redimensionar"
               className={`absolute bottom-2 right-2 z-10 cursor-se-resize rounded-md border border-white/10 bg-[#111120]/80 p-1 transition-opacity ${
                 selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'

@@ -8,7 +8,6 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
-import { Gauge } from 'lucide-react'
 import type { SeriesPoint } from '@/lib/utils'
 
 const PIE_COLORS = [
@@ -57,13 +56,9 @@ export function PieWidget({
   return (
     <div className="relative z-[1] p-5">
       <h3 className="mb-5 text-sm font-semibold text-[var(--dash-text)]">{title}</h3>
-      <div className="relative">
-        <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full bg-[var(--dash-panel-strong)] p-4 text-center shadow-[0_0_30px_var(--dash-glow-blue)]">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-violet-500 text-white">
-            <Gauge size={18} />
-          </div>
-          <p className="mt-2 text-lg font-black text-[var(--dash-text)]">{topPercent}%</p>
-          <p className="max-w-20 truncate text-[10px] text-[var(--dash-faint)]">{top.name}</p>
+      <div className="relative drop-shadow-[0_0_22px_var(--dash-glow-blue)]">
+        <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--dash-border)] bg-[color:var(--dash-panel)]/75 text-center shadow-[0_0_28px_var(--dash-glow-blue)] backdrop-blur-xl">
+          <p className="text-lg font-black text-[var(--dash-text)]">{topPercent}%</p>
         </div>
         <ResponsiveContainer width="100%" height={chartHeight}>
           <PieChart>

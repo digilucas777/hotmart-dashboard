@@ -6,13 +6,18 @@ import { useRouter } from 'next/navigation'
 import {
   BarChart3,
   Bell,
+  Clock3,
   CreditCard,
+  Edit3,
   ExternalLink,
   LayoutDashboard,
   Loader2,
   LogOut,
   Plus,
   Settings,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
   UserRound,
   X,
 } from 'lucide-react'
@@ -38,6 +43,8 @@ export function UserAppShell() {
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Projeto | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [dashboardName, setDashboardName] = useState('')
   const [dashboardDescription, setDashboardDescription] = useState('')
   const [error, setError] = useState('')
@@ -123,6 +130,28 @@ export function UserAppShell() {
     router.refresh()
   }
 
+  async function deleteDashboard() {
+    if (!deleteTarget) return
+
+    setDeleting(true)
+    setError('')
+
+    await supabase.from('projeto_produtos').delete().eq('projeto_id', deleteTarget.id)
+    await supabase.from('dashboard_widgets').delete().eq('projeto_id', deleteTarget.id)
+    const { error: deleteError } = await supabase.from('projetos').delete().eq('id', deleteTarget.id)
+
+    setDeleting(false)
+
+    if (deleteError) {
+      setError('Não foi possível excluir este dashboard agora.')
+      return
+    }
+
+    setDashboards(prev => prev.filter(dashboard => dashboard.id !== deleteTarget.id))
+    setDeleteTarget(null)
+    await loadDashboards()
+  }
+
   const stats = useMemo(
     () => [
       ['Dashboards ativos', String(dashboards.length), dashboards.length === 1 ? '1 dashboard criado na sua conta' : 'Dashboards criados na sua conta'],
@@ -133,6 +162,11 @@ export function UserAppShell() {
   )
 
   const isFounder = FOUNDER_EMAILS.includes(email.toLowerCase()) || email.toLowerCase().startsWith('gestor.digitalcomlucas@')
+  const dashboardsLimit = isFounder ? Infinity : 3
+  const dashboardsAvailable = isFounder ? 'Ilimitados' : String(Math.max(0, dashboardsLimit - dashboards.length))
+  const planProgress = isFounder ? 100 : Math.min(100, (dashboards.length / dashboardsLimit) * 100)
+  const recentDashboards = dashboards.slice(0, 3)
+  const lastEdited = dashboards[0]
 
   return (
     <div className="min-h-screen bg-[#07080d] text-white">
@@ -152,9 +186,22 @@ export function UserAppShell() {
             </Link>
           ))}
         </nav>
-        <div className="absolute inset-x-5 bottom-5 rounded-3xl border border-white/10 bg-white/[0.04] p-4">
+        <div className="absolute inset-x-5 bottom-5 overflow-hidden rounded-3xl border border-cyan-300/15 bg-[linear-gradient(135deg,rgba(0,212,255,0.08),rgba(139,92,246,0.1))] p-4 shadow-[0_0_34px_rgba(0,212,255,0.08)]">
           <p className="text-xs text-slate-500">Plano atual</p>
-          <p className="mt-1 font-black">{isFounder ? 'Founder ilimitado' : 'Pro placeholder'}</p>
+          <p className="mt-1 font-black">{isFounder ? 'Founder ilimitado' : 'Pro'}</p>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-2xl bg-black/20 p-2">
+              <p className="text-slate-500">Usados</p>
+              <p className="font-black text-white">{dashboards.length}</p>
+            </div>
+            <div className="rounded-2xl bg-black/20 p-2">
+              <p className="text-slate-500">Disponíveis</p>
+              <p className="font-black text-white">{dashboardsAvailable}</p>
+            </div>
+          </div>
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+            <div className="h-full rounded-full bg-gradient-to-r from-cyan-300 to-violet-400" style={{ width: `${planProgress}%` }} />
+          </div>
           <Link href="/pricing" className="mt-3 inline-flex text-sm font-bold text-cyan-200 hover:text-white">
             Gerenciar assinatura
           </Link>
@@ -261,22 +308,103 @@ export function UserAppShell() {
                     <p className="mt-1 line-clamp-2 min-h-10 text-sm text-slate-500">
                       {dashboard.descricao || (index === 0 ? 'Dashboard principal da operação' : 'Dashboard pronto para configurar')}
                     </p>
-                    <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <div className="mt-5 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
                       <Link href={`/dashboard/${dashboard.id}`} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3 text-sm font-black text-white shadow-[0_0_28px_rgba(0,212,255,0.22)] transition-transform hover:-translate-y-0.5">
                         Abrir dashboard
                         <ExternalLink size={14} />
                       </Link>
                       <Link href={`/dashboard/${dashboard.id}`} className="inline-flex items-center justify-center rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white">
-                        Editar layout
+                        <Edit3 size={14} />
+                        <span className="ml-2">Editar dashboard</span>
                       </Link>
-                      <Link href={`/dashboard/${dashboard.id}`} className="inline-flex items-center justify-center rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white">
-                        Widgets
-                      </Link>
+                      <button
+                        onClick={() => setDeleteTarget(dashboard)}
+                        className="inline-flex items-center justify-center rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-400 transition-colors hover:border-red-300/35 hover:bg-red-500/10 hover:text-red-200"
+                      >
+                        <Trash2 size={14} />
+                        <span className="ml-2">Excluir dashboard</span>
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
             )}
+          </section>
+
+          <section className="mt-8 grid gap-4 xl:grid-cols-3">
+            <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-black/20">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-400/10 text-cyan-200">
+                  <Clock3 size={20} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black">Atividade recente</h2>
+                  <p className="text-sm text-slate-500">Resumo rápido da conta</p>
+                </div>
+              </div>
+              <div className="mt-5 space-y-3">
+                {(recentDashboards.length ? recentDashboards : [{ id: 'empty', nome: 'Nenhuma atividade ainda', descricao: 'Crie ou abra um dashboard para começar.' } as Projeto]).map((dashboard, index) => (
+                  <div key={dashboard.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold">{dashboard.nome}</p>
+                      <p className="text-xs text-slate-500">{index === 0 && lastEdited ? 'Último dashboard editado' : 'Dashboard recente'}</p>
+                    </div>
+                    <span className="rounded-full bg-cyan-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-cyan-200">
+                      {index === 0 ? 'Novo' : 'Ativo'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-black/20">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-400/10 text-violet-200">
+                  <Sparkles size={20} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black">Dashboards em foco</h2>
+                  <p className="text-sm text-slate-500">Mais acessados e recentes</p>
+                </div>
+              </div>
+              <div className="mt-5 space-y-3">
+                {recentDashboards.length ? recentDashboards.map((dashboard, index) => (
+                  <Link key={dashboard.id} href={`/dashboard/${dashboard.id}`} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 transition-colors hover:border-cyan-300/35">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400/30 to-violet-500/30 text-sm font-black">
+                      {index + 1}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold">{dashboard.nome}</p>
+                      <p className="text-xs text-slate-500">{dashboard.descricao || 'Pronto para abrir'}</p>
+                    </div>
+                  </Link>
+                )) : (
+                  <p className="rounded-2xl border border-dashed border-white/10 p-4 text-sm text-slate-500">Os dashboards mais acessados aparecem aqui.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-black/20">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-200">
+                  <ShieldCheck size={20} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black">Status integrações</h2>
+                  <p className="text-sm text-slate-500">Meta Ads em preparação</p>
+                </div>
+              </div>
+              <div className="mt-5 grid gap-3">
+                {['Meta Ads', 'Business Manager', 'Contas de anúncios'].map((item, index) => (
+                  <Link key={item} href="/integracoes" className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3 transition-colors hover:border-cyan-300/35">
+                    <span className="text-sm font-bold">{item}</span>
+                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${index === 0 ? 'bg-cyan-400/10 text-cyan-200' : 'bg-white/5 text-slate-400'}`}>
+                      {index === 0 ? 'Pronto' : 'Em breve'}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </div>
           </section>
 
           <section className="mt-8 grid gap-4 lg:grid-cols-2">
@@ -346,6 +474,39 @@ export function UserAppShell() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md animate-in rounded-[2rem] border border-white/10 bg-[#0b0d14] p-6 shadow-2xl shadow-black/60">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/10 text-red-200">
+              <Trash2 size={21} />
+            </div>
+            <h2 className="mt-5 text-xl font-black">Deseja realmente excluir este dashboard?</h2>
+            <p className="mt-2 text-sm text-slate-500">
+              {deleteTarget.nome} será removido da sua área de dashboards.
+            </p>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                className="h-12 flex-1 rounded-2xl border border-white/10 text-sm font-black text-slate-300 transition-colors hover:text-white disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={deleteDashboard}
+                disabled={deleting}
+                className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-red-500 text-sm font-black text-white shadow-[0_0_28px_rgba(239,68,68,0.25)] transition-transform hover:-translate-y-0.5 disabled:opacity-60"
+              >
+                {deleting && <Loader2 size={16} className="animate-spin" />}
+                Excluir dashboard
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

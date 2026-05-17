@@ -61,7 +61,7 @@ export function Sidebar() {
       style={{
         width: expanded ? '220px' : '60px',
         transition: 'width 0.2s ease',
-        background: '#0d0d1a',
+        background: '#07080d',
         borderRight: '1px solid rgba(255,255,255,0.07)',
       }}
       onMouseEnter={() => setExpanded(true)}
@@ -72,14 +72,14 @@ export function Sidebar() {
         className="app-sidebar-logo flex h-14 flex-shrink-0 items-center gap-3 px-[18px]"
         style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
       >
-        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-indigo-500/20">
-          <LayoutDashboard size={14} className="text-indigo-400" />
+        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-violet-500 shadow-lg shadow-cyan-500/20">
+          <LayoutDashboard size={15} className="text-white" />
         </div>
         <span
           className="whitespace-nowrap text-sm font-bold text-slate-100"
           style={{ opacity: expanded ? 1 : 0, transition: 'opacity 0.15s ease' }}
         >
-          {companyName || 'Hotmart'}
+          {companyName || 'Dash Speed'}
         </span>
       </div>
 
@@ -95,10 +95,10 @@ export function Sidebar() {
               title={!expanded ? item.label : undefined}
               className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors ${
                 active
-                  ? 'text-indigo-300'
+                  ? 'text-cyan-100'
                   : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
               }`}
-              style={active ? { background: 'rgba(99,102,241,0.12)' } : undefined}
+              style={active ? { background: 'linear-gradient(135deg, rgba(0,212,255,0.12), rgba(139,92,246,0.12))' } : undefined}
             >
               <Icon size={17} className="flex-shrink-0" />
               <span

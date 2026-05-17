@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
+  Check,
+  ChevronDown,
   Settings,
   RefreshCw,
   Plus,
@@ -37,6 +39,7 @@ import type { Venda, Projeto, Produto, Period, WidgetConfig } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
 import { AddWidgetModal } from '@/components/dashboard/AddWidgetModal'
 import { WidgetRenderer } from '@/components/dashboard/widgets/WidgetRenderer'
+import type { ResizeDirection } from '@/components/dashboard/widgets/WidgetRenderer'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -109,32 +112,6 @@ function normalizeLoadedLayout(rawWidgets: WidgetConfig[]) {
   const normalized = rawWidgets.map(withGridDefaults)
   const needsRecovery = rawWidgets.some(w => (w.row_span ?? 0) <= 4 || (w.row_start ?? 1) > 80)
   return needsRecovery ? compactLayout(normalized) : normalized
-}
-
-function collides(a: { col: number; row: number; colSpan: number; rowSpan: number }, b: WidgetConfig) {
-  const bCol = b.col_start ?? 1
-  const bRow = b.row_start ?? 1
-  const bColSpan = b.col_span ?? widthToSpan(b.width)
-  const bRowSpan = normalizeRowSpan(b)
-
-  return (
-    a.col < bCol + bColSpan &&
-    a.col + a.colSpan > bCol &&
-    a.row < bRow + bRowSpan &&
-    a.row + a.rowSpan > bRow
-  )
-}
-
-function nextAvailableRow(widgets: WidgetConfig[], activeId: string, col: number, row: number, colSpan: number, rowSpan: number) {
-  let candidate = row
-  while (
-    widgets.some(w =>
-      w.id !== activeId && collides({ col, row: candidate, colSpan, rowSpan }, w),
-    )
-  ) {
-    candidate += 1
-  }
-  return candidate
 }
 
 function maxLayoutRow(widgets: WidgetConfig[], activeId?: string) {
@@ -288,6 +265,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const router = useRouter()
   const [projeto, setProjeto] = useState<Projeto | null>(null)
   const [dashboardOptions, setDashboardOptions] = useState<Projeto[]>([])
+  const [showDashboardSwitcher, setShowDashboardSwitcher] = useState(false)
   const [vendas, setVendas] = useState<Venda[]>([])
   const [combinedVendas, setCombinedVendas] = useState<Venda[]>([])
   const [period, setPeriod] = useState<Period>('today')
@@ -331,8 +309,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   }, [])
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(THEME_STORAGE_KEY)
-    if (stored === 'dark' || stored === 'light') setTheme(stored)
+    queueMicrotask(() => {
+      const stored = window.localStorage.getItem(THEME_STORAGE_KEY)
+      if (stored === 'dark' || stored === 'light') setTheme(stored)
+    })
   }, [])
 
   function toggleTheme() {
@@ -436,7 +416,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
   }, [projectId, period])
 
-  useEffect(() => { fetchVendas() }, [fetchVendas])
+  useEffect(() => {
+    void Promise.resolve().then(fetchVendas)
+  }, [fetchVendas])
 
   const fetchCustos = useCallback(async () => {
     const { from, to } = getPeriodRange(period)
@@ -449,7 +431,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setCustoTotal((data ?? []).reduce((sum: number, row: { custo_brl: number }) => sum + (row.custo_brl ?? 0), 0))
   }, [projectId, period])
 
-  useEffect(() => { fetchCustos() }, [fetchCustos])
+  useEffect(() => {
+    void Promise.resolve().then(fetchCustos)
+  }, [fetchCustos])
 
   const pushHistory = useCallback(() => {
     setUndoStack(prev => [...prev, widgets])
@@ -559,38 +543,68 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setSelectedWidgetId(prev => prev === id ? null : prev)
   }, [])
 
-  const updateWidgetConfig = useCallback((id: string, updates: { width?: string; height?: string; col_span?: number; row_span?: number }) => {
-    pushHistory()
-    setWidgets(prev => resolveOverlaps(prev.map(w => w.id === id ? { ...w, ...updates } : w), id))
-  }, [pushHistory])
-
-  const getResizePlacement = useCallback((id: string, width: number, height: number): GridPlacement | null => {
+  const getResizePlacement = useCallback((
+    id: string,
+    width: number,
+    height: number,
+    direction: ResizeDirection = 'bottom-right',
+    deltaX = 0,
+    deltaY = 0,
+  ): GridPlacement | null => {
     const grid = gridRef.current
     const widget = widgets.find(w => w.id === id)
     if (!grid || !widget) return null
 
     const rect = grid.getBoundingClientRect()
     const colWidth = rect.width / GRID_COLUMNS
-    const col_span = Math.min(
-      GRID_COLUMNS - (widget.col_start ?? 1) + 1,
-      normalizeColSpan(Math.round((width + GRID_ITEM_PADDING * 2) / colWidth)),
-    )
-    const row_span = Math.max(7, Math.round((height + GRID_ITEM_PADDING * 2) / GRID_ROW_HEIGHT))
+    const currentCol = widget.col_start ?? 1
+    const currentRow = widget.row_start ?? 1
+    const currentColSpan = widget.col_span ?? widthToSpan(widget.width)
+    const currentRowSpan = normalizeRowSpan(widget)
+    const affectsLeft = direction.includes('left')
+    const affectsRight = direction.includes('right')
+    const affectsTop = direction.includes('top')
+    const affectsBottom = direction.includes('bottom')
+
+    let col_start = currentCol
+    let row_start = currentRow
+    let col_span = currentColSpan
+    let row_span = currentRowSpan
+
+    if (affectsLeft) {
+      const colDelta = Math.round(deltaX / colWidth)
+      col_start = Math.min(currentCol + currentColSpan - 2, Math.max(1, currentCol + colDelta))
+      col_span = currentColSpan - (col_start - currentCol)
+    } else if (affectsRight) {
+      col_span = normalizeColSpan(Math.round((width + GRID_ITEM_PADDING * 2) / colWidth))
+    }
+
+    col_span = Math.min(GRID_COLUMNS - col_start + 1, Math.max(2, normalizeColSpan(col_span)))
+
+    if (affectsTop) {
+      const rowDelta = Math.round(deltaY / GRID_ROW_HEIGHT)
+      row_start = Math.min(currentRow + currentRowSpan - 7, Math.max(1, currentRow + rowDelta))
+      row_span = currentRowSpan - (row_start - currentRow)
+    } else if (affectsBottom) {
+      row_span = Math.max(7, Math.round((height + GRID_ITEM_PADDING * 2) / GRID_ROW_HEIGHT))
+    }
+
+    row_span = Math.max(7, row_span)
     return {
       id,
-      col_start: widget.col_start ?? 1,
-      row_start: widget.row_start ?? 1,
+      col_start,
+      row_start,
       col_span,
       row_span,
     }
   }, [widgets])
 
-  const previewWidgetResize = useCallback((id: string, width: number, height: number) => {
-    setResizePreview(getResizePlacement(id, width, height))
+  const previewWidgetResize = useCallback((id: string, width: number, height: number, direction: ResizeDirection, deltaX: number, deltaY: number) => {
+    setResizePreview(getResizePlacement(id, width, height, direction, deltaX, deltaY))
   }, [getResizePlacement])
 
-  const commitWidgetResize = useCallback((id: string, width: number, height: number) => {
-    const placement = getResizePlacement(id, width, height)
+  const commitWidgetResize = useCallback((id: string, width: number, height: number, direction: ResizeDirection, deltaX: number, deltaY: number) => {
+    const placement = getResizePlacement(id, width, height, direction, deltaX, deltaY)
     setResizePreview(null)
     if (!placement) return
     pushHistory()
@@ -653,7 +667,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     } finally {
       setSavingLayout(false)
     }
-  }, [widgets])
+  }, [projectId, widgets])
 
   const undoLayout = useCallback(() => {
     setUndoStack(prev => {
@@ -713,11 +727,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   }, [allProducts, productSearch])
   const displayedWidgets = useMemo(
     () => previewPlacement
-      ? (dragPreview
-          ? resolveOverlaps(widgets.map(w => applyPlacement(w, previewPlacement)), previewPlacement.id)
-          : resolveOverlaps(widgets.map(w => applyPlacement(w, previewPlacement)), previewPlacement.id))
+      ? compactLayout(resolveOverlaps(widgets.map(w => applyPlacement(w, previewPlacement)), previewPlacement.id))
       : widgets,
-    [dragPreview, previewPlacement, widgets],
+    [previewPlacement, widgets],
   )
 
   return (
@@ -750,18 +762,62 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               Geral
             </div>
             {dashboardOptions.length > 0 && (
-              <select
-                value={projectId}
-                onChange={event => router.push(`/dashboard/${event.target.value}`)}
-                className="min-w-0 rounded-xl border border-[var(--dash-border)] bg-white/5 px-3 py-2 text-xs font-bold text-[var(--dash-text)] outline-none transition-colors hover:border-[var(--dash-border-strong)] sm:min-w-48"
-                title="Trocar dashboard"
-              >
-                {dashboardOptions.map(option => (
-                  <option key={option.id} value={option.id}>
-                    {option.nome}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <button
+                  onClick={() => setShowDashboardSwitcher(prev => !prev)}
+                  className="flex min-w-0 items-center gap-3 rounded-2xl border border-[var(--dash-border)] bg-[var(--dash-panel)] px-3 py-2 text-left shadow-lg shadow-black/10 transition-all hover:-translate-y-0.5 hover:border-[var(--dash-border-strong)] sm:min-w-64"
+                  title="Trocar dashboard"
+                >
+                  <div className="grid h-9 w-11 shrink-0 grid-cols-3 items-end gap-1 rounded-xl bg-gradient-to-br from-cyan-400/20 to-violet-500/20 p-2">
+                    <span className="h-3 rounded-full bg-cyan-300/80" />
+                    <span className="h-5 rounded-full bg-violet-300/80" />
+                    <span className="h-4 rounded-full bg-sky-200/80" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-extrabold text-[var(--dash-text)]">{projeto?.nome ?? 'Dashboard'}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-faint)]">Ativo</p>
+                  </div>
+                  <ChevronDown size={15} className={`shrink-0 text-[var(--dash-muted)] transition-transform ${showDashboardSwitcher ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showDashboardSwitcher && (
+                  <div className="absolute right-0 top-full z-50 mt-3 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-[var(--dash-border)] bg-[var(--dash-panel)] p-2 shadow-2xl shadow-black/35 backdrop-blur-2xl">
+                    <div className="px-3 py-2">
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--dash-faint)]">Trocar dashboard</p>
+                    </div>
+                    <div className="max-h-80 space-y-1 overflow-y-auto pr-1">
+                      {dashboardOptions.map(option => {
+                        const active = option.id === projectId
+                        return (
+                          <button
+                            key={option.id}
+                            onClick={() => {
+                              setShowDashboardSwitcher(false)
+                              if (!active) router.push(`/dashboard/${option.id}`)
+                            }}
+                            className={`group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all ${
+                              active
+                                ? 'bg-gradient-to-r from-cyan-400/15 to-violet-500/15 text-[var(--dash-text)]'
+                                : 'text-[var(--dash-muted)] hover:bg-white/5 hover:text-[var(--dash-text)]'
+                            }`}
+                          >
+                            <div className="grid h-11 w-14 shrink-0 grid-cols-3 items-end gap-1 rounded-2xl border border-[var(--dash-border)] bg-gradient-to-br from-cyan-400/15 to-violet-500/15 p-2">
+                              <span className="h-4 rounded-full bg-cyan-300/75" />
+                              <span className="h-7 rounded-full bg-violet-300/75" />
+                              <span className="h-5 rounded-full bg-sky-200/75" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-black">{option.nome}</p>
+                              <p className="text-xs text-[var(--dash-faint)]">{active ? 'Dashboard ativo' : 'Pronto para abrir'}</p>
+                            </div>
+                            {active && <Check size={17} className="text-cyan-300" />}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
           <div className="ml-auto" />
@@ -945,7 +1001,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                     selected={selectedWidgetId === w.id}
                     onSelect={setSelectedWidgetId}
                     onDelete={deleteWidget}
-                    onUpdateConfig={updateWidgetConfig}
                     onPreviewResize={previewWidgetResize}
                     onCommitResize={commitWidgetResize}
                   />
