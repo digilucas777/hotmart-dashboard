@@ -183,10 +183,35 @@ function resolveOverlaps(layout: WidgetConfig[], activeId: string) {
   return next
 }
 
+// Treats all widgets in activeIds as fixed; pushes non-active widgets down on overlap.
+function resolveOverlapsMulti(layout: WidgetConfig[], activeIds: Set<string>) {
+  const fixed = layoutBounds(layout.filter(w => activeIds.has(w.id)))
+  const next = layout.map(w => ({ ...w }))
+  const others = next
+    .filter(w => !activeIds.has(w.id))
+    .sort((a, b) => ((a.row_start ?? 1) - (b.row_start ?? 1)) || ((a.col_start ?? 1) - (b.col_start ?? 1)))
+
+  const placed = [...fixed]
+  for (const widget of others) {
+    const colSpan = widget.col_span ?? widthToSpan(widget.width)
+    const rowSpan = normalizeRowSpan(widget)
+    const box = { col: widget.col_start ?? 1, row: widget.row_start ?? 1, colSpan, rowSpan }
+    while (placed.some(p => collidesBounds(box, p))) box.row += 1
+    widget.row_start = box.row
+    widget.row_span = rowSpan
+    placed.push({ id: widget.id, ...box })
+  }
+  return next
+}
+
 function compactLayout(widgets: WidgetConfig[]) {
+  // Sort by visual position first so compacting preserves the user's intended order.
+  const sorted = [...widgets].sort(
+    (a, b) => ((a.row_start ?? 1) - (b.row_start ?? 1)) || ((a.col_start ?? 1) - (b.col_start ?? 1)),
+  )
   const placed: { col: number; row: number; colSpan: number; rowSpan: number }[] = []
 
-  return widgets.map((widget, index) => {
+  return sorted.map((widget, index) => {
     const colSpan = widget.col_span ?? widthToSpan(widget.width)
     const rowSpan = normalizeRowSpan(widget)
     let row = 1
@@ -275,7 +300,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [showAddWidget, setShowAddWidget] = useState(false)
   const [editingWidgetId, setEditingWidgetId] = useState<string | null>(null)
   const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null)
-  const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null)
+  const [selectedWidgetIds, setSelectedWidgetIds] = useState<Set<string>>(new Set())
+  const selectedWidgetIdsRef = useRef<Set<string>>(new Set())
   const [dragPreview, setDragPreview] = useState<GridPlacement | null>(null)
   const [resizePreview, setResizePreview] = useState<GridPlacement | null>(null)
   const [savedWidgets, setSavedWidgets] = useState<WidgetConfig[]>([])
@@ -466,10 +492,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     [widgets],
   )
 
+  // Keep ref in sync so drag callbacks always read current selection without stale closure.
+  useEffect(() => { selectedWidgetIdsRef.current = selectedWidgetIds }, [selectedWidgetIds])
+
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const id = String(event.active.id)
     setActiveWidgetId(id)
-    setSelectedWidgetId(id)
+    // If dragging an unselected widget, reset selection to just that widget.
+    setSelectedWidgetIds(prev => prev.has(id) ? prev : new Set([id]))
   }, [])
 
   const handleDragMove = useCallback(
@@ -482,11 +512,29 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       setActiveWidgetId(null)
-      const placement = dragPreview ?? getPlacementFromDelta(String(event.active.id), event.delta)
+      const draggedId = String(event.active.id)
+      const placement = dragPreview ?? getPlacementFromDelta(draggedId, event.delta)
       setDragPreview(null)
       if (!placement) return
       pushHistory()
-      setWidgets(prev => compactLayout(resolveOverlaps(prev.map(w => applyPlacement(w, placement)), placement.id)))
+      setWidgets(prev => {
+        const dragged = prev.find(w => w.id === draggedId)
+        if (!dragged) return prev
+        const activeIds = selectedWidgetIdsRef.current
+        const deltaCol = placement.col_start - (dragged.col_start ?? 1)
+        const deltaRow = placement.row_start - (dragged.row_start ?? 1)
+        const moved = prev.map(w => {
+          if (w.id === draggedId) return { ...w, col_start: placement.col_start, row_start: placement.row_start }
+          if (!activeIds.has(w.id)) return w
+          const colSpan = w.col_span ?? widthToSpan(w.width)
+          return {
+            ...w,
+            col_start: Math.min(GRID_COLUMNS - colSpan + 1, Math.max(1, (w.col_start ?? 1) + deltaCol)),
+            row_start: Math.max(1, (w.row_start ?? 1) + deltaRow),
+          }
+        })
+        return resolveOverlapsMulti(moved, activeIds)
+      })
     },
     [dragPreview, getPlacementFromDelta, pushHistory],
   )
@@ -536,7 +584,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     await supabase.from('dashboard_widgets').delete().eq('id', id)
     setWidgets(prev => compactLayout(prev.filter(w => w.id !== id)))
     setSavedWidgets(prev => compactLayout(prev.filter(w => w.id !== id)))
-    setSelectedWidgetId(prev => prev === id ? null : prev)
+    setSelectedWidgetIds(prev => { const next = new Set(prev); next.delete(id); return next })
   }, [])
 
   const duplicateWidget = useCallback(async (id: string) => {
@@ -629,7 +677,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setResizePreview(null)
     if (!placement) return
     pushHistory()
-    setWidgets(prev => compactLayout(resolveOverlaps(prev.map(w => applyPlacement(w, placement)), id)))
+    setWidgets(prev => resolveOverlaps(prev.map(w => applyPlacement(w, placement)), id))
   }, [getResizePlacement, pushHistory])
 
   const organizeLayout = useCallback(() => {
@@ -643,7 +691,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setRedoStack([])
     setLayoutError(null)
     setEditMode(false)
-    setSelectedWidgetId(null)
+    setSelectedWidgetIds(new Set())
   }, [savedWidgets])
 
   const saveLayout = useCallback(async () => {
@@ -671,7 +719,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       setUndoStack([])
       setRedoStack([])
       setEditMode(false)
-      setSelectedWidgetId(null)
+      setSelectedWidgetIds(new Set())
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Não foi possível salvar o layout.'
       if (message.includes('schema cache') || message.includes('col_span')) {
@@ -681,7 +729,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         setRedoStack([])
         setLayoutError(null)
         setEditMode(false)
-        setSelectedWidgetId(null)
+        setSelectedWidgetIds(new Set())
       } else {
         setLayoutError(message)
       }
@@ -740,7 +788,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     function handleDocClick(e: MouseEvent) {
       const target = e.target as Element
       if (!target.closest('.dashboard-widget-shell')) {
-        setSelectedWidgetId(null)
+        setSelectedWidgetIds(new Set())
       }
     }
     document.addEventListener('click', handleDocClick)
@@ -768,12 +816,28 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       product.hotmart_id.toLowerCase().includes(query),
     )
   }, [allProducts, productSearch])
-  const displayedWidgets = useMemo(
-    () => previewPlacement
-      ? resolveOverlaps(widgets.map(w => applyPlacement(w, previewPlacement)), previewPlacement.id)
-      : widgets,
-    [previewPlacement, widgets],
-  )
+  const displayedWidgets = useMemo(() => {
+    if (!previewPlacement) return widgets
+    const draggedId = previewPlacement.id
+    const dragged = widgets.find(w => w.id === draggedId)
+    if (!dragged) return widgets
+    const activeIds = selectedWidgetIds
+    const deltaCol = previewPlacement.col_start - (dragged.col_start ?? 1)
+    const deltaRow = previewPlacement.row_start - (dragged.row_start ?? 1)
+    const moved = widgets.map(w => {
+      if (w.id === draggedId) return applyPlacement(w, previewPlacement)
+      if (activeIds.has(w.id)) {
+        const colSpan = w.col_span ?? widthToSpan(w.width)
+        return {
+          ...w,
+          col_start: Math.min(GRID_COLUMNS - colSpan + 1, Math.max(1, (w.col_start ?? 1) + deltaCol)),
+          row_start: Math.max(1, (w.row_start ?? 1) + deltaRow),
+        }
+      }
+      return w
+    })
+    return resolveOverlapsMulti(moved, activeIds.has(draggedId) ? activeIds : new Set([draggedId, ...activeIds]))
+  }, [previewPlacement, widgets, selectedWidgetIds])
 
   return (
     <div className="dashboard-shell min-h-screen text-[var(--dash-text)]" data-dashboard-theme={theme}>
@@ -889,7 +953,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 size="sm"
                 onClick={() => {
                   setEditMode(true)
-                  setSelectedWidgetId(null)
+                  setSelectedWidgetIds(new Set())
                 }}
                 className="shrink-0"
               >
@@ -968,9 +1032,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         {editMode && (
           <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--dash-border)] bg-[var(--dash-panel)] px-4 py-3 text-xs text-[var(--dash-muted)] shadow-xl shadow-black/20">
             <span>
-              {selectedWidgetId
-                ? 'Widget selecionado. Arraste o card ou aproxime o mouse das bordas para redimensionar.'
-                : 'Selecione um widget para editar posição e tamanho. As bordas ficam ativas no hover.'}
+              {selectedWidgetIds.size > 0
+                ? selectedWidgetIds.size > 1
+                  ? `${selectedWidgetIds.size} widgets selecionados. Arraste qualquer um para mover o grupo.`
+                  : 'Widget selecionado. Arraste o card ou aproxime o mouse das bordas para redimensionar.'
+                : 'Clique para selecionar · Shift+clique para selecionar múltiplos · Arraste para mover.'}
             </span>
             <span className={layoutError ? 'font-semibold text-red-300' : hasUnsavedLayout ? 'font-semibold text-[var(--dash-neon)]' : 'text-[var(--dash-faint)]'}>
               {layoutError ?? (hasUnsavedLayout ? 'Alterações não salvas' : 'Layout salvo')}
@@ -1050,8 +1116,19 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                     exchangeRate={exchangeRate}
                     custoTotal={displayCustoTotal}
                     editMode={editMode}
-                    selected={selectedWidgetId === w.id}
-                    onSelect={setSelectedWidgetId}
+                    selected={selectedWidgetIds.has(w.id)}
+                    isGroupDragging={!!activeWidgetId && selectedWidgetIds.has(w.id) && w.id !== activeWidgetId}
+                    onSelect={(id, multi) => {
+                      if (multi) {
+                        setSelectedWidgetIds(prev => {
+                          const next = new Set(prev)
+                          if (next.has(id)) next.delete(id); else next.add(id)
+                          return next
+                        })
+                      } else {
+                        setSelectedWidgetIds(new Set([id]))
+                      }
+                    }}
                     onDelete={deleteWidget}
                     onDuplicate={editMode ? duplicateWidget : undefined}
                     onEdit={editMode ? setEditingWidgetId : undefined}
@@ -1062,8 +1139,18 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               </div>
               <DragOverlay dropAnimation={null}>
                 {activeWidgetId ? (
-                  <div className="rounded-2xl border border-white/35 bg-[#1d1d31]/80 px-5 py-4 text-sm font-semibold text-slate-100 shadow-2xl shadow-indigo-500/25 backdrop-blur">
+                  <div className="flex items-center gap-2 rounded-2xl border border-cyan-400/30 bg-[#1d1d31]/90 px-5 py-4 text-sm font-semibold text-slate-100 shadow-2xl shadow-cyan-500/20 backdrop-blur">
+                    {selectedWidgetIds.size > 1 && (
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500 text-[10px] font-black text-white">
+                        {selectedWidgetIds.size}
+                      </span>
+                    )}
                     {widgets.find(w => w.id === activeWidgetId)?.title}
+                    {selectedWidgetIds.size > 1 && (
+                      <span className="text-xs font-normal text-slate-400">
+                        +{selectedWidgetIds.size - 1} mais
+                      </span>
+                    )}
                   </div>
                 ) : null}
               </DragOverlay>

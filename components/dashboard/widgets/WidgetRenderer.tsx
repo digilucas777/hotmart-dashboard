@@ -40,6 +40,7 @@ export function WidgetRenderer({
   custoTotal = 0,
   editMode,
   selected,
+  isGroupDragging = false,
   onSelect,
   onDelete,
   onDuplicate,
@@ -55,10 +56,11 @@ export function WidgetRenderer({
   custoTotal?: number
   editMode: boolean
   selected: boolean
-  onSelect: (id: string) => void
+  onSelect: (id: string, multi?: boolean) => void
   onDelete: (id: string) => void
   onDuplicate?: (id: string) => void
   onEdit?: (id: string) => void
+  isGroupDragging?: boolean
   onPreviewResize?: (id: string, width: number, height: number, direction: ResizeDirection, deltaX: number, deltaY: number) => void
   onCommitResize?: (id: string, width: number, height: number, direction: ResizeDirection, deltaX: number, deltaY: number) => void
 }) {
@@ -165,7 +167,7 @@ export function WidgetRenderer({
   const shellStyle: CSSProperties = {
     gridColumn: `${config.col_start ?? 1} / span ${config.col_span ?? 6}`,
     gridRow: `${config.row_start ?? 1} / span ${config.row_span ?? 12}`,
-    opacity: isDragging ? 0.28 : 1,
+    opacity: isDragging ? 0.15 : isGroupDragging ? 0.45 : 1,
     padding: GRID_ITEM_PADDING,
     '--mobile-row-span': String(Math.max(12, Math.min(26, config.row_span ?? 12))),
   } as CSSProperties
@@ -183,8 +185,8 @@ export function WidgetRenderer({
   return (
     <div
       ref={setNodeRef}
-      onPointerDown={() => {
-        if (editMode) onSelect(config.id)
+      onPointerDown={(e) => {
+        if (editMode) onSelect(config.id, e.shiftKey)
       }}
       style={shellStyle}
       className={`dashboard-widget-shell ${isSelected ? 'relative z-10' : ''}`}
