@@ -226,7 +226,7 @@ export function WidgetRenderer({
         )}
 
         {config.type === 'table' && data.kind === 'table' && (
-          <SalesTable vendas={data.vendas} exchangeRate={exchangeRate} />
+          <SalesTable vendas={data.vendas} exchangeRate={exchangeRate} heightMode="fill" />
         )}
       </div>
     </div>

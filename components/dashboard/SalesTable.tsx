@@ -34,10 +34,12 @@ export function SalesTable({
   vendas,
   exchangeRate,
   initialStatusFilter = 'approved',
+  heightMode = 'viewport',
 }: {
   vendas: Venda[]
   exchangeRate: number
   initialStatusFilter?: string
+  heightMode?: 'viewport' | 'fill'
 }) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
@@ -78,8 +80,12 @@ export function SalesTable({
     'Origem',
   ]
 
+  const heightClass = heightMode === 'fill'
+    ? 'h-full'
+    : 'h-[calc(100vh-260px)] min-h-[360px]'
+
   return (
-    <div className="flex h-full min-h-0 flex-col rounded-2xl border border-white/7 bg-[#191929]">
+    <div className={`flex ${heightClass} min-h-0 flex-col rounded-2xl border border-white/7 bg-[#191929]`}>
       {/* Toolbar */}
       <div className="flex shrink-0 flex-col gap-3 border-b border-white/7 p-5 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-sm font-semibold text-slate-200">Transações</h3>
