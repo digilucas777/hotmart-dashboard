@@ -7,9 +7,11 @@ import {
   BarChart3,
   Bell,
   Clock3,
+  Copy,
   CreditCard,
   Edit3,
   ExternalLink,
+  ImageIcon,
   LayoutDashboard,
   Loader2,
   LogOut,
@@ -43,10 +45,18 @@ export function UserAppShell() {
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
+  const [editTarget, setEditTarget] = useState<Projeto | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Projeto | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null)
+  const [savingDashboard, setSavingDashboard] = useState(false)
   const [dashboardName, setDashboardName] = useState('')
   const [dashboardDescription, setDashboardDescription] = useState('')
+  const [dashboardCover, setDashboardCover] = useState('')
+  const [dashboardColor, setDashboardColor] = useState('#00d4ff')
+  const [dashboardCategory, setDashboardCategory] = useState('')
+  const [dashboardImage, setDashboardImage] = useState('')
+  const [dashboardStatus, setDashboardStatus] = useState('active')
   const [error, setError] = useState('')
 
   async function loadDashboards() {
@@ -122,6 +132,146 @@ export function UserAppShell() {
     setDashboardDescription('')
     setDashboards(prev => [data as Projeto, ...prev])
     router.push(`/dashboard/${(data as Projeto).id}`)
+  }
+
+  function openEditDashboard(dashboard: Projeto) {
+    setEditTarget(dashboard)
+    setDashboardName(dashboard.nome)
+    setDashboardDescription(dashboard.descricao ?? '')
+    setDashboardCover(dashboard.capa_url ?? '')
+    setDashboardColor(dashboard.cor ?? '#00d4ff')
+    setDashboardCategory(dashboard.categoria ?? '')
+    setDashboardImage(dashboard.imagem_url ?? '')
+    setDashboardStatus(dashboard.status ?? 'active')
+  }
+
+  function resetDashboardForm() {
+    setEditTarget(null)
+    setDashboardName('')
+    setDashboardDescription('')
+    setDashboardCover('')
+    setDashboardColor('#00d4ff')
+    setDashboardCategory('')
+    setDashboardImage('')
+    setDashboardStatus('active')
+  }
+
+  async function saveDashboardDetails(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editTarget || !dashboardName.trim()) return
+
+    setSavingDashboard(true)
+    setError('')
+
+    const fullPayload = {
+      nome: dashboardName.trim(),
+      descricao: dashboardDescription.trim() || null,
+      capa_url: dashboardCover.trim() || null,
+      cor: dashboardColor,
+      categoria: dashboardCategory.trim() || null,
+      imagem_url: dashboardImage.trim() || null,
+      status: dashboardStatus,
+    }
+
+    let { data, error: updateError } = await supabase
+      .from('projetos')
+      .update(fullPayload)
+      .eq('id', editTarget.id)
+      .select()
+      .single()
+
+    if (updateError && (updateError.message.includes('schema cache') || updateError.message.includes('capa_url'))) {
+      const retry = await supabase
+        .from('projetos')
+        .update({ nome: fullPayload.nome, descricao: fullPayload.descricao })
+        .eq('id', editTarget.id)
+        .select()
+        .single()
+      data = retry.data
+      updateError = retry.error
+    }
+
+    setSavingDashboard(false)
+
+    if (updateError || !data) {
+      setError('Não foi possível salvar os detalhes do dashboard.')
+      return
+    }
+
+    setDashboards(prev => prev.map(dashboard => dashboard.id === editTarget.id ? data as Projeto : dashboard))
+    resetDashboardForm()
+  }
+
+  async function duplicateDashboard(dashboard: Projeto) {
+    setDuplicatingId(dashboard.id)
+    setError('')
+
+    const payload = {
+      nome: `Cópia de ${dashboard.nome}`,
+      descricao: dashboard.descricao ?? null,
+      capa_url: dashboard.capa_url ?? null,
+      cor: dashboard.cor ?? null,
+      categoria: dashboard.categoria ?? null,
+      imagem_url: dashboard.imagem_url ?? null,
+      status: dashboard.status ?? 'active',
+    }
+
+    let { data: duplicated, error: duplicateError } = await supabase
+      .from('projetos')
+      .insert(payload)
+      .select()
+      .single()
+
+    if (duplicateError && (duplicateError.message.includes('schema cache') || duplicateError.message.includes('capa_url'))) {
+      const retry = await supabase
+        .from('projetos')
+        .insert({ nome: payload.nome, descricao: payload.descricao })
+        .select()
+        .single()
+      duplicated = retry.data
+      duplicateError = retry.error
+    }
+
+    if (duplicateError || !duplicated) {
+      setDuplicatingId(null)
+      setError('Não foi possível duplicar este dashboard.')
+      return
+    }
+
+    const newProject = duplicated as Projeto
+    const [{ data: widgets }, { data: products }, { data: adAccounts }] = await Promise.all([
+      supabase
+        .from('dashboard_widgets')
+        .select('type,data_source,title,width,position,height,col_start,row_start,col_span,row_span')
+        .eq('projeto_id', dashboard.id)
+        .order('position'),
+      supabase.from('projeto_produtos').select('produto_id').eq('projeto_id', dashboard.id),
+      supabase.from('dashboard_ad_accounts').select('ad_account_id').eq('dashboard_id', dashboard.id),
+    ])
+
+    if (widgets?.length) {
+      await supabase.from('dashboard_widgets').insert(widgets.map(widget => ({
+        ...widget,
+        projeto_id: newProject.id,
+      })))
+    }
+
+    if (products?.length) {
+      await supabase.from('projeto_produtos').insert(products.map(({ produto_id }) => ({
+        projeto_id: newProject.id,
+        produto_id,
+      })))
+    }
+
+    if (adAccounts?.length) {
+      await supabase.from('dashboard_ad_accounts').insert(adAccounts.map(({ ad_account_id }) => ({
+        dashboard_id: newProject.id,
+        ad_account_id,
+      })))
+    }
+
+    setDuplicatingId(null)
+    await loadDashboards()
   }
 
   async function logout() {
@@ -308,15 +458,23 @@ export function UserAppShell() {
                     <p className="mt-1 line-clamp-2 min-h-10 text-sm text-slate-500">
                       {dashboard.descricao || (index === 0 ? 'Dashboard principal da operação' : 'Dashboard pronto para configurar')}
                     </p>
-                    <div className="mt-5 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+                    <div className="mt-5 grid gap-2 sm:grid-cols-2">
                       <Link href={`/dashboard/${dashboard.id}`} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3 text-sm font-black text-white shadow-[0_0_28px_rgba(0,212,255,0.22)] transition-transform hover:-translate-y-0.5">
                         Abrir dashboard
                         <ExternalLink size={14} />
                       </Link>
-                      <Link href={`/dashboard/${dashboard.id}`} className="inline-flex items-center justify-center rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white">
+                      <button onClick={() => openEditDashboard(dashboard)} className="inline-flex items-center justify-center rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white">
                         <Edit3 size={14} />
                         <span className="ml-2">Editar dashboard</span>
-                      </Link>
+                      </button>
+                      <button
+                        onClick={() => duplicateDashboard(dashboard)}
+                        disabled={duplicatingId === dashboard.id}
+                        className="inline-flex items-center justify-center rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300 transition-colors hover:border-violet-300/40 hover:text-white disabled:opacity-60"
+                      >
+                        {duplicatingId === dashboard.id ? <Loader2 size={14} className="animate-spin" /> : <Copy size={14} />}
+                        <span className="ml-2">Duplicar dashboard</span>
+                      </button>
                       <button
                         onClick={() => setDeleteTarget(dashboard)}
                         className="inline-flex items-center justify-center rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-400 transition-colors hover:border-red-300/35 hover:bg-red-500/10 hover:text-red-200"
@@ -471,6 +629,108 @@ export function UserAppShell() {
               <button disabled={!dashboardName.trim() || creating} className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 text-sm font-black text-white disabled:opacity-50">
                 {creating && <Loader2 size={16} className="animate-spin" />}
                 Criar e abrir
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {editTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/75 px-4 py-8 backdrop-blur-sm">
+          <form onSubmit={saveDashboardDetails} className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-[#0b0d14] p-6 shadow-2xl shadow-black/60">
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400/20 to-violet-500/20 text-cyan-200">
+                  <ImageIcon size={19} />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200/70">Editar dashboard</p>
+                  <h2 className="mt-1 text-xl font-black">Identidade e configurações</h2>
+                </div>
+              </div>
+              <button type="button" onClick={resetDashboardForm} className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 text-slate-400 hover:text-white">
+                <X size={17} />
+              </button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-slate-500">Nome</span>
+                <input
+                  value={dashboardName}
+                  onChange={event => setDashboardName(event.target.value)}
+                  className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm text-white outline-none transition-colors placeholder:text-slate-700 focus:border-cyan-300/60"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-slate-500">Categoria</span>
+                <input
+                  value={dashboardCategory}
+                  onChange={event => setDashboardCategory(event.target.value)}
+                  placeholder="Ex: Tráfego pago"
+                  className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm text-white outline-none transition-colors placeholder:text-slate-700 focus:border-cyan-300/60"
+                />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="mb-1.5 block text-xs font-semibold text-slate-500">Descrição</span>
+                <textarea
+                  value={dashboardDescription}
+                  onChange={event => setDashboardDescription(event.target.value)}
+                  rows={3}
+                  className="w-full resize-none rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-slate-700 focus:border-cyan-300/60"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-slate-500">Capa</span>
+                <input
+                  value={dashboardCover}
+                  onChange={event => setDashboardCover(event.target.value)}
+                  placeholder="URL da capa"
+                  className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm text-white outline-none transition-colors placeholder:text-slate-700 focus:border-cyan-300/60"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-slate-500">Imagem</span>
+                <input
+                  value={dashboardImage}
+                  onChange={event => setDashboardImage(event.target.value)}
+                  placeholder="URL da imagem"
+                  className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm text-white outline-none transition-colors placeholder:text-slate-700 focus:border-cyan-300/60"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-slate-500">Cor</span>
+                <div className="flex h-12 items-center gap-3 rounded-2xl border border-white/10 bg-black/25 px-3">
+                  <input
+                    type="color"
+                    value={dashboardColor}
+                    onChange={event => setDashboardColor(event.target.value)}
+                    className="h-8 w-10 rounded-lg border-0 bg-transparent"
+                  />
+                  <span className="text-sm font-bold text-slate-300">{dashboardColor}</span>
+                </div>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold text-slate-500">Status</span>
+                <select
+                  value={dashboardStatus}
+                  onChange={event => setDashboardStatus(event.target.value)}
+                  className="h-12 w-full rounded-2xl border border-white/10 bg-[#080a12] px-4 text-sm text-white outline-none transition-colors focus:border-cyan-300/60"
+                >
+                  <option value="active">Ativo</option>
+                  <option value="draft">Rascunho</option>
+                  <option value="archived">Arquivado</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <button type="button" onClick={resetDashboardForm} className="h-12 flex-1 rounded-2xl border border-white/10 text-sm font-black text-slate-300 transition-colors hover:text-white">
+                Cancelar
+              </button>
+              <button disabled={!dashboardName.trim() || savingDashboard} className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 text-sm font-black text-white disabled:opacity-50">
+                {savingDashboard && <Loader2 size={16} className="animate-spin" />}
+                Salvar dashboard
               </button>
             </div>
           </form>

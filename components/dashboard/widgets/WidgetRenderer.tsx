@@ -71,6 +71,17 @@ export function WidgetRenderer({
     ? { height: `${liveSize.h}px`, overflow: 'hidden' }
     : { height: '100%', overflow: 'hidden' }
 
+  const resizeZones: { direction: ResizeDirection; className: string; title: string }[] = [
+    { direction: 'top', title: 'Redimensionar pelo topo', className: 'inset-x-7 top-0 h-3 cursor-ns-resize' },
+    { direction: 'bottom', title: 'Redimensionar por baixo', className: 'inset-x-7 bottom-0 h-3 cursor-ns-resize' },
+    { direction: 'left', title: 'Redimensionar pela esquerda', className: 'left-0 inset-y-7 w-3 cursor-ew-resize' },
+    { direction: 'right', title: 'Redimensionar pela direita', className: 'right-0 inset-y-7 w-3 cursor-ew-resize' },
+    { direction: 'top-left', title: 'Redimensionar pelo canto superior esquerdo', className: 'left-0 top-0 h-7 w-7 cursor-nwse-resize' },
+    { direction: 'top-right', title: 'Redimensionar pelo canto superior direito', className: 'right-0 top-0 h-7 w-7 cursor-nesw-resize' },
+    { direction: 'bottom-left', title: 'Redimensionar pelo canto inferior esquerdo', className: 'bottom-0 left-0 h-7 w-7 cursor-nesw-resize' },
+    { direction: 'bottom-right', title: 'Redimensionar pelo canto inferior direito', className: 'bottom-0 right-0 h-7 w-7 cursor-nwse-resize' },
+  ]
+
   function handleResizeStart(e: ReactMouseEvent, direction: ResizeDirection) {
     e.preventDefault()
     e.stopPropagation()
@@ -152,18 +163,10 @@ export function WidgetRenderer({
         {editMode && (
           <>
             <div
-              className={`absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-cyan-400/10 to-transparent transition-opacity ${
+              className={`pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-cyan-400/10 to-transparent transition-opacity ${
                 selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
               }`}
               title="Arraste o card"
-            />
-            <div
-              onPointerDown={e => e.stopPropagation()}
-              onMouseDown={e => handleResizeStart(e, 'top')}
-              title="Ajustar altura pelo topo"
-              className={`absolute left-1/2 top-0 z-20 h-3 w-16 -translate-x-1/2 cursor-ns-resize rounded-b-lg bg-white/10 transition-opacity hover:bg-white/20 ${
-                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
             />
             <div
               className={`absolute right-3 top-3 z-10 flex items-center gap-1 transition-opacity ${
@@ -189,74 +192,15 @@ export function WidgetRenderer({
               </button>
             </div>
 
-            <div
-              onPointerDown={e => e.stopPropagation()}
-              onMouseDown={e => handleResizeStart(e, 'left')}
-              title="Ajustar largura pelo lado esquerdo"
-              className={`absolute left-0 top-1/2 z-20 h-16 w-3 -translate-y-1/2 cursor-ew-resize rounded-r-lg bg-white/10 transition-opacity hover:bg-white/20 ${
-                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
-            />
-
-            <div
-              onPointerDown={e => e.stopPropagation()}
-              onMouseDown={e => handleResizeStart(e, 'right')}
-              title="Ajustar largura"
-              className={`absolute right-0 top-1/2 z-10 h-16 w-3 -translate-y-1/2 cursor-ew-resize rounded-l-lg bg-white/10 transition-opacity hover:bg-white/20 ${
-                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
-            />
-
-            <div
-              onPointerDown={e => e.stopPropagation()}
-              onMouseDown={e => handleResizeStart(e, 'bottom')}
-              title="Ajustar altura"
-              className={`absolute bottom-0 left-1/2 z-10 h-3 w-16 -translate-x-1/2 cursor-ns-resize rounded-t-lg bg-white/10 transition-opacity hover:bg-white/20 ${
-                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
-            />
-
-            <div
-              onPointerDown={e => e.stopPropagation()}
-              onMouseDown={e => handleResizeStart(e, 'top-left')}
-              title="Redimensionar pelo canto superior esquerdo"
-              className={`absolute left-2 top-2 z-20 h-5 w-5 cursor-nwse-resize rounded-md border border-white/10 bg-[#111120]/80 transition-opacity hover:bg-white/20 ${
-                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
-            />
-
-            <div
-              onPointerDown={e => e.stopPropagation()}
-              onMouseDown={e => handleResizeStart(e, 'top-right')}
-              title="Redimensionar pelo canto superior direito"
-              className={`absolute right-10 top-2 z-20 h-5 w-5 cursor-nesw-resize rounded-md border border-white/10 bg-[#111120]/80 transition-opacity hover:bg-white/20 ${
-                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
-            />
-
-            <div
-              onPointerDown={e => e.stopPropagation()}
-              onMouseDown={e => handleResizeStart(e, 'bottom-left')}
-              title="Redimensionar pelo canto inferior esquerdo"
-              className={`absolute bottom-2 left-2 z-20 h-5 w-5 cursor-nesw-resize rounded-md border border-white/10 bg-[#111120]/80 transition-opacity hover:bg-white/20 ${
-                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
-            />
-
-            <div
-              onPointerDown={e => e.stopPropagation()}
-              onMouseDown={e => handleResizeStart(e, 'bottom-right')}
-              title="Arrastar para redimensionar"
-              className={`absolute bottom-2 right-2 z-10 cursor-se-resize rounded-md border border-white/10 bg-[#111120]/80 p-1 transition-opacity ${
-                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
-              style={{
-                width: 20,
-                height: 20,
-                backgroundImage: 'radial-gradient(circle, #475569 1.5px, transparent 1.5px)',
-                backgroundSize: '4px 4px',
-              }}
-            />
+            {resizeZones.map(zone => (
+              <div
+                key={zone.direction}
+                onPointerDown={e => e.stopPropagation()}
+                onMouseDown={e => handleResizeStart(e, zone.direction)}
+                title={zone.title}
+                className={`absolute z-20 rounded-xl bg-cyan-300/0 transition-colors hover:bg-cyan-300/[0.03] ${zone.className}`}
+              />
+            ))}
           </>
         )}
 

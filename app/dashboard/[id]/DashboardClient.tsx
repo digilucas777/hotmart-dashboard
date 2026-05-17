@@ -86,13 +86,7 @@ function normalizeRowSpan(widget: WidgetConfig) {
 }
 
 function normalizeColSpan(span: number) {
-  if (span <= 2) return 2
-  if (span <= 3) return 3
-  if (span <= 4) return 4
-  if (span <= 6) return 6
-  if (span <= 8) return 8
-  if (span <= 9) return 9
-  return 12
+  return Math.min(GRID_COLUMNS, Math.max(2, Math.round(span)))
 }
 
 function withGridDefaults(widget: WidgetConfig, index: number): WidgetConfig {
@@ -727,7 +721,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   }, [allProducts, productSearch])
   const displayedWidgets = useMemo(
     () => previewPlacement
-      ? compactLayout(resolveOverlaps(widgets.map(w => applyPlacement(w, previewPlacement)), previewPlacement.id))
+      ? resolveOverlaps(widgets.map(w => applyPlacement(w, previewPlacement)), previewPlacement.id)
       : widgets,
     [previewPlacement, widgets],
   )
@@ -834,48 +828,74 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       <main className="dashboard-main mx-auto max-w-[1400px] px-6 py-8">
         <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
           <PeriodFilter value={period} onChange={setPeriod} />
-          <div className="dashboard-action-bar dashboard-panel flex flex-wrap items-center justify-end gap-2 rounded-2xl p-1.5">
+          <div className="dashboard-action-bar dashboard-panel flex max-w-full flex-nowrap items-center justify-end gap-2 overflow-x-auto rounded-2xl p-1.5">
             <button
               onClick={fetchVendas}
               title="Atualizar"
-              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 transition-transform hover:-translate-y-0.5"
+              className="flex shrink-0 items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 transition-transform hover:-translate-y-0.5"
             >
               <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
               Atualizar
             </button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                if (editMode) {
-                  cancelLayout()
-                  return
-                }
-                setEditMode(true)
-                setSelectedWidgetId(null)
-              }}
-              className={editMode ? 'border-red-400/30 bg-red-500/10 text-red-300' : ''}
-            >
-              {editMode ? <X size={13} /> : <Pencil size={13} />}
-              {editMode ? 'Cancelar' : 'Editar layout'}
-            </Button>
-            {editMode && (
+            {!editMode ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setEditMode(true)
+                  setSelectedWidgetId(null)
+                }}
+                className="shrink-0"
+              >
+                <Pencil size={13} />
+                Editar layout
+              </Button>
+            ) : (
               <>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={organizeLayout}
                   title="Organizar widgets em sequência"
+                  className="shrink-0"
                 >
                   <LayoutDashboard size={13} />
                   Organizar
                 </Button>
+                <Button
+                  size="sm"
+                  onClick={saveLayout}
+                  disabled={!hasUnsavedLayout || savingLayout}
+                  className="shrink-0"
+                >
+                  {savingLayout ? <Spinner size={13} /> : <Save size={13} />}
+                  Salvar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={cancelLayout}
+                  title="Cancelar edições e voltar ao layout salvo"
+                  className="shrink-0 border-red-400/30 bg-red-500/10 text-red-300"
+                >
+                  <X size={13} />
+                  Cancelar
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setShowAddWidget(true)} className="shrink-0">
+                  <Plus size={13} />
+                  Adicionar Widget
+                </Button>
+              </>
+            )}
+            {!editMode && (
+              <>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={undoLayout}
                   disabled={undoStack.length === 0}
                   title="Desfazer última edição"
+                  className="shrink-0"
                 >
                   <Undo2 size={13} />
                 </Button>
@@ -885,46 +905,26 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                   onClick={redoLayout}
                   disabled={redoStack.length === 0}
                   title="Refazer edição"
+                  className="shrink-0"
                 >
                   <Redo2 size={13} />
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={cancelLayout}
-                  title="Cancelar edições e voltar ao layout salvo"
-                >
-                  <X size={13} />
-                  Cancelar
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={saveLayout}
-                  disabled={!hasUnsavedLayout || savingLayout}
-                >
-                  {savingLayout ? <Spinner size={13} /> : <Save size={13} />}
-                  Salvar
-                </Button>
               </>
             )}
-            {editMode && (
-              <Button variant="outline" size="sm" onClick={() => setShowAddWidget(true)}>
-                <Plus size={13} />
-                Widget
+            {!editMode && (
+              <Button variant="outline" size="sm" onClick={openProductsModal} className="shrink-0">
+                <Settings size={13} />
+                Produtos
               </Button>
             )}
-            <Button variant="outline" size="sm" onClick={openProductsModal}>
-              <Settings size={13} />
-              Produtos
-            </Button>
           </div>
         </div>
         {editMode && (
           <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--dash-border)] bg-[var(--dash-panel)] px-4 py-3 text-xs text-[var(--dash-muted)] shadow-xl shadow-black/20">
             <span>
               {selectedWidgetId
-                ? 'Widget selecionado. Arraste o card ou use o canto inferior direito para redimensionar.'
-                : 'Selecione um widget para editar posição e tamanho.'}
+                ? 'Widget selecionado. Arraste o card ou aproxime o mouse das bordas para redimensionar.'
+                : 'Selecione um widget para editar posição e tamanho. As bordas ficam ativas no hover.'}
             </span>
             <span className={layoutError ? 'font-semibold text-red-300' : hasUnsavedLayout ? 'font-semibold text-[var(--dash-neon)]' : 'text-[var(--dash-faint)]'}>
               {layoutError ?? (hasUnsavedLayout ? 'Alterações não salvas' : 'Layout salvo')}

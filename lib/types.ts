@@ -20,6 +20,11 @@ export type Projeto = {
   id: string
   nome: string
   descricao?: string | null
+  capa_url?: string | null
+  cor?: string | null
+  categoria?: string | null
+  imagem_url?: string | null
+  status?: string | null
   data_criacao?: string | null
 }
 

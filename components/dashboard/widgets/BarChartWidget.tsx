@@ -36,8 +36,8 @@ function CustomTooltip({
 }) {
   if (!active || !payload?.length) return null
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0f0f1e] px-3 py-2.5 shadow-xl">
-      <p className="mb-1 text-xs text-slate-500">{label}</p>
+    <div className="rounded-2xl border border-cyan-300/20 bg-[#080a12]/95 px-3 py-2.5 text-white shadow-[0_0_28px_rgba(0,212,255,0.18)] backdrop-blur-xl">
+      <p className="mb-1 text-xs text-slate-400">{label}</p>
       {dualCurrency ? (
         <>
           {payload.find(p => p.dataKey === 'valueBRL') && (
@@ -97,7 +97,11 @@ export function BarChartWidget({
             }
             width={55}
           />
-          <Tooltip content={<CustomTooltip isBRL={isBRL} dualCurrency={dualCurrency} />} />
+          <Tooltip
+            content={<CustomTooltip isBRL={isBRL} dualCurrency={dualCurrency} />}
+            cursor={{ fill: 'rgba(0,212,255,0.06)' }}
+            wrapperStyle={{ outline: 'none' }}
+          />
           {dualCurrency ? (
             <>
               <Legend
