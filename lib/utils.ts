@@ -1,4 +1,4 @@
-import type { Period, Venda, WidgetDataSource } from './types'
+import type { Period, Venda, WidgetDataSource, Status } from './types'
 
 export function getPeriodRange(period: Period): { from: Date; to: Date } {
   const now = new Date()
@@ -452,4 +452,57 @@ export function computeWidgetData(
     default:
       return { kind: 'metric', value: '—', subValue: '' }
   }
+}
+
+const DEMO_PRODUTOS = ['Método Acelerador Digital', 'Mentoria Premium 2.0', 'Curso Tráfego Pro']
+const DEMO_NOMES = ['Lucas Mendes', 'Ana Costa', 'Pedro Oliveira', 'Maria Santos', 'João Ferreira', 'Carla Lima', 'Rafael Souza', 'Juliana Rocha']
+const DEMO_PAGAMENTOS = ['CREDIT_CARD', 'CREDIT_CARD', 'PIX', 'PIX', 'CREDIT_CARD', 'BOLETO']
+const DEMO_PAISES = ['BR', 'BR', 'BR', 'BR', 'PT', 'BR']
+const DEMO_STATUS_WEIGHTS: [Status, number][] = [['approved', 72], ['pending', 12], ['cancelled', 8], ['refunded', 5], ['abandoned', 3]]
+
+function demoPick<T>(arr: T[], seed: number): T { return arr[Math.abs(seed) % arr.length]! }
+function demoStatus(seed: number): Status {
+  const h = Math.abs(seed) % 100
+  let acc = 0
+  for (const [s, w] of DEMO_STATUS_WEIGHTS) { acc += w; if (h < acc) return s }
+  return 'approved'
+}
+
+export function generateDemoVendas(period: Period): Venda[] {
+  const { from, to } = getPeriodRange(period)
+  const durationMs = to.getTime() - from.getTime()
+  const days = Math.max(1, Math.ceil(durationMs / 86_400_000))
+  const count = Math.min(200, Math.max(3, Math.round(5.5 * days)))
+
+  return Array.from({ length: count }, (_, i) => {
+    const seed = (i * 2654435761 + 1013904223) >>> 0
+    const offset = ((seed % 1_000_000) / 1_000_000) * durationMs
+    const data_venda = new Date(Math.min(from.getTime() + offset, to.getTime() - 1000)).toISOString()
+    const moeda = seed % 10 === 0 ? 'USD' : 'BRL'
+    const valorBase = moeda === 'USD' ? 29.9 : 147.0
+    const valor = parseFloat((valorBase * (1 + (seed % 100) / 100 * 2.5)).toFixed(2))
+    return {
+      id: `demo_${i}`,
+      hotmart_id: `demo_${i}`,
+      hotmart_produto_id: null,
+      produto: demoPick(DEMO_PRODUTOS, i),
+      comprador_nome: demoPick(DEMO_NOMES, i * 3),
+      comprador_email: `demo${i}@example.com`,
+      valor,
+      moeda,
+      status: demoStatus(seed),
+      data_venda,
+      forma_pagamento: demoPick(DEMO_PAGAMENTOS, i * 7),
+      pais: demoPick(DEMO_PAISES, i * 5),
+      origem: null,
+    }
+  }).sort((a, b) => new Date(b.data_venda).getTime() - new Date(a.data_venda).getTime())
+}
+
+const DEMO_CUSTO_PER_DAY: Record<Period, number> = {
+  today: 450, yesterday: 430, '7d': 420, '30d': 410, '90d': 400, '180d': 395, '365d': 390, thisMonth: 415, lastMonth: 425,
+}
+export function generateDemoCusto(period: Period): number {
+  const daysMap: Record<Period, number> = { today: 1, yesterday: 1, '7d': 7, '30d': 30, '90d': 90, '180d': 180, '365d': 365, thisMonth: 25, lastMonth: 30 }
+  return (daysMap[period] ?? 1) * (DEMO_CUSTO_PER_DAY[period] ?? 420)
 }
