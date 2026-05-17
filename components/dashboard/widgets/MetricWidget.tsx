@@ -24,18 +24,18 @@ const ICON_MAP: Partial<Record<WidgetDataSource, React.ElementType>> = {
 }
 
 const COLOR_MAP: Partial<Record<WidgetDataSource, { icon: string; bg: string }>> = {
-  total_converted: { icon: 'text-indigo-400', bg: 'bg-indigo-500/12' },
+  total_converted: { icon: 'text-cyan-300', bg: 'bg-cyan-400/15' },
   total_brl: { icon: 'text-green-400', bg: 'bg-green-500/12' },
-  total_usd: { icon: 'text-blue-400', bg: 'bg-blue-500/12' },
+  total_usd: { icon: 'text-sky-300', bg: 'bg-sky-400/15' },
   sales_count: { icon: 'text-green-400', bg: 'bg-green-500/12' },
-  approval_rate: { icon: 'text-blue-400', bg: 'bg-blue-500/12' },
-  avg_ticket: { icon: 'text-purple-400', bg: 'bg-purple-500/12' },
+  approval_rate: { icon: 'text-cyan-300', bg: 'bg-cyan-400/15' },
+  avg_ticket: { icon: 'text-violet-300', bg: 'bg-violet-400/15' },
   refunds_count: { icon: 'text-red-400', bg: 'bg-red-500/12' },
   pending_count: { icon: 'text-yellow-400', bg: 'bg-yellow-500/12' },
   cancelled_count: { icon: 'text-orange-400', bg: 'bg-orange-500/12' },
 }
 
-const DEFAULT_COLORS = { icon: 'text-indigo-400', bg: 'bg-indigo-500/12' }
+const DEFAULT_COLORS = { icon: 'text-cyan-300', bg: 'bg-cyan-400/15' }
 
 export function MetricWidget({
   title,
@@ -52,17 +52,17 @@ export function MetricWidget({
   const colors = COLOR_MAP[dataSource] ?? DEFAULT_COLORS
 
   return (
-    <div className="relative flex h-full flex-col justify-between gap-3 p-5">
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
-      <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl shadow-lg shadow-black/20 ${colors.bg}`}>
+    <div className="relative z-[1] flex h-full flex-col justify-between gap-3 p-5">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/35 to-transparent" />
+      <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl shadow-lg shadow-cyan-500/15 ${colors.bg}`}>
         <Icon size={17} className={colors.icon} />
       </div>
       <div>
-        <p className="text-xs font-medium text-slate-500">{title}</p>
-        <p className="mt-1 text-[1.65rem] font-extrabold leading-tight text-white drop-shadow">
+        <p className="text-xs font-medium text-[var(--dash-faint)]">{title}</p>
+        <p className="mt-1 text-[1.65rem] font-extrabold leading-tight text-[var(--dash-text)] drop-shadow">
           {value}
         </p>
-        {subValue && <p className="mt-0.5 text-xs text-slate-600">{subValue}</p>}
+        {subValue && <p className="mt-0.5 text-xs text-[var(--dash-faint)]">{subValue}</p>}
       </div>
     </div>
   )

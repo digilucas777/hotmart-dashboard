@@ -10,8 +10,11 @@ import {
   LayoutDashboard,
   Pencil,
   Lock,
+  Moon,
+  Rocket,
   Save,
   Search,
+  Sun,
   Undo2,
   Redo2,
 } from 'lucide-react'
@@ -42,6 +45,9 @@ const GRID_ROW_HEIGHT = 20
 const GRID_GAP = 0
 const GRID_ITEM_PADDING = 10
 const LAYOUT_STORAGE_PREFIX = 'dashboard-layout:'
+const THEME_STORAGE_KEY = 'dashboard-theme'
+
+type DashboardTheme = 'dark' | 'light'
 
 type GridPlacement = {
   id: string
@@ -283,6 +289,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [combinedVendas, setCombinedVendas] = useState<Venda[]>([])
   const [period, setPeriod] = useState<Period>('today')
   const [exchangeRate, setExchangeRate] = useState(5.85)
+  const [theme, setTheme] = useState<DashboardTheme>('dark')
   const [loading, setLoading] = useState(true)
   const [custoTotal, setCustoTotal] = useState(0)
 
@@ -319,6 +326,19 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       .then((d: { rate: number }) => setExchangeRate(d.rate ?? 5.85))
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY)
+    if (stored === 'dark' || stored === 'light') setTheme(stored)
+  }, [])
+
+  function toggleTheme() {
+    setTheme(current => {
+      const next = current === 'dark' ? 'light' : 'dark'
+      window.localStorage.setItem(THEME_STORAGE_KEY, next)
+      return next
+    })
+  }
 
   useEffect(() => {
     supabase
@@ -679,39 +699,54 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   )
 
   return (
-    <div className="min-h-screen bg-[#090912] text-slate-100">
+    <div className="dashboard-shell min-h-screen text-[var(--dash-text)]" data-dashboard-theme={theme}>
       <header
-        className="sticky top-0 z-40 border-b shadow-2xl shadow-black/20"
-        style={{
-          borderColor: 'rgba(255,255,255,0.07)',
-          background: 'rgba(9,9,18,0.88)',
-          backdropFilter: 'blur(20px)',
-        }}
+        className="sticky top-0 z-40 border-b border-[var(--dash-border)] bg-[color:var(--dash-bg)]/80 shadow-2xl shadow-black/20 backdrop-blur-2xl"
       >
-        <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-4 px-6">
+        <div className="mx-auto flex min-h-16 max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
           <Link
             href="/"
-            className="flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-slate-200"
+            className="flex items-center gap-1.5 text-sm text-[var(--dash-faint)] transition-colors hover:text-[var(--dash-text)]"
           >
             <ArrowLeft size={15} />
             Projetos
           </Link>
-          <div className="h-4 w-px" style={{ background: 'rgba(255,255,255,0.1)' }} />
-          <h1 className="truncate text-sm font-semibold text-slate-200">
-            {projeto?.nome ?? '...'}
-          </h1>
+          <div className="hidden h-5 w-px bg-[var(--dash-border)] sm:block" />
+          <div className="dashboard-topbar flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-3 py-2 sm:px-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 via-blue-500 to-violet-500 text-white shadow-lg shadow-cyan-500/20">
+              <Rocket size={19} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dash-faint)]">
+                Dashboard
+              </p>
+              <h1 className="truncate text-base font-extrabold text-[var(--dash-text)] sm:text-lg">
+                {projeto?.nome ?? '...'}
+              </h1>
+            </div>
+            <div className="ml-auto hidden rounded-full bg-gradient-to-r from-cyan-400/15 to-violet-500/15 px-3 py-1 text-xs font-semibold text-[var(--dash-muted)] sm:block">
+              Geral
+            </div>
+          </div>
           <div className="ml-auto" />
+          <button
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--dash-border)] bg-[var(--dash-panel)] text-[var(--dash-text)] shadow-lg transition-all hover:border-[var(--dash-border-strong)] hover:text-[var(--dash-neon)]"
+          >
+            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1400px] px-6 py-9">
+      <main className="dashboard-main mx-auto max-w-[1400px] px-6 py-8">
         <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
           <PeriodFilter value={period} onChange={setPeriod} />
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-[#111120]/75 p-1.5 shadow-xl shadow-black/20">
+          <div className="dashboard-action-bar dashboard-panel flex flex-wrap items-center gap-2 rounded-2xl p-1.5">
             <button
               onClick={fetchVendas}
               title="Atualizar"
-              className="flex items-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-600"
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 transition-transform hover:-translate-y-0.5"
             >
               <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
               Atualizar
@@ -833,11 +868,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           >
               <div
                 ref={gridRef}
-                className="relative grid"
+                className="dashboard-grid relative grid"
                 style={{
-                  gridTemplateColumns: 'repeat(12, minmax(0, 1fr))',
                   gridAutoRows: `${GRID_ROW_HEIGHT}px`,
-                  gridAutoFlow: 'row dense',
                   gap: `${GRID_GAP}px`,
                 }}
               >

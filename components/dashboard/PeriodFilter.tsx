@@ -21,15 +21,15 @@ interface PeriodFilterProps {
 
 export function PeriodFilter({ value, onChange }: PeriodFilterProps) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="dashboard-panel flex max-w-full gap-2 overflow-x-auto rounded-2xl p-1.5 sm:flex-wrap">
       {PERIODS.map(p => (
         <button
           key={p.value}
           onClick={() => onChange(p.value)}
-          className={`rounded-lg px-3.5 py-2 text-sm font-semibold transition-all duration-150 ${
+          className={`shrink-0 rounded-xl px-3.5 py-2 text-sm font-semibold transition-all duration-150 ${
             value === p.value
-              ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/30'
-              : 'border border-white/8 bg-[#151525] text-slate-400 hover:border-white/15 hover:bg-[#1b1b2e] hover:text-slate-200'
+              ? 'bg-gradient-to-r from-cyan-500 to-violet-500 text-white shadow-lg shadow-cyan-500/20'
+              : 'border border-[var(--dash-border)] bg-white/5 text-[var(--dash-muted)] hover:border-[var(--dash-border-strong)] hover:bg-white/10 hover:text-[var(--dash-text)]'
           }`}
         >
           {p.label}

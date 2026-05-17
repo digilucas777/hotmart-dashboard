@@ -11,8 +11,8 @@ import {
 import type { SeriesPoint } from '@/lib/utils'
 
 const PIE_COLORS = [
-  '#6366f1', '#22c55e', '#f59e0b', '#ef4444',
-  '#8b5cf6', '#06b6d4', '#f97316', '#64748b',
+  '#00d4ff', '#a78bfa', '#22c55e', '#f59e0b',
+  '#7c3aed', '#38bdf8', '#ef4444', '#64748b',
 ]
 
 function CustomTooltip({
@@ -51,8 +51,8 @@ export function PieWidget({
   const data = points.map(p => ({ name: p.label, value: p.value }))
 
   return (
-    <div className="p-5">
-      <h3 className="mb-5 text-sm font-semibold text-slate-200">{title}</h3>
+    <div className="relative z-[1] p-5">
+      <h3 className="mb-5 text-sm font-semibold text-[var(--dash-text)]">{title}</h3>
       <ResponsiveContainer width="100%" height={chartHeight}>
         <PieChart>
           <Pie

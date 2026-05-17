@@ -64,8 +64,8 @@ export function LineChartWidget({
   chartHeight?: number
 }) {
   return (
-    <div className="p-5">
-      <h3 className="mb-5 text-sm font-semibold text-slate-200">{title}</h3>
+    <div className="relative z-[1] p-5">
+      <h3 className="mb-5 text-sm font-semibold text-[var(--dash-text)]">{title}</h3>
       <ResponsiveContainer width="100%" height={chartHeight}>
         <LineChart data={points} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
@@ -105,20 +105,20 @@ export function LineChartWidget({
               <Line
                 type="monotone"
                 dataKey="valueUSD"
-                stroke="#6366f1"
+                stroke="#00d4ff"
                 strokeWidth={2}
                 dot={false}
-                activeDot={{ r: 4, fill: '#6366f1', strokeWidth: 0 }}
+                activeDot={{ r: 4, fill: '#00d4ff', strokeWidth: 0 }}
               />
             </>
           ) : (
             <Line
               type="monotone"
               dataKey="value"
-              stroke="#6366f1"
+              stroke="#00d4ff"
               strokeWidth={2.5}
               dot={false}
-              activeDot={{ r: 4, fill: '#6366f1', strokeWidth: 0 }}
+              activeDot={{ r: 4, fill: '#00d4ff', strokeWidth: 0 }}
             />
           )}
         </LineChart>

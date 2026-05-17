@@ -15,8 +15,8 @@ import { formatBRL, formatUSD } from '@/lib/utils'
 import type { SeriesPoint } from '@/lib/utils'
 
 const BAR_COLORS = {
-  brl: '#22c55e',
-  usd: '#6366f1',
+  brl: '#00d4ff',
+  usd: '#a78bfa',
 }
 
 const BAR_COLORS_LIST = [BAR_COLORS.brl, BAR_COLORS.usd]
@@ -74,8 +74,8 @@ export function BarChartWidget({
   chartHeight?: number
 }) {
   return (
-    <div className="p-5">
-      <h3 className="mb-5 text-sm font-semibold text-slate-200">{title}</h3>
+    <div className="relative z-[1] p-5">
+      <h3 className="mb-5 text-sm font-semibold text-[var(--dash-text)]">{title}</h3>
       <ResponsiveContainer width="100%" height={chartHeight}>
         <BarChart data={points} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />

@@ -7,6 +7,21 @@
 
 :root {
   color-scheme: dark;
+  --dash-bg: #090a10;
+  --dash-bg-soft: #11131d;
+  --dash-panel: rgba(18, 20, 31, 0.86);
+  --dash-panel-strong: rgba(24, 26, 39, 0.94);
+  --dash-border: rgba(255, 255, 255, 0.09);
+  --dash-border-strong: rgba(125, 211, 252, 0.26);
+  --dash-text: #f8fafc;
+  --dash-muted: #94a3b8;
+  --dash-faint: #64748b;
+  --dash-neon: #00d4ff;
+  --dash-purple: #a78bfa;
+  --dash-accent: #7c3aed;
+  --dash-glow-blue: rgba(0, 212, 255, 0.22);
+  --dash-glow-purple: rgba(167, 139, 250, 0.18);
+  --dash-shadow: 0 22px 70px rgba(0, 0, 0, 0.34);
 }
 
 *,
@@ -43,4 +58,141 @@ body {
 :focus-visible {
   outline: 2px solid #6366f1;
   outline-offset: 2px;
+}
+
+/* Dashboard visual system */
+.dashboard-shell {
+  --dash-bg: #090a10;
+  --dash-bg-soft: #11131d;
+  --dash-panel: rgba(18, 20, 31, 0.86);
+  --dash-panel-strong: rgba(24, 26, 39, 0.94);
+  --dash-border: rgba(255, 255, 255, 0.09);
+  --dash-border-strong: rgba(125, 211, 252, 0.26);
+  --dash-text: #f8fafc;
+  --dash-muted: #94a3b8;
+  --dash-faint: #64748b;
+  --dash-neon: #00d4ff;
+  --dash-purple: #a78bfa;
+  --dash-accent: #7c3aed;
+  --dash-glow-blue: rgba(0, 212, 255, 0.22);
+  --dash-glow-purple: rgba(167, 139, 250, 0.18);
+  --dash-shadow: 0 22px 70px rgba(0, 0, 0, 0.34);
+  background:
+    radial-gradient(circle at 12% 8%, rgba(0, 212, 255, 0.15), transparent 34rem),
+    radial-gradient(circle at 82% 0%, rgba(167, 139, 250, 0.16), transparent 30rem),
+    linear-gradient(180deg, #0b0c13 0%, var(--dash-bg) 42%, #080910 100%);
+  color: var(--dash-text);
+}
+
+.dashboard-shell[data-dashboard-theme='light'] {
+  --dash-bg: #f7f8fc;
+  --dash-bg-soft: #eef2ff;
+  --dash-panel: rgba(255, 255, 255, 0.84);
+  --dash-panel-strong: rgba(255, 255, 255, 0.96);
+  --dash-border: rgba(15, 23, 42, 0.1);
+  --dash-border-strong: rgba(14, 165, 233, 0.26);
+  --dash-text: #111827;
+  --dash-muted: #475569;
+  --dash-faint: #64748b;
+  --dash-neon: #0284c7;
+  --dash-purple: #7c3aed;
+  --dash-accent: #2563eb;
+  --dash-glow-blue: rgba(14, 165, 233, 0.18);
+  --dash-glow-purple: rgba(124, 58, 237, 0.14);
+  --dash-shadow: 0 22px 60px rgba(15, 23, 42, 0.12);
+  background:
+    radial-gradient(circle at 10% 10%, rgba(14, 165, 233, 0.15), transparent 32rem),
+    radial-gradient(circle at 86% 0%, rgba(124, 58, 237, 0.13), transparent 30rem),
+    linear-gradient(180deg, #f8fafc 0%, var(--dash-bg) 100%);
+}
+
+.dashboard-topbar,
+.dashboard-card,
+.dashboard-panel {
+  border: 1px solid var(--dash-border);
+  background: var(--dash-panel);
+  box-shadow: var(--dash-shadow);
+  backdrop-filter: blur(22px);
+}
+
+.dashboard-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.075), transparent 34%),
+    linear-gradient(90deg, var(--dash-glow-blue), transparent 28%, var(--dash-glow-purple));
+  opacity: 0.46;
+}
+
+.dashboard-grid {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-flow: row dense;
+}
+
+@media (max-width: 900px) {
+  .dashboard-main {
+    padding: 1rem 1rem 5.5rem;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-auto-rows: minmax(18px, auto) !important;
+  }
+
+  .dashboard-widget-shell {
+    grid-column: 1 / -1 !important;
+    grid-row: auto / span var(--mobile-row-span, 18) !important;
+    padding: 0.5rem !important;
+  }
+
+  .dashboard-action-bar {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-sidebar {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    width: 100% !important;
+    height: 4.5rem !important;
+    flex-direction: row !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.09) !important;
+    border-right: 0 !important;
+    background: rgba(9, 10, 16, 0.92) !important;
+    backdrop-filter: blur(22px);
+  }
+
+  .app-sidebar-logo,
+  .app-sidebar-logout {
+    display: none !important;
+  }
+
+  .app-sidebar-nav {
+    width: 100%;
+    flex-direction: row !important;
+    justify-content: space-around;
+    gap: 0.25rem;
+    padding: 0.55rem !important;
+  }
+
+  .app-sidebar-nav a {
+    min-width: 3.25rem;
+    flex: 1;
+    justify-content: center;
+    border-radius: 1rem;
+    padding: 0.75rem 0.5rem !important;
+  }
+
+  .app-sidebar-nav span {
+    display: none;
+  }
 }

@@ -56,7 +56,7 @@ export function Sidebar() {
 
   return (
     <aside
-      className="sticky top-0 z-50 flex h-screen flex-shrink-0 flex-col overflow-hidden"
+      className="app-sidebar sticky top-0 z-50 flex h-screen flex-shrink-0 flex-col overflow-hidden"
       style={{
         width: expanded ? '220px' : '60px',
         transition: 'width 0.2s ease',
@@ -68,7 +68,7 @@ export function Sidebar() {
     >
       {/* Logo */}
       <div
-        className="flex h-14 flex-shrink-0 items-center gap-3 px-[18px]"
+        className="app-sidebar-logo flex h-14 flex-shrink-0 items-center gap-3 px-[18px]"
         style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
       >
         <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-indigo-500/20">
@@ -83,7 +83,7 @@ export function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="flex flex-1 flex-col gap-0.5 p-2 pt-3">
+      <nav className="app-sidebar-nav flex flex-1 flex-col gap-0.5 p-2 pt-3">
         {NAV_ITEMS.map(item => {
           const active = isNavActive(item.href, pathname)
           const Icon = item.icon
@@ -112,7 +112,7 @@ export function Sidebar() {
       </nav>
 
       {/* Logout */}
-      <div className="p-2" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+      <div className="app-sidebar-logout p-2" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
         <button
           onClick={handleLogout}
           title={!expanded ? 'Sair' : undefined}

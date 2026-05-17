@@ -95,33 +95,36 @@ export function WidgetRenderer({
     window.addEventListener('mouseup', onMouseUp)
   }
 
+  const shellStyle: CSSProperties = {
+    gridColumn: `${config.col_start ?? 1} / span ${config.col_span ?? 6}`,
+    gridRow: `${config.row_start ?? 1} / span ${config.row_span ?? 12}`,
+    opacity: isDragging ? 0.28 : 1,
+    padding: GRID_ITEM_PADDING,
+    '--mobile-row-span': String(Math.max(12, Math.min(26, config.row_span ?? 12))),
+  } as CSSProperties
+
   return (
     <div
       ref={setNodeRef}
       onPointerDown={() => {
         if (editMode) onSelect(config.id)
       }}
-      style={{
-        gridColumn: `${config.col_start ?? 1} / span ${config.col_span ?? 6}`,
-        gridRow: `${config.row_start ?? 1} / span ${config.row_span ?? 12}`,
-        opacity: isDragging ? 0.28 : 1,
-        padding: GRID_ITEM_PADDING,
-      }}
+      style={shellStyle}
+      className="dashboard-widget-shell"
     >
       <div
         ref={cardRef}
         {...(editMode ? attributes : {})}
         {...(editMode ? listeners : {})}
-        className={`group relative h-full overflow-hidden rounded-2xl border bg-[#191929] shadow-[0_18px_50px_rgba(0,0,0,0.24)] transition-all duration-200 ${
+        className={`dashboard-card group relative h-full overflow-hidden rounded-2xl transition-all duration-200 ${
           isDragging
-            ? 'border-indigo-500/50 shadow-2xl shadow-indigo-500/10'
+            ? 'border-cyan-400/50 shadow-2xl shadow-cyan-500/10'
             : selected
-              ? 'border-white/75 shadow-[0_0_0_1px_rgba(255,255,255,0.25),0_24px_60px_rgba(0,0,0,0.35)]'
-              : 'border-white/10 hover:border-white/20 hover:shadow-[0_22px_55px_rgba(0,0,0,0.32)]'
+              ? 'border-[var(--dash-border-strong)] shadow-[0_0_0_1px_var(--dash-border-strong),0_24px_60px_rgba(0,0,0,0.28)]'
+              : 'hover:border-[var(--dash-border-strong)] hover:shadow-[0_22px_65px_var(--dash-glow-blue)]'
         } ${editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
         style={cardHeightStyle}
       >
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.055),transparent_36%,rgba(99,102,241,0.06))]" />
         {editMode && (
           <>
             <div
