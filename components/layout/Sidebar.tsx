@@ -52,7 +52,8 @@ export function Sidebar() {
     router.push('/login')
   }
 
-  if (pathname === '/login') return null
+  const hiddenRoutes = ['/', '/login', '/register', '/forgot-password', '/pricing', '/dashboard']
+  if (hiddenRoutes.includes(pathname)) return null
 
   return (
     <aside
