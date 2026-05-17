@@ -36,7 +36,49 @@ export type Produto = {
 
 export type Period = 'today' | 'yesterday' | '7d' | '30d' | '90d' | '180d' | '365d' | 'thisMonth' | 'lastMonth'
 
-export type WidgetType = 'metric' | 'line' | 'bar' | 'pie' | 'table' | 'combined'
+export type WidgetType =
+  | 'metric'
+  | 'line'
+  | 'bar'
+  | 'pie'
+  | 'table'
+  | 'combined'
+  | 'meta-metric'
+  | 'meta-chart'
+  | 'meta-funnel'
+  | 'meta-campaign'
+  | 'meta-creative'
+
+export type MetaDataSource =
+  | 'meta_spend'
+  | 'meta_revenue'
+  | 'meta_roas'
+  | 'meta_profit'
+  | 'meta_roi'
+  | 'meta_avg_ticket'
+  | 'meta_cpa'
+  | 'meta_cpl'
+  | 'meta_cpm'
+  | 'meta_cpc'
+  | 'meta_ctr'
+  | 'meta_frequency'
+  | 'meta_reach'
+  | 'meta_impressions'
+  | 'meta_link_clicks'
+  | 'meta_conversions'
+  | 'meta_leads'
+  | 'meta_purchases'
+  | 'meta_checkout_initiated'
+  | 'meta_add_to_cart'
+  | 'meta_page_views'
+  | 'meta_landing_page_views'
+  | 'meta_spend_by_day'
+  | 'meta_roas_by_day'
+  | 'meta_conversions_by_day'
+  | 'meta_funnel'
+  | 'meta_campaigns'
+  | 'meta_creatives_ctr'
+  | 'meta_creatives_roas'
 
 export type WidgetDataSource =
   | 'total_converted'
@@ -61,6 +103,7 @@ export type WidgetDataSource =
   | 'roas'
   | 'cpa'
   | 'combined_by_day'
+  | MetaDataSource
 
 export type WidgetWidth = 'full' | 'half' | '1/4' | '1/3' | '1/2' | '2/3' | '3/4'
 

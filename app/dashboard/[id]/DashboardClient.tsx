@@ -708,6 +708,18 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     fetchVendas()
   }
 
+  useEffect(() => {
+    if (!editMode) return
+    function handleDocClick(e: MouseEvent) {
+      const target = e.target as Element
+      if (!target.closest('.dashboard-widget-shell')) {
+        setSelectedWidgetId(null)
+      }
+    }
+    document.addEventListener('click', handleDocClick)
+    return () => document.removeEventListener('click', handleDocClick)
+  }, [editMode])
+
   const isReady = !loading && !loadingWidgets
   const hasUnsavedLayout = !sameLayout(widgets, savedWidgets)
   const previewPlacement = dragPreview ?? resizePreview
@@ -751,9 +763,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               <h1 className="truncate text-base font-extrabold text-[var(--dash-text)] sm:text-lg">
                 {projeto?.nome ?? '...'}
               </h1>
-            </div>
-            <div className="ml-auto hidden rounded-full bg-gradient-to-r from-cyan-400/15 to-violet-500/15 px-3 py-1 text-xs font-semibold text-[var(--dash-muted)] sm:block">
-              Geral
             </div>
             {dashboardOptions.length > 0 && (
               <div className="relative">

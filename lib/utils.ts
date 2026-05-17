@@ -449,5 +449,7 @@ export function computeWidgetData(
 
       return { kind: 'combined', points: Object.values(buckets) }
     }
+    default:
+      return { kind: 'metric', value: '—', subValue: '' }
   }
 }

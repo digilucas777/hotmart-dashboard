@@ -12,6 +12,12 @@ import { BarChartWidget } from './BarChartWidget'
 import { PieWidget } from './PieWidget'
 import { CombinedChartWidget } from './CombinedChartWidget'
 import { SalesTable } from '@/components/dashboard/SalesTable'
+import { MetaMetricWidget } from './meta/MetaMetricWidget'
+import { MetaFunnelWidget } from './meta/MetaFunnelWidget'
+import { MetaChartWidget } from './meta/MetaChartWidget'
+import { MetaCampaignWidget } from './meta/MetaCampaignWidget'
+import { MetaCreativeWidget } from './meta/MetaCreativeWidget'
+import { computeMetaWidgetData } from '@/lib/meta-ads-mock'
 
 const GRID_ROW_HEIGHT = 20
 const GRID_ITEM_PADDING = 10
@@ -52,24 +58,28 @@ export function WidgetRenderer({
   onPreviewResize?: (id: string, width: number, height: number, direction: ResizeDirection, deltaX: number, deltaY: number) => void
   onCommitResize?: (id: string, width: number, height: number, direction: ResizeDirection, deltaX: number, deltaY: number) => void
 }) {
-  // ref on the inner card to measure real dimensions for resize
   const cardRef = useRef<HTMLDivElement>(null)
   const [liveSize, setLiveSize] = useState<{ w: number; h: number } | null>(null)
+  const [resizePct, setResizePct] = useState<{ w: number; h: number } | null>(null)
 
   const { attributes, listeners, setNodeRef, isDragging } =
     useDraggable({ id: config.id, disabled: !editMode })
 
-  const data = computeWidgetData(vendas, config.data_source, period, exchangeRate, custoTotal)
-  const isBRL = getValueFormat(config.data_source) === 'brl'
+  const isMetaWidget = config.type.startsWith('meta-')
+
+  const data = isMetaWidget
+    ? computeMetaWidgetData(config.data_source, period)
+    : computeWidgetData(vendas, config.data_source, period, exchangeRate, custoTotal)
+
+  const isBRL = !isMetaWidget && getValueFormat(config.data_source) === 'brl'
 
   const chartHeight = liveSize
     ? Math.max(120, liveSize.h - 80)
     : Math.max(120, (config.row_span ?? 12) * GRID_ROW_HEIGHT - GRID_ITEM_PADDING * 2 - 80)
 
-  // Height applied directly on the inner card so h-full works correctly
   const cardHeightStyle: CSSProperties = liveSize
-    ? { height: `${liveSize.h}px`, overflow: 'hidden' }
-    : { height: '100%', overflow: 'hidden' }
+    ? { height: `${liveSize.h}px` }
+    : { height: '100%' }
 
   const resizeZones: { direction: ResizeDirection; className: string; title: string }[] = [
     { direction: 'top', title: 'Redimensionar pelo topo', className: 'inset-x-7 top-0 h-3 cursor-ns-resize' },
@@ -88,6 +98,10 @@ export function WidgetRenderer({
     const card = cardRef.current
     if (!card) return
 
+    const grid = card.closest('.dashboard-grid') as HTMLElement | null
+    const gridTotalWidth = grid?.clientWidth ?? 1200
+    const gridTotalHeight = Math.max(600, grid?.scrollHeight ?? 800)
+
     const startX = e.clientX
     const startY = e.clientY
     const startW = card.offsetWidth
@@ -98,16 +112,26 @@ export function WidgetRenderer({
     const affectsTop = direction.includes('top')
     const affectsBottom = direction.includes('bottom')
 
+    // Maximum resize bounds: cannot go past the grid's right/bottom edge
+    const cardRect = card.getBoundingClientRect()
+    const gridRect = grid?.getBoundingClientRect()
+    const maxW = gridRect ? gridRect.right - cardRect.left : gridTotalWidth
+    const maxH = gridTotalHeight
+
     function onMouseMove(ev: MouseEvent) {
       const deltaX = ev.clientX - startX
       const deltaY = ev.clientY - startY
       const newW = !affectsLeft && !affectsRight
         ? startW
-        : Math.max(110, startW + (affectsLeft ? -deltaX : deltaX))
+        : Math.min(maxW, Math.max(110, startW + (affectsLeft ? -deltaX : deltaX)))
       const newH = !affectsTop && !affectsBottom
         ? startH
-        : Math.max(90, startH + (affectsTop ? -deltaY : deltaY))
+        : Math.min(maxH, Math.max(90, startH + (affectsTop ? -deltaY : deltaY)))
       setLiveSize({ w: newW, h: newH })
+      setResizePct({
+        w: Math.round((newW / gridTotalWidth) * 100),
+        h: Math.round((newH / gridTotalHeight) * 100),
+      })
       onPreviewResize?.(config.id, newW, newH, direction, deltaX, deltaY)
     }
 
@@ -118,11 +142,12 @@ export function WidgetRenderer({
       const deltaY = ev.clientY - startY
       const newW = !affectsLeft && !affectsRight
         ? startW
-        : Math.max(110, startW + (affectsLeft ? -deltaX : deltaX))
+        : Math.min(maxW, Math.max(110, startW + (affectsLeft ? -deltaX : deltaX)))
       const newH = !affectsTop && !affectsBottom
         ? startH
-        : Math.max(90, startH + (affectsTop ? -deltaY : deltaY))
+        : Math.min(maxH, Math.max(90, startH + (affectsTop ? -deltaY : deltaY)))
       setLiveSize(null)
+      setResizePct(null)
       onCommitResize?.(config.id, newW, newH, direction, deltaX, deltaY)
     }
 
@@ -138,6 +163,16 @@ export function WidgetRenderer({
     '--mobile-row-span': String(Math.max(12, Math.min(26, config.row_span ?? 12))),
   } as CSSProperties
 
+  const isSelected = selected && editMode && !isDragging
+
+  const cardStyle: CSSProperties = {
+    ...cardHeightStyle,
+    overflow: 'hidden',
+    ...(isSelected ? {
+      boxShadow: '0 0 0 2px rgba(34, 211, 238, 0.55), 0 0 28px rgba(34, 211, 238, 0.22), 0 0 60px rgba(34, 211, 238, 0.08)',
+    } : {}),
+  }
+
   return (
     <div
       ref={setNodeRef}
@@ -145,32 +180,59 @@ export function WidgetRenderer({
         if (editMode) onSelect(config.id)
       }}
       style={shellStyle}
-      className="dashboard-widget-shell"
+      className={`dashboard-widget-shell ${isSelected ? 'relative z-10' : ''}`}
     >
       <div
         ref={cardRef}
         {...(editMode ? attributes : {})}
         {...(editMode ? listeners : {})}
-        className={`dashboard-card group relative h-full overflow-hidden rounded-2xl transition-all duration-200 ${
+        className={`dashboard-card group relative h-full rounded-2xl transition-all duration-200 ${
           isDragging
             ? 'border-cyan-400/50 shadow-2xl shadow-cyan-500/10'
-            : selected
-              ? 'border-[var(--dash-border-strong)] shadow-[0_0_0_1px_var(--dash-border-strong),0_24px_60px_rgba(0,0,0,0.28)]'
+            : isSelected
+              ? 'border-cyan-400/35'
               : 'hover:border-[var(--dash-border-strong)] hover:shadow-[0_22px_65px_var(--dash-glow-blue)]'
         } ${editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
-        style={cardHeightStyle}
+        style={cardStyle}
       >
+        {/* Premium selection ring overlay */}
+        {isSelected && (
+          <div
+            className="pointer-events-none absolute inset-0 z-20 rounded-2xl"
+            style={{
+              border: '2px dashed rgba(34, 211, 238, 0.65)',
+              background: 'radial-gradient(ellipse at 50% 0%, rgba(34, 211, 238, 0.04), transparent 65%)',
+            }}
+          />
+        )}
+
+        {/* Resize percentage badge */}
+        {liveSize && resizePct && (
+          <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center">
+            <div
+              className="rounded-xl px-4 py-2 font-mono text-sm font-bold text-cyan-300"
+              style={{
+                background: 'rgba(9, 9, 20, 0.92)',
+                border: '1px solid rgba(34, 211, 238, 0.35)',
+                boxShadow: '0 4px 24px rgba(0,0,0,0.5), 0 0 16px rgba(34, 211, 238, 0.12)',
+                backdropFilter: 'blur(8px)',
+              }}
+            >
+              {resizePct.w}% × {resizePct.h}%
+            </div>
+          </div>
+        )}
+
         {editMode && (
           <>
             <div
               className={`pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-cyan-400/10 to-transparent transition-opacity ${
-                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
               }`}
-              title="Arraste o card"
             />
             <div
-              className={`absolute right-3 top-3 z-10 flex items-center gap-1 transition-opacity ${
-                selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              className={`absolute right-3 top-3 z-30 flex items-center gap-1 transition-opacity ${
+                isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
               }`}
               onPointerDown={e => e.stopPropagation()}
             >
@@ -198,12 +260,13 @@ export function WidgetRenderer({
                 onPointerDown={e => e.stopPropagation()}
                 onMouseDown={e => handleResizeStart(e, zone.direction)}
                 title={zone.title}
-                className={`absolute z-20 rounded-xl bg-cyan-300/0 transition-colors hover:bg-cyan-300/[0.03] ${zone.className}`}
+                className={`absolute z-20 rounded-xl transition-colors hover:bg-cyan-300/[0.06] ${zone.className}`}
               />
             ))}
           </>
         )}
 
+        {/* Hotmart widgets */}
         {config.type === 'metric' && data.kind === 'metric' && (
           <MetricWidget
             title={config.title}
@@ -212,7 +275,6 @@ export function WidgetRenderer({
             dataSource={config.data_source}
           />
         )}
-
         {config.type === 'line' && data.kind === 'series' && (
           <LineChartWidget
             title={config.title}
@@ -222,7 +284,6 @@ export function WidgetRenderer({
             chartHeight={chartHeight}
           />
         )}
-
         {config.type === 'bar' && data.kind === 'series' && (
           <BarChartWidget
             title={config.title}
@@ -232,11 +293,9 @@ export function WidgetRenderer({
             chartHeight={chartHeight}
           />
         )}
-
         {config.type === 'pie' && data.kind === 'series' && (
           <PieWidget title={config.title} points={data.points} chartHeight={chartHeight} />
         )}
-
         {config.type === 'combined' && data.kind === 'combined' && (
           <CombinedChartWidget
             title={config.title}
@@ -244,9 +303,25 @@ export function WidgetRenderer({
             chartHeight={chartHeight}
           />
         )}
-
         {config.type === 'table' && data.kind === 'table' && (
           <SalesTable vendas={data.vendas} exchangeRate={exchangeRate} heightMode="fill" />
+        )}
+
+        {/* Meta Ads widgets */}
+        {config.type === 'meta-metric' && data.kind === 'meta-metric' && (
+          <MetaMetricWidget title={config.title} data={data} />
+        )}
+        {config.type === 'meta-funnel' && data.kind === 'meta-funnel' && (
+          <MetaFunnelWidget title={config.title} data={data} />
+        )}
+        {config.type === 'meta-chart' && data.kind === 'meta-chart' && (
+          <MetaChartWidget title={config.title} data={data} chartHeight={chartHeight} />
+        )}
+        {config.type === 'meta-campaign' && data.kind === 'meta-campaign' && (
+          <MetaCampaignWidget title={config.title} data={data} />
+        )}
+        {config.type === 'meta-creative' && data.kind === 'meta-creative' && (
+          <MetaCreativeWidget title={config.title} data={data} />
         )}
       </div>
     </div>
