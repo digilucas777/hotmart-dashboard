@@ -13,6 +13,13 @@ import {
 } from 'recharts'
 import { formatBRL, formatUSD } from '@/lib/utils'
 import type { SeriesPoint } from '@/lib/utils'
+import type { Period } from '@/lib/types'
+
+const CHART_PERIODS: { value: Period; label: string }[] = [
+  { value: '7d', label: '7d' },
+  { value: '30d', label: '30d' },
+  { value: '90d', label: '90d' },
+]
 
 const BAR_COLORS = {
   brl: '#00d4ff',
@@ -66,16 +73,39 @@ export function BarChartWidget({
   isBRL,
   dualCurrency,
   chartHeight = 220,
+  localPeriod,
+  onChangePeriod,
 }: {
   title: string
   points: SeriesPoint[]
   isBRL: boolean
   dualCurrency?: boolean
   chartHeight?: number
+  localPeriod?: Period
+  onChangePeriod?: (p: Period) => void
 }) {
   return (
     <div className="relative z-[1] p-5">
-      <h3 className="mb-5 text-sm font-semibold text-[var(--dash-text)]">{title}</h3>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-[var(--dash-text)]">{title}</h3>
+        {localPeriod && onChangePeriod && (
+          <div className="flex items-center gap-0.5 rounded-lg bg-white/[0.04] p-0.5">
+            {CHART_PERIODS.map(p => (
+              <button
+                key={p.value}
+                onClick={() => onChangePeriod(p.value)}
+                className={`rounded-md px-2 py-1 text-[10px] font-bold transition-all ${
+                  localPeriod === p.value
+                    ? 'bg-white/10 text-[var(--dash-text)]'
+                    : 'text-[var(--dash-faint)] hover:text-[var(--dash-muted)]'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <ResponsiveContainer width="100%" height={chartHeight}>
         <BarChart data={points} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />

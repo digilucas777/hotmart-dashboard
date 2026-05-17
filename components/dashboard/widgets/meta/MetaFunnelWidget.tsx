@@ -21,7 +21,7 @@ export function MetaFunnelWidget({ title, data }: { title: string; data: MetaFun
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">Meta Ads · Funil</p>
           <p className="text-sm font-bold text-[var(--dash-text)]">{title}</p>
         </div>
-        <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-400/60">
+        <span className="rounded-full bg-slate-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-400/50">
           Demo
         </span>
       </div>

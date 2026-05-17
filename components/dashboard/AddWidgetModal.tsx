@@ -13,6 +13,7 @@ import {
   Filter,
   Megaphone,
   Sparkles,
+  Check,
 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -157,6 +158,10 @@ function defaultWidth(type: WidgetType): WidgetWidth {
   return type === 'metric' || type === 'meta-metric' ? 'half' : 'full'
 }
 
+function stripEmoji(label: string): string {
+  return label.replace(/^\p{Emoji}\s*/u, '')
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function AddWidgetModal({
@@ -166,20 +171,20 @@ export function AddWidgetModal({
 }: {
   open: boolean
   onClose: () => void
-  onAdd: (w: NewWidget) => Promise<void>
+  onAdd: (widgets: NewWidget[]) => Promise<void>
 }) {
-  const [step, setStep]               = useState<1 | 2>(1)
-  const [category, setCategory]       = useState<Category>('hotmart')
+  const [step, setStep]                 = useState<1 | 2>(1)
+  const [category, setCategory]         = useState<Category>('hotmart')
   const [selectedType, setSelectedType] = useState<WidgetType | null>(null)
-  const [dataSource, setDataSource]   = useState<WidgetDataSource | null>(null)
-  const [title, setTitle]             = useState('')
-  const [width, setWidth]             = useState<WidgetWidth>('half')
-  const [saving, setSaving]           = useState(false)
+  const [selectedSources, setSelectedSources] = useState<Set<WidgetDataSource>>(new Set())
+  const [title, setTitle]               = useState('')
+  const [width, setWidth]               = useState<WidgetWidth>('half')
+  const [saving, setSaving]             = useState(false)
 
   function reset() {
     setStep(1)
     setSelectedType(null)
-    setDataSource(null)
+    setSelectedSources(new Set())
     setTitle('')
     setWidth('half')
   }
@@ -191,34 +196,55 @@ export function AddWidgetModal({
 
   function selectType(type: WidgetType) {
     setSelectedType(type)
-    setDataSource(null)
+    setSelectedSources(new Set())
     setTitle('')
     setWidth(defaultWidth(type))
     setStep(2)
   }
 
-  function selectSource(src: { value: WidgetDataSource; label: string }) {
-    setDataSource(src.value)
-    if (!title) {
-      // strip leading emoji for auto-title
-      setTitle(src.label.replace(/^\p{Emoji}\s*/u, ''))
-    }
+  function toggleSource(src: { value: WidgetDataSource; label: string }) {
+    setSelectedSources(prev => {
+      const next = new Set(prev)
+      if (next.has(src.value)) {
+        next.delete(src.value)
+        if (next.size === 0) setTitle('')
+      } else {
+        next.add(src.value)
+        if (next.size === 1 && !title) {
+          setTitle(stripEmoji(src.label))
+        }
+      }
+      return next
+    })
   }
 
   async function handleCreate() {
-    if (!selectedType || !dataSource) return
+    if (!selectedType || selectedSources.size === 0) return
     setSaving(true)
+    const sources = getSourcesForType(selectedType)
     try {
-      await onAdd({ type: selectedType, data_source: dataSource, title: title || 'Widget', width })
+      const items: NewWidget[] = Array.from(selectedSources).map(srcValue => {
+        const srcObj = sources.find(s => s.value === srcValue)
+        const autoTitle = srcObj ? stripEmoji(srcObj.label) : 'Widget'
+        return {
+          type: selectedType,
+          data_source: srcValue,
+          title: selectedSources.size === 1 && title ? title : autoTitle,
+          width,
+        }
+      })
+      await onAdd(items)
       handleClose()
     } finally {
       setSaving(false)
     }
   }
 
-  const widgetTypes = category === 'meta' ? META_WIDGET_TYPES : HOTMART_WIDGET_TYPES
-  const sources     = selectedType ? getSourcesForType(selectedType) : []
-  const isMeta      = category === 'meta'
+  const widgetTypes  = category === 'meta' ? META_WIDGET_TYPES : HOTMART_WIDGET_TYPES
+  const sources      = selectedType ? getSourcesForType(selectedType) : []
+  const isMeta       = category === 'meta'
+  const selCount     = selectedSources.size
+  const singleSource = sources.length === 1
 
   return (
     <Modal open={open} onClose={handleClose} title="Adicionar Widget" maxWidth="max-w-lg">
@@ -297,39 +323,60 @@ export function AddWidgetModal({
             Voltar
           </button>
 
-          {/* Data source */}
+          {/* Data source multi-select */}
           <div className="space-y-2">
-            <p className="text-xs font-medium text-slate-500">Dado a exibir</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-slate-500">Dado a exibir</p>
+              {!singleSource && selCount > 0 && (
+                <p className="text-[10px] font-semibold text-slate-600">{selCount} selecionado{selCount !== 1 ? 's' : ''}</p>
+              )}
+            </div>
             <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
-              {sources.map(src => (
-                <button
-                  key={src.value}
-                  onClick={() => selectSource(src)}
-                  className={`w-full rounded-xl px-3 py-2.5 text-left text-sm transition-all ${
-                    dataSource === src.value
-                      ? isMeta
-                        ? 'bg-blue-500/15 text-blue-300 ring-1 ring-blue-500/30'
-                        : 'bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-500/30'
-                      : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
-                  }`}
-                >
-                  {src.label}
-                </button>
-              ))}
+              {sources.map(src => {
+                const isSelected = selectedSources.has(src.value)
+                return (
+                  <button
+                    key={src.value}
+                    onClick={() => toggleSource(src)}
+                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-all ${
+                      isSelected
+                        ? isMeta
+                          ? 'bg-blue-500/15 text-blue-300 ring-1 ring-blue-500/30'
+                          : 'bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-500/30'
+                        : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                    }`}
+                  >
+                    <span
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all ${
+                        isSelected
+                          ? isMeta
+                            ? 'border-blue-500 bg-blue-500'
+                            : 'border-indigo-500 bg-indigo-500'
+                          : 'border-white/15 bg-transparent'
+                      }`}
+                    >
+                      {isSelected && <Check size={10} strokeWidth={3} className="text-white" />}
+                    </span>
+                    {src.label}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
-          {/* Title */}
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-slate-500">Título do widget</p>
-            <input
-              type="text"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="Ex: ROAS por Dia"
-              className="w-full rounded-xl bg-white/5 px-3 py-2.5 text-sm text-slate-200 placeholder-slate-600 outline-none ring-1 ring-white/8 focus:ring-indigo-500/50"
-            />
-          </div>
+          {/* Title — shown only when single selection */}
+          {selCount <= 1 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-slate-500">Título do widget</p>
+              <input
+                type="text"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder="Ex: ROAS por Dia"
+                className="w-full rounded-xl bg-white/5 px-3 py-2.5 text-sm text-slate-200 placeholder-slate-600 outline-none ring-1 ring-white/8 focus:ring-indigo-500/50"
+              />
+            </div>
+          )}
 
           {/* Width */}
           <div className="space-y-2">
@@ -357,8 +404,12 @@ export function AddWidgetModal({
             <Button variant="ghost" className="flex-1" onClick={handleClose}>
               Cancelar
             </Button>
-            <Button className="flex-1" onClick={handleCreate} disabled={!dataSource || saving}>
-              {saving ? 'Criando...' : 'Criar widget'}
+            <Button className="flex-1" onClick={handleCreate} disabled={selCount === 0 || saving}>
+              {saving
+                ? 'Criando...'
+                : selCount > 1
+                  ? `Adicionar ${selCount} widgets`
+                  : 'Criar widget'}
             </Button>
           </div>
         </div>

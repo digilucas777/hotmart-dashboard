@@ -11,6 +11,13 @@ import {
   Legend,
 } from 'recharts'
 import type { MetaChartResult } from '@/lib/meta-ads-mock'
+import type { Period } from '@/lib/types'
+
+const CHART_PERIODS: { value: Period; label: string }[] = [
+  { value: '7d', label: '7d' },
+  { value: '30d', label: '30d' },
+  { value: '90d', label: '90d' },
+]
 
 function fmtAxis(v: number, format: MetaChartResult['format']): string {
   switch (format) {
@@ -44,10 +51,14 @@ export function MetaChartWidget({
   title,
   data,
   chartHeight,
+  localPeriod,
+  onChangePeriod,
 }: {
   title: string
   data: MetaChartResult
   chartHeight: number
+  localPeriod?: Period
+  onChangePeriod?: (p: Period) => void
 }) {
   const hasSecond = data.points.some(p => p.value2 !== undefined)
 
@@ -59,9 +70,28 @@ export function MetaChartWidget({
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">Meta Ads</p>
           <p className="text-sm font-bold text-[var(--dash-text)]">{title}</p>
         </div>
-        <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-400/60">
-          Demo
-        </span>
+        <div className="flex items-center gap-2">
+          {localPeriod && onChangePeriod && (
+            <div className="flex items-center gap-0.5 rounded-lg bg-white/[0.04] p-0.5">
+              {CHART_PERIODS.map(p => (
+                <button
+                  key={p.value}
+                  onClick={() => onChangePeriod(p.value)}
+                  className={`rounded-md px-2 py-1 text-[10px] font-bold transition-all ${
+                    localPeriod === p.value
+                      ? 'bg-white/10 text-[var(--dash-text)]'
+                      : 'text-[var(--dash-faint)] hover:text-[var(--dash-muted)]'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          )}
+          <span className="rounded-full bg-slate-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-400/50">
+            Demo
+          </span>
+        </div>
       </div>
 
       {/* Chart */}

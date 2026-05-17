@@ -34,10 +34,11 @@ import {
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { supabase } from '@/lib/supabase'
-import { getPeriodRange } from '@/lib/utils'
-import type { Venda, Projeto, Produto, Period, WidgetConfig } from '@/lib/types'
+import { getPeriodRange, generateDemoVendas, generateDemoCusto } from '@/lib/utils'
+import type { Venda, Projeto, Produto, Period, WidgetConfig, WidgetType, WidgetDataSource } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
 import { AddWidgetModal } from '@/components/dashboard/AddWidgetModal'
+import { EditWidgetModal } from '@/components/dashboard/EditWidgetModal'
 import { WidgetRenderer } from '@/components/dashboard/widgets/WidgetRenderer'
 import type { ResizeDirection } from '@/components/dashboard/widgets/WidgetRenderer'
 import { Modal } from '@/components/ui/Modal'
@@ -272,6 +273,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [loadingWidgets, setLoadingWidgets] = useState(true)
   const [editMode, setEditMode] = useState(false)
   const [showAddWidget, setShowAddWidget] = useState(false)
+  const [editingWidgetId, setEditingWidgetId] = useState<string | null>(null)
   const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null)
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null)
   const [dragPreview, setDragPreview] = useState<GridPlacement | null>(null)
@@ -484,7 +486,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       setDragPreview(null)
       if (!placement) return
       pushHistory()
-      setWidgets(prev => resolveOverlaps(prev.map(w => applyPlacement(w, placement)), placement.id))
+      setWidgets(prev => compactLayout(resolveOverlaps(prev.map(w => applyPlacement(w, placement)), placement.id)))
     },
     [dragPreview, getPlacementFromDelta, pushHistory],
   )
@@ -532,9 +534,34 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
   const deleteWidget = useCallback(async (id: string) => {
     await supabase.from('dashboard_widgets').delete().eq('id', id)
-    setWidgets(prev => prev.filter(w => w.id !== id))
-    setSavedWidgets(prev => prev.filter(w => w.id !== id))
+    setWidgets(prev => compactLayout(prev.filter(w => w.id !== id)))
+    setSavedWidgets(prev => compactLayout(prev.filter(w => w.id !== id)))
     setSelectedWidgetId(prev => prev === id ? null : prev)
+  }, [])
+
+  const duplicateWidget = useCallback(async (id: string) => {
+    const source = widgets.find(w => w.id === id)
+    if (!source) return
+    await addWidget({
+      type: source.type,
+      data_source: source.data_source,
+      title: `${source.title} (cópia)`,
+      width: source.width,
+      height: source.height,
+      col_span: source.col_span,
+      row_span: source.row_span,
+    })
+  }, [widgets]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const updateWidget = useCallback(async (
+    id: string,
+    updates: { type: WidgetType; data_source: WidgetDataSource; title: string },
+  ) => {
+    const { error } = await supabase.from('dashboard_widgets').update(updates).eq('id', id)
+    if (error) { setWidgetError(error.message); return }
+    setWidgets(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w))
+    setSavedWidgets(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w))
+    setEditingWidgetId(null)
   }, [])
 
   const getResizePlacement = useCallback((
@@ -723,6 +750,16 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const isReady = !loading && !loadingWidgets
   const hasUnsavedLayout = !sameLayout(widgets, savedWidgets)
   const previewPlacement = dragPreview ?? resizePreview
+  const isDemoMode = isReady && vendas.length === 0
+  const displayVendas = useMemo(
+    () => isDemoMode ? generateDemoVendas(period) : vendas,
+    [isDemoMode, vendas, period],
+  )
+  const displayCombinedVendas = useMemo(
+    () => isDemoMode ? generateDemoVendas('30d') : combinedVendas,
+    [isDemoMode, combinedVendas],
+  )
+  const displayCustoTotal = isDemoMode ? generateDemoCusto(period) : custoTotal
   const filteredProducts = useMemo(() => {
     const query = productSearch.trim().toLowerCase()
     if (!query) return allProducts
@@ -945,6 +982,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             Erro ao criar widget: {widgetError}
           </div>
         )}
+        {isDemoMode && !loadingWidgets && widgets.length > 0 && (
+          <div className="mb-5 flex items-center gap-2 rounded-xl border border-cyan-400/15 bg-cyan-400/5 px-4 py-2.5 text-xs text-cyan-300/70">
+            <span className="font-bold">Demo</span>
+            Sem vendas no período selecionado — dados simulados para visualização.
+          </div>
+        )}
 
         {!isReady ? (
           <div className="flex h-72 items-center justify-center">
@@ -1001,15 +1044,17 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                   <WidgetRenderer
                     key={w.id}
                     config={w}
-                    vendas={vendas}
-                    combinedVendas={combinedVendas}
+                    vendas={displayVendas}
+                    combinedVendas={displayCombinedVendas}
                     period={period}
                     exchangeRate={exchangeRate}
-                    custoTotal={custoTotal}
+                    custoTotal={displayCustoTotal}
                     editMode={editMode}
                     selected={selectedWidgetId === w.id}
                     onSelect={setSelectedWidgetId}
                     onDelete={deleteWidget}
+                    onDuplicate={editMode ? duplicateWidget : undefined}
+                    onEdit={editMode ? setEditingWidgetId : undefined}
                     onPreviewResize={previewWidgetResize}
                     onCommitResize={commitWidgetResize}
                   />
@@ -1029,7 +1074,16 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       <AddWidgetModal
         open={showAddWidget}
         onClose={() => setShowAddWidget(false)}
-        onAdd={addWidget}
+        onAdd={async (newWidgets) => {
+          for (const w of newWidgets) await addWidget(w)
+        }}
+      />
+
+      <EditWidgetModal
+        open={editingWidgetId !== null}
+        widget={widgets.find(w => w.id === editingWidgetId) ?? null}
+        onClose={() => setEditingWidgetId(null)}
+        onSave={updateWidget}
       />
 
       <Modal

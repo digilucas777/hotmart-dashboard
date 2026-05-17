@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react'
 import { useDraggable } from '@dnd-kit/core'
-import { GripVertical, Trash2 } from 'lucide-react'
+import { Copy, GripVertical, Pencil, Trash2 } from 'lucide-react'
 import { computeWidgetData, getValueFormat } from '@/lib/utils'
 import type { WidgetConfig, Venda, Period } from '@/lib/types'
 import { MetricWidget } from './MetricWidget'
@@ -42,6 +42,8 @@ export function WidgetRenderer({
   selected,
   onSelect,
   onDelete,
+  onDuplicate,
+  onEdit,
   onPreviewResize,
   onCommitResize,
 }: {
@@ -55,21 +57,26 @@ export function WidgetRenderer({
   selected: boolean
   onSelect: (id: string) => void
   onDelete: (id: string) => void
+  onDuplicate?: (id: string) => void
+  onEdit?: (id: string) => void
   onPreviewResize?: (id: string, width: number, height: number, direction: ResizeDirection, deltaX: number, deltaY: number) => void
   onCommitResize?: (id: string, width: number, height: number, direction: ResizeDirection, deltaX: number, deltaY: number) => void
 }) {
   const cardRef = useRef<HTMLDivElement>(null)
   const [liveSize, setLiveSize] = useState<{ w: number; h: number } | null>(null)
   const [resizePct, setResizePct] = useState<{ w: number; h: number } | null>(null)
+  const [chartPeriod, setChartPeriod] = useState<Period>(period)
 
   const { attributes, listeners, setNodeRef, isDragging } =
     useDraggable({ id: config.id, disabled: !editMode })
 
   const isMetaWidget = config.type.startsWith('meta-')
+  const isChartWidget = config.type === 'line' || config.type === 'bar' || config.type === 'meta-chart'
+  const effectivePeriod = isChartWidget ? chartPeriod : period
 
   const data = isMetaWidget
-    ? computeMetaWidgetData(config.data_source, period)
-    : computeWidgetData(vendas, config.data_source, period, exchangeRate, custoTotal)
+    ? computeMetaWidgetData(config.data_source, effectivePeriod)
+    : computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, custoTotal)
 
   const isBRL = !isMetaWidget && getValueFormat(config.data_source) === 'brl'
 
@@ -236,6 +243,30 @@ export function WidgetRenderer({
               }`}
               onPointerDown={e => e.stopPropagation()}
             >
+              {onEdit && (
+                <button
+                  onClick={e => {
+                    e.stopPropagation()
+                    onEdit(config.id)
+                  }}
+                  title="Editar widget"
+                  className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-white/5 hover:text-slate-400"
+                >
+                  <Pencil size={13} />
+                </button>
+              )}
+              {onDuplicate && (
+                <button
+                  onClick={e => {
+                    e.stopPropagation()
+                    onDuplicate(config.id)
+                  }}
+                  title="Duplicar widget"
+                  className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-white/5 hover:text-slate-400"
+                >
+                  <Copy size={13} />
+                </button>
+              )}
               <button
                 onClick={e => {
                   e.stopPropagation()
@@ -282,6 +313,8 @@ export function WidgetRenderer({
             isBRL={isBRL}
             dualCurrency={data.dualCurrency}
             chartHeight={chartHeight}
+            localPeriod={chartPeriod}
+            onChangePeriod={setChartPeriod}
           />
         )}
         {config.type === 'bar' && data.kind === 'series' && (
@@ -291,6 +324,8 @@ export function WidgetRenderer({
             isBRL={isBRL}
             dualCurrency={data.dualCurrency}
             chartHeight={chartHeight}
+            localPeriod={chartPeriod}
+            onChangePeriod={setChartPeriod}
           />
         )}
         {config.type === 'pie' && data.kind === 'series' && (
@@ -315,7 +350,13 @@ export function WidgetRenderer({
           <MetaFunnelWidget title={config.title} data={data} />
         )}
         {config.type === 'meta-chart' && data.kind === 'meta-chart' && (
-          <MetaChartWidget title={config.title} data={data} chartHeight={chartHeight} />
+          <MetaChartWidget
+            title={config.title}
+            data={data}
+            chartHeight={chartHeight}
+            localPeriod={chartPeriod}
+            onChangePeriod={setChartPeriod}
+          />
         )}
         {config.type === 'meta-campaign' && data.kind === 'meta-campaign' && (
           <MetaCampaignWidget title={config.title} data={data} />
