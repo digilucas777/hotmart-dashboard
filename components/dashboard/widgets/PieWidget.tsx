@@ -46,7 +46,8 @@ export function PieWidget({
   const total = data.reduce((sum, item) => sum + item.value, 0)
   const top = data.reduce((best, item) => item.value > best.value ? item : best, data[0])
   const topPercent = total > 0 ? Math.round((top.value / total) * 100) : 0
-  const chartAreaHeight = Math.max(160, Math.min(chartHeight - 12, 320))
+  const legendRows = Math.ceil(data.length / 2)
+  const chartAreaHeight = Math.max(100, Math.min(chartHeight - legendRows * 24 - 20, 300))
 
   return (
     <div className="relative z-[1] flex h-full flex-col p-4">
@@ -84,7 +85,7 @@ export function PieWidget({
             </PieChart>
           </ResponsiveContainer>
         </div>
-        <div className="mt-1 grid max-h-28 grid-cols-1 gap-x-3 gap-y-2 overflow-y-auto pr-1 sm:grid-cols-2">
+        <div className="mt-1 grid grid-cols-1 gap-x-3 gap-y-1.5 overflow-hidden sm:grid-cols-2">
           {data.map((item, index) => (
             <div key={item.name} className="flex min-w-0 items-center gap-2 text-xs font-medium text-[var(--dash-text)]">
               <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />

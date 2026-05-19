@@ -62,14 +62,14 @@ export function MetricWidget({
       <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl shadow-md shadow-cyan-500/10 ${colors.bg}`}>
         <Icon size={16} className={colors.icon} />
       </div>
-      <div className="min-w-0 overflow-hidden">
+      <div className="min-w-0">
         <p className="truncate text-xs font-semibold leading-4 text-[var(--dash-faint)]">{title}</p>
-        <p className="mt-1.5 overflow-hidden text-[1.6rem] font-extrabold leading-tight text-[var(--dash-text)] drop-shadow [word-break:break-word]">
+        <p className="mt-1.5 truncate text-2xl font-extrabold leading-tight text-[var(--dash-text)] drop-shadow">
           {value}
         </p>
-        {subValue && <p className="mt-1 line-clamp-2 text-xs leading-4 text-[var(--dash-faint)]">{subValue}</p>}
+        {subValue && <p className="mt-1 truncate text-xs leading-4 text-[var(--dash-faint)]">{subValue}</p>}
         {comparison && (
-          <p className={`mt-1 text-xs font-bold ${comparison.startsWith('↑') ? 'text-emerald-300' : comparison.startsWith('↓') ? 'text-red-300' : 'text-[var(--dash-faint)]'}`}>
+          <p className={`mt-0.5 truncate text-xs font-bold ${comparison.startsWith('↑') ? 'text-emerald-300' : comparison.startsWith('↓') ? 'text-red-300' : 'text-[var(--dash-faint)]'}`}>
             {comparison}
           </p>
         )}

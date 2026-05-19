@@ -290,7 +290,7 @@ function minRowSpanForType(type?: string): number {
   if (type === 'pie') return 14
   if (type === 'line' || type === 'bar') return 11
   if (type === 'table' || type === 'combined') return 15
-  return 8
+  return 9
 }
 
 export function DashboardClient({ projectId }: { projectId: string }) {
