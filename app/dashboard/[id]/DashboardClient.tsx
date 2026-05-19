@@ -466,6 +466,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         .from('vendas')
         .select('*')
         .in('hotmart_produto_id', hotmartIds)
+        .eq('status', 'approved')
         .order('data_venda', { ascending: false })
         .limit(8)
 
@@ -854,7 +855,34 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const displayVendas = vendas
   const displayCombinedVendas = combinedVendas
   const displayCustoTotal = custoTotal
-  const latestSale = recentVendas.find(v => v.status === 'approved') ?? recentVendas[0]
+  const approvedRecentVendas = recentVendas.filter(v => v.status === 'approved')
+  const latestSale = approvedRecentVendas[0]
+  const countryRanking = useMemo(() => {
+    const groups = new Map<string, { label: string; count: number; revenue: number }>()
+    for (const venda of vendas.filter(v => v.status === 'approved')) {
+      const code = (venda.pais || '').trim().toUpperCase()
+      const label = code ? code : 'Unknown'
+      const current = groups.get(label) ?? { label, count: 0, revenue: 0 }
+      current.count += 1
+      current.revenue += venda.valor ?? 0
+      groups.set(label, current)
+    }
+    return Array.from(groups.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 5)
+  }, [vendas])
+  const insights = useMemo(() => {
+    const approved = vendas.filter(v => v.status === 'approved')
+    const topCountry = countryRanking[0]?.label
+    const topProduct = Object.entries(approved.reduce<Record<string, number>>((acc, venda) => {
+      const key = venda.produto || 'Produto'
+      acc[key] = (acc[key] ?? 0) + (venda.valor ?? 0)
+      return acc
+    }, {})).sort((a, b) => b[1] - a[1])[0]?.[0]
+    return [
+      approved.length > 0 ? `${approved.length} vendas aprovadas no período.` : 'Aguardando vendas aprovadas no período.',
+      topCountry ? `${topCountry} lidera em receita entre os países.` : 'Mapa de países pronto para novas vendas.',
+      topProduct ? `${topProduct} lidera o faturamento.` : 'Produtos aparecerão aqui assim que houver dados.',
+    ]
+  }, [countryRanking, vendas])
   void nowTick
   const filteredProducts = useMemo(() => {
     const query = productSearch.trim().toLowerCase()
@@ -984,16 +1012,18 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       </header>
 
       <main className="dashboard-main mx-auto max-w-[1400px] px-6 py-8">
-        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-          <PeriodFilter
-            value={period}
-            onChange={setPeriod}
-            customFrom={customFrom}
-            customTo={customTo}
-            updatedAt={lastUpdatedAt}
-            onCustomChange={(from, to) => { setCustomFrom(from); setCustomTo(to) }}
-          />
-          <div className="dashboard-panel flex items-center gap-3 rounded-2xl px-4 py-3 shadow-[0_0_35px_rgba(16,185,129,0.08)]">
+        <div className="dashboard-toolbar sticky top-[4.9rem] z-30 mb-8 flex flex-col gap-3 rounded-3xl border border-[var(--dash-border)] bg-[rgba(12,14,24,0.72)] p-3 shadow-[0_18px_60px_rgba(0,0,0,0.26)] backdrop-blur-2xl lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <PeriodFilter
+              value={period}
+              onChange={setPeriod}
+              customFrom={customFrom}
+              customTo={customTo}
+              updatedAt={lastUpdatedAt}
+              onCustomChange={(from, to) => { setCustomFrom(from); setCustomTo(to) }}
+            />
+          </div>
+          <div className="dashboard-panel flex shrink-0 items-center gap-3 rounded-2xl px-4 py-3 shadow-[0_0_35px_rgba(16,185,129,0.08)]">
             <span className="relative flex h-3 w-3">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
               <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-300 shadow-[0_0_16px_rgba(52,211,153,0.75)]" />
@@ -1003,7 +1033,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               <p className="text-xs text-[var(--dash-faint)]">Última venda {formatRelativeTime(latestSale?.data_venda)}</p>
             </div>
           </div>
-          <div className="dashboard-action-bar dashboard-panel flex max-w-full flex-nowrap items-center justify-end gap-2 overflow-x-auto rounded-2xl p-1.5">
+          <div className="dashboard-action-bar dashboard-panel ml-auto flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto rounded-2xl p-1.5">
             <button
               onClick={fetchVendas}
               title="Atualizar"
@@ -1218,20 +1248,51 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               <h3 className="text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-muted)]">Últimas vendas</h3>
               <span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_14px_rgba(52,211,153,0.8)]" />
             </div>
-            <div className="space-y-2">
-              {recentVendas.length === 0 ? (
+            <div className="relative max-h-[520px] space-y-2 overflow-hidden">
+              {approvedRecentVendas.length === 0 ? (
                 <p className="py-6 text-center text-xs text-[var(--dash-faint)]">Aguardando vendas</p>
-              ) : recentVendas.map(venda => (
-                <div key={venda.id} className="rounded-2xl border border-white/7 bg-white/[0.035] px-3 py-3">
+              ) : approvedRecentVendas.map(venda => {
+                const country = (venda.pais || '').trim().toUpperCase()
+                const countryLabel = country === 'GB' || country === 'UK' ? '🇬🇧 UK' : country ? `🌐 ${country}` : '🌐 Unknown'
+                return (
+                <div key={venda.id} className="group animate-[premiumSlideIn_.35s_ease-out] rounded-2xl border border-white/7 bg-white/[0.035] px-3 py-3 transition-all hover:border-emerald-300/20 hover:bg-white/[0.06] hover:shadow-[0_14px_35px_rgba(16,185,129,0.08)]">
                   <div className="mb-1 flex items-center justify-between gap-3">
                     <span className="text-xs font-black text-[var(--dash-text)]">
-                      {venda.pais === 'GB' || venda.pais === 'UK' ? '🇬🇧 UK' : venda.pais ?? '🌐'} • {venda.moeda === 'USD' ? `$${(venda.valor ?? 0).toFixed(0)}` : `R$${(venda.valor ?? 0).toFixed(0)}`}
+                      {countryLabel} • {venda.moeda === 'USD' ? `$${(venda.valor ?? 0).toFixed(0)}` : `R$${(venda.valor ?? 0).toFixed(0)}`}
                     </span>
-                    <span className="text-[10px] text-[var(--dash-faint)]">{formatRelativeTime(venda.data_venda)}</span>
+                    <span className="rounded-full bg-emerald-400/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-300">Live</span>
                   </div>
                   <p className="line-clamp-2 text-xs font-semibold text-[var(--dash-muted)]">{venda.produto ?? 'Produto'}</p>
+                  <p className="mt-2 text-[10px] text-[var(--dash-faint)]">{formatRelativeTime(venda.data_venda)}</p>
                 </div>
-              ))}
+              )})}
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-[var(--dash-panel)] to-transparent" />
+            </div>
+            <div className="mt-5 border-t border-white/8 pt-4">
+              <h3 className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-muted)]">Insights automáticos</h3>
+              <div className="space-y-2">
+                {insights.map((item, index) => (
+                  <div key={index} className="rounded-2xl border border-white/7 bg-white/[0.03] px-3 py-2 text-xs text-[var(--dash-muted)]">
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="mt-5 border-t border-white/8 pt-4">
+              <h3 className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-muted)]">Mapa de países</h3>
+              <div className="space-y-2">
+                {(countryRanking.length ? countryRanking : [{ label: 'Unknown', count: 0, revenue: 0 }]).map((country, index) => (
+                  <div key={country.label} className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-white/[0.025] px-3 py-2">
+                    <div>
+                      <p className="text-xs font-bold text-[var(--dash-text)]">{country.label === 'Unknown' ? '🌐 Unknown' : `🌐 ${country.label}`}</p>
+                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/5">
+                        <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-400" style={{ width: `${Math.max(8, 100 - index * 18)}%` }} />
+                      </div>
+                    </div>
+                    <p className="text-[10px] font-bold text-[var(--dash-faint)]">{country.count} vendas</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </aside>
           </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { CalendarDays, X } from 'lucide-react'
+import { CalendarDays, Clock3, X } from 'lucide-react'
 import type { Period } from '@/lib/types'
 import { formatPeriodContext } from '@/lib/utils'
 
@@ -49,9 +49,15 @@ export function PeriodFilter({
     return { from: parseLocal(customFrom), to: new Date(parseLocal(customTo).getTime() + 86_400_000) }
   }, [value, customFrom, customTo])
 
+  const rangeLabel = useMemo(() => {
+    const range = value === 'custom' ? customRange : undefined
+    const [prefix, rest] = formatPeriodContext(value, range).split('•').map(part => part.trim())
+    return { prefix, rest }
+  }, [customRange, value])
+
   const updatedLabel = updatedAt
-    ? `Atualizado há ${Math.max(0, Math.floor((Date.now() - updatedAt.getTime()) / 1000))} segundos`
-    : 'Atualizando dados'
+    ? `Atualizado há ${Math.max(0, Math.floor((Date.now() - updatedAt.getTime()) / 1000))}s`
+    : 'Sincronizando'
 
   function openCustom() {
     setDraftFrom(customFrom)
@@ -103,10 +109,16 @@ export function PeriodFilter({
         </button>
       </div>
 
-      <div className="px-1 text-xs leading-relaxed text-[var(--dash-faint)]">
-        <span className="font-semibold text-[var(--dash-muted)]">{formatPeriodContext(value, customRange)}</span>
-        <span className="mx-2 text-[var(--dash-border-strong)]">•</span>
-        <span>{updatedLabel}</span>
+      <div className="flex flex-wrap items-center gap-2 px-1 text-xs leading-relaxed text-[var(--dash-faint)]">
+        <span className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.035] px-3 py-1.5">
+          <CalendarDays size={13} className="text-cyan-300" />
+          <span className="font-semibold text-[var(--dash-muted)]">Período analisado:</span>
+          <span className="font-bold text-[var(--dash-text)]">{rangeLabel.rest ?? rangeLabel.prefix}</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.025] px-3 py-1.5">
+          <Clock3 size={12} className="text-[var(--dash-faint)]" />
+          {updatedLabel}
+        </span>
       </div>
 
       {showCustom && (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import { Copy, GripVertical, Pencil, Trash2, X } from 'lucide-react'
@@ -82,6 +82,7 @@ export function WidgetRenderer({
   const isMetaWidget = config.type.startsWith('meta-')
   const isChartWidget = config.type === 'line' || config.type === 'bar' || config.type === 'meta-chart'
   const isTimeSeries = config.data_source === 'revenue_by_day' || config.data_source === 'sales_by_day'
+  const canExpand = ['line', 'bar', 'pie', 'combined', 'table', 'meta-chart', 'meta-funnel', 'meta-campaign', 'meta-creative'].includes(config.type)
   const effectivePeriod = isChartWidget && isTimeSeries && period !== 'custom' ? chartPeriod : period
 
   const data = isMetaWidget
@@ -200,6 +201,15 @@ export function WidgetRenderer({
     } : {}),
   }
 
+  useEffect(() => {
+    if (!expanded) return
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setExpanded(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [expanded])
+
   return (
     <div
       ref={setNodeRef}
@@ -214,7 +224,7 @@ export function WidgetRenderer({
         {...(editMode ? attributes : {})}
         {...(editMode ? listeners : {})}
         onClick={(e) => {
-          if (!editMode && !(e.target as HTMLElement).closest('button,input,a')) setExpanded(true)
+          if (canExpand && !editMode && !(e.target as HTMLElement).closest('button,input,a')) setExpanded(true)
         }}
         className={`dashboard-card group relative h-full rounded-2xl transition-all duration-200 ${
           isDragging
@@ -222,7 +232,7 @@ export function WidgetRenderer({
             : isSelected
               ? 'border-cyan-400/35'
               : 'hover:border-[var(--dash-border-strong)] hover:shadow-[0_22px_65px_var(--dash-glow-blue)]'
-        } ${editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        } ${editMode ? 'cursor-grab active:cursor-grabbing' : canExpand ? 'cursor-zoom-in' : ''}`}
         style={cardStyle}
       >
         {/* Premium selection ring overlay */}
@@ -248,7 +258,8 @@ export function WidgetRenderer({
                 backdropFilter: 'blur(8px)',
               }}
             >
-              {resizePct.w}% × {resizePct.h}%
+              <span className="block">Largura {resizePct.w}%</span>
+              <span className="block">Altura {resizePct.h}%</span>
             </div>
           </div>
         )}
@@ -400,37 +411,73 @@ export function WidgetRenderer({
           <MetaCreativeWidget title={config.title} data={data} />
         )}
       </div>
-      {expanded && !editMode && (
-        <div className="fixed inset-0 z-[90] bg-black/75 p-4 backdrop-blur-2xl sm:p-8" onClick={() => setExpanded(false)}>
+      {expanded && !editMode && canExpand && (
+        <div className="fixed inset-0 z-[90] animate-[premiumFadeIn_.18s_ease-out] bg-black/75 p-3 backdrop-blur-2xl sm:p-8" onClick={() => setExpanded(false)}>
           <div className="dashboard-card mx-auto flex h-full max-w-7xl flex-col overflow-hidden rounded-3xl" onClick={e => e.stopPropagation()}>
-            <div className="flex shrink-0 items-center justify-between border-b border-[var(--dash-border)] px-5 py-4">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-[var(--dash-border)] px-5 py-4">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">Widget expandido</p>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">Analytics expandido</p>
                 <h2 className="text-lg font-black text-[var(--dash-text)]">{config.title}</h2>
+                <p className="mt-1 text-xs text-[var(--dash-faint)]">Período ativo • comparativo automático • atualizado em tempo real</p>
               </div>
-              <button onClick={() => setExpanded(false)} className="rounded-xl p-2 text-[var(--dash-faint)] hover:bg-white/5 hover:text-[var(--dash-text)]">
-                <X size={19} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-xs font-bold text-[var(--dash-muted)] hover:text-[var(--dash-text)]">Exportar PNG</button>
+                <button className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-xs font-bold text-[var(--dash-muted)] hover:text-[var(--dash-text)]">PDF</button>
+                <button onClick={() => setExpanded(false)} className="rounded-xl p-2 text-[var(--dash-faint)] hover:bg-white/5 hover:text-[var(--dash-text)]">
+                  <X size={19} />
+                </button>
+              </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto p-2">
-              {config.type === 'metric' && data.kind === 'metric' && (
-                <MetricWidget title={config.title} value={data.value} subValue={data.subValue} dataSource={config.data_source} comparison={comparison} />
-              )}
-              {config.type === 'line' && data.kind === 'series' && (
-                <LineChartWidget title={config.title} points={data.points} isBRL={isBRL} dualCurrency={data.dualCurrency} chartHeight={520} />
-              )}
-              {config.type === 'bar' && data.kind === 'series' && (
-                <BarChartWidget title={config.title} points={data.points} isBRL={isBRL} dualCurrency={data.dualCurrency} chartHeight={520} />
-              )}
-              {config.type === 'pie' && data.kind === 'series' && (
-                <PieWidget title={config.title} points={data.points} chartHeight={520} />
-              )}
-              {config.type === 'combined' && data.kind === 'combined' && (
-                <CombinedChartWidget title={config.title} vendas={combinedVendas ?? vendas} chartHeight={620} />
-              )}
-              {config.type === 'table' && data.kind === 'table' && (
-                <SalesTable vendas={data.vendas} exchangeRate={exchangeRate} heightMode="fill" />
-              )}
+            <div className="grid min-h-0 flex-1 gap-4 overflow-auto p-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+              <div className="min-h-[420px] rounded-3xl border border-white/8 bg-white/[0.025] p-3">
+                {config.type === 'line' && data.kind === 'series' && (
+                  <LineChartWidget title={config.title} points={data.points} isBRL={isBRL} dualCurrency={data.dualCurrency} chartHeight={560} />
+                )}
+                {config.type === 'bar' && data.kind === 'series' && (
+                  <BarChartWidget title={config.title} points={data.points} isBRL={isBRL} dualCurrency={data.dualCurrency} chartHeight={560} />
+                )}
+                {config.type === 'pie' && data.kind === 'series' && (
+                  <PieWidget title={config.title} points={data.points} chartHeight={560} />
+                )}
+                {config.type === 'combined' && data.kind === 'combined' && (
+                  <CombinedChartWidget title={config.title} vendas={combinedVendas ?? vendas} chartHeight={620} />
+                )}
+                {config.type === 'table' && data.kind === 'table' && (
+                  <SalesTable vendas={data.vendas} exchangeRate={exchangeRate} heightMode="fill" />
+                )}
+                {config.type === 'meta-chart' && data.kind === 'meta-chart' && (
+                  <MetaChartWidget title={config.title} data={data} chartHeight={560} localPeriod={chartPeriod} onChangePeriod={setChartPeriod} />
+                )}
+                {config.type === 'meta-funnel' && data.kind === 'meta-funnel' && (
+                  <MetaFunnelWidget title={config.title} data={data} />
+                )}
+                {config.type === 'meta-campaign' && data.kind === 'meta-campaign' && (
+                  <MetaCampaignWidget title={config.title} data={data} />
+                )}
+                {config.type === 'meta-creative' && data.kind === 'meta-creative' && (
+                  <MetaCreativeWidget title={config.title} data={data} />
+                )}
+              </div>
+              <div className="space-y-3">
+                {[
+                  ['Comparativo', comparison ?? `vs ${formatPeriodComparisonLabel(period)}`],
+                  ['Amostra', `${vendas.length} registros no período`],
+                  ['Status', loading ? 'Sincronizando' : 'Atualizado'],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-3xl border border-white/8 bg-white/[0.035] p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">{label}</p>
+                    <p className="mt-2 text-sm font-bold text-[var(--dash-text)]">{value}</p>
+                  </div>
+                ))}
+                <div className="rounded-3xl border border-white/8 bg-white/[0.035] p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">Insights rápidos</p>
+                  <p className="mt-2 text-xs leading-relaxed text-[var(--dash-muted)]">Revise tendências, compare períodos e exporte visões sem sair do layout.</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center justify-between border-t border-[var(--dash-border)] px-5 py-3 text-xs text-[var(--dash-faint)]">
+              <span>ESC fecha • clique fora fecha</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_12px_rgba(52,211,153,0.8)]" />Atualização ativa</span>
             </div>
           </div>
         </div>

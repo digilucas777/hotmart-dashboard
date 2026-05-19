@@ -1,15 +1,6 @@
 'use client'
 
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-} from 'recharts'
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts'
 import { formatBRL, formatUSD } from '@/lib/utils'
 import type { SeriesPoint } from '@/lib/utils'
 import type { Period } from '@/lib/types'
@@ -18,6 +9,14 @@ const CHART_PERIODS: { value: Period; label: string }[] = [
   { value: 'thisWeek', label: 'Semana' },
   { value: 'thisMonth', label: 'Mês' },
   { value: 'lastMonth', label: 'Último mês' },
+]
+
+const DEMO_POINTS: SeriesPoint[] = [
+  { label: 'Seg', value: 18, valueBRL: 18, valueUSD: 3 },
+  { label: 'Ter', value: 26, valueBRL: 26, valueUSD: 5 },
+  { label: 'Qua', value: 21, valueBRL: 21, valueUSD: 4 },
+  { label: 'Qui', value: 38, valueBRL: 38, valueUSD: 7 },
+  { label: 'Sex', value: 44, valueBRL: 44, valueUSD: 8 },
 ]
 
 function CustomTooltip({
@@ -33,17 +32,17 @@ function CustomTooltip({
 }) {
   if (!active || !payload?.length) return null
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0f0f1e] px-3 py-2.5 shadow-xl">
-      <p className="mb-1.5 text-xs text-slate-500">{label}</p>
+    <div className="rounded-2xl border border-cyan-300/20 bg-[#080a12]/95 px-3 py-2.5 shadow-[0_0_28px_rgba(0,212,255,0.18)] backdrop-blur-xl">
+      <p className="mb-1.5 text-xs text-slate-400">{label}</p>
       {dualCurrency ? (
         <>
           {payload.find(p => p.dataKey === 'valueBRL') && (
-            <p className="text-xs font-semibold text-green-400">
+            <p className="text-xs font-semibold text-emerald-300">
               BRL: {formatBRL(payload.find(p => p.dataKey === 'valueBRL')!.value)}
             </p>
           )}
           {payload.find(p => p.dataKey === 'valueUSD') && (
-            <p className="text-xs font-semibold text-indigo-400">
+            <p className="text-xs font-semibold text-cyan-300">
               USD: {formatUSD(payload.find(p => p.dataKey === 'valueUSD')!.value)}
             </p>
           )}
@@ -74,6 +73,9 @@ export function LineChartWidget({
   localPeriod?: Period
   onChangePeriod?: (p: Period) => void
 }) {
+  const empty = points.length === 0 || points.every(point => (point.value ?? 0) === 0 && (point.valueBRL ?? 0) === 0 && (point.valueUSD ?? 0) === 0)
+  const displayPoints = empty ? DEMO_POINTS : points
+
   return (
     <div className="relative z-[1] p-5">
       <div className="mb-4 flex items-center justify-between gap-2">
@@ -97,17 +99,11 @@ export function LineChartWidget({
         )}
       </div>
       <ResponsiveContainer width="100%" height={chartHeight}>
-        <LineChart data={points} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-          <XAxis
-            dataKey="label"
-            tick={{ fill: '#475569', fontSize: 11 }}
-            axisLine={false}
-            tickLine={false}
-            interval="preserveStartEnd"
-          />
+        <LineChart data={displayPoints} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.045)" vertical={false} />
+          <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
           <YAxis
-            tick={{ fill: '#475569', fontSize: 11 }}
+            tick={{ fill: '#64748b', fontSize: 11 }}
             axisLine={false}
             tickLine={false}
             tickFormatter={v =>
@@ -117,42 +113,23 @@ export function LineChartWidget({
             }
             width={55}
           />
-          <Tooltip content={<CustomTooltip dualCurrency={dualCurrency} />} />
+          <Tooltip content={<CustomTooltip dualCurrency={dualCurrency} />} wrapperStyle={{ outline: 'none' }} cursor={{ stroke: 'rgba(0,212,255,0.22)', strokeWidth: 1 }} />
           {dualCurrency ? (
             <>
-              <Legend
-                formatter={(value) => value === 'valueBRL' ? 'BRL' : 'USD'}
-                wrapperStyle={{ fontSize: 11, color: '#475569' }}
-              />
-              <Line
-                type="monotone"
-                dataKey="valueBRL"
-                stroke="#22c55e"
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4, fill: '#22c55e', strokeWidth: 0 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="valueUSD"
-                stroke="#00d4ff"
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4, fill: '#00d4ff', strokeWidth: 0 }}
-              />
+              <Legend formatter={(value) => value === 'valueBRL' ? 'BRL' : 'USD'} wrapperStyle={{ fontSize: 11, color: '#64748b' }} />
+              <Line type="monotone" dataKey="valueBRL" stroke="#22c55e" strokeWidth={2.4} dot={false} activeDot={{ r: 4, fill: '#22c55e', strokeWidth: 0 }} isAnimationActive />
+              <Line type="monotone" dataKey="valueUSD" stroke="#00d4ff" strokeWidth={2.4} dot={false} activeDot={{ r: 4, fill: '#00d4ff', strokeWidth: 0 }} isAnimationActive />
             </>
           ) : (
-            <Line
-              type="monotone"
-              dataKey="value"
-              stroke="#00d4ff"
-              strokeWidth={2.5}
-              dot={false}
-              activeDot={{ r: 4, fill: '#00d4ff', strokeWidth: 0 }}
-            />
+            <Line type="monotone" dataKey="value" stroke="#00d4ff" strokeWidth={2.6} dot={false} activeDot={{ r: 4, fill: '#00d4ff', strokeWidth: 0 }} isAnimationActive />
           )}
         </LineChart>
       </ResponsiveContainer>
+      {empty && (
+        <div className="pointer-events-none absolute inset-x-5 bottom-5 rounded-2xl border border-white/8 bg-black/20 px-3 py-2 text-xs font-semibold text-[var(--dash-faint)] backdrop-blur">
+          Aguardando dados
+        </div>
+      )}
     </div>
   )
 }

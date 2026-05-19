@@ -8,7 +8,7 @@ function fmtNum(n: number): string {
   return n.toLocaleString('pt-BR')
 }
 
-const STEP_COLORS = ['#6366f1', '#8b5cf6', '#a855f7', '#c026d3', '#10b981']
+const STEP_COLORS = ['#00d4ff', '#38bdf8', '#6366f1', '#8b5cf6', '#10b981']
 
 export function MetaFunnelWidget({ title, data }: { title: string; data: MetaFunnelResult }) {
   const maxCount = data.steps[0]?.count ?? 1
@@ -21,7 +21,7 @@ export function MetaFunnelWidget({ title, data }: { title: string; data: MetaFun
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">Meta Ads · Funil</p>
           <p className="text-sm font-bold text-[var(--dash-text)]">{title}</p>
         </div>
-        <span className="rounded-full bg-slate-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-400/50">
+        <span className="rounded-full bg-cyan-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-cyan-300/70">
           Demo
         </span>
       </div>
@@ -32,7 +32,7 @@ export function MetaFunnelWidget({ title, data }: { title: string; data: MetaFun
           const pct = maxCount > 0 ? (step.count / maxCount) * 100 : 0
           const color = STEP_COLORS[i] ?? '#6366f1'
           return (
-            <div key={step.label}>
+            <div key={step.label} className="rounded-2xl border border-white/7 bg-white/[0.025] p-2.5">
               <div className="mb-1.5 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="text-sm leading-none">{step.icon}</span>
@@ -52,15 +52,17 @@ export function MetaFunnelWidget({ title, data }: { title: string; data: MetaFun
                   )}
                 </div>
               </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-white/[0.05]">
+              <div className="mx-auto h-9 overflow-hidden rounded-xl bg-white/[0.045]" style={{ width: `${Math.max(34, pct)}%` }}>
                 <div
-                  className="h-full rounded-full transition-all duration-700"
+                  className="flex h-full items-center justify-center rounded-xl text-[10px] font-black text-white/90 transition-all duration-700"
                   style={{
-                    width: `${pct}%`,
+                    width: '100%',
                     background: `linear-gradient(90deg, ${color}bb, ${color})`,
-                    boxShadow: `0 0 8px ${color}44`,
+                    boxShadow: `0 0 18px ${color}44`,
                   }}
-                />
+                >
+                  {pct.toFixed(0)}%
+                </div>
               </div>
             </div>
           )
