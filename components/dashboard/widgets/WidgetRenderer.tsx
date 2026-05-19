@@ -1,6 +1,7 @@
 'use client'
 
 import { memo, useEffect, useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import { Copy, GripVertical, Pencil, Trash2, X } from 'lucide-react'
@@ -332,13 +333,8 @@ function WidgetRendererBase({
         )}
 
         {loading && (
-          <div className="pointer-events-none absolute inset-0 z-40 rounded-2xl bg-[var(--dash-panel)]/88 p-5">
-            <div className="h-full animate-pulse space-y-4">
-              <div className="h-10 w-10 rounded-xl bg-white/10" />
-              <div className="h-3 w-1/3 rounded-full bg-white/10" />
-              <div className="h-8 w-2/3 rounded-full bg-white/10" />
-              <div className="h-3 w-1/2 rounded-full bg-white/10" />
-            </div>
+          <div className="pointer-events-none absolute inset-x-4 top-3 z-40 h-0.5 overflow-hidden rounded-full bg-white/5">
+            <div className="h-full w-1/3 rounded-full bg-cyan-300/70" />
           </div>
         )}
 
@@ -411,11 +407,11 @@ function WidgetRendererBase({
           <MetaCreativeWidget title={config.title} data={data} />
         )}
       </div>
-      {expanded && !editMode && canExpand && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-3 sm:p-6" onClick={() => setExpanded(false)}>
+      {expanded && !editMode && canExpand && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/45 p-3 sm:p-6" onClick={() => setExpanded(false)}>
           <div
-            className="dashboard-card flex w-full max-w-[1400px] flex-col overflow-hidden rounded-2xl"
-            style={{ maxHeight: '90vh' }}
+            className="dashboard-expanded-modal flex w-full max-w-[1400px] flex-col overflow-hidden rounded-2xl border border-[var(--dash-border)] bg-[var(--dash-panel-strong)] shadow-2xl"
+            style={{ maxHeight: '90vh', height: 'min(90vh, 820px)' }}
             onClick={e => e.stopPropagation()}
           >
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--dash-border)] px-5 py-3">
@@ -484,7 +480,8 @@ function WidgetRendererBase({
               <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_12px_rgba(52,211,153,0.8)]" />Atualização ativa</span>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

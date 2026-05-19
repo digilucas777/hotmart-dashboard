@@ -5,7 +5,6 @@ import {
   Pie,
   Cell,
   Tooltip,
-  Legend,
   ResponsiveContainer,
 } from 'recharts'
 import type { SeriesPoint } from '@/lib/utils'
@@ -54,38 +53,44 @@ export function PieWidget({
         <h3 className="text-sm font-semibold text-[var(--dash-text)]">{title}</h3>
         {empty && <span className="rounded-full bg-white/5 px-2 py-1 text-[10px] font-bold text-[var(--dash-faint)]">Demo</span>}
       </div>
-      <div className="relative flex-1 drop-shadow-[0_0_22px_var(--dash-glow-blue)]">
-        <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--dash-border)] bg-[color:var(--dash-panel)]/75 text-center shadow-[0_0_28px_var(--dash-glow-blue)] backdrop-blur-xl">
+      <div className="relative min-h-0 flex-1">
+        <div className="relative grid h-full min-h-[160px] place-items-center">
+          <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[var(--dash-border)] bg-[color:var(--dash-panel)]/90 text-center shadow-sm">
           <p className="text-lg font-black text-[var(--dash-text)]">{topPercent}%</p>
+            </div>
         </div>
         <ResponsiveContainer width="100%" height={chartHeight}>
-          <PieChart margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+          <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
           <Pie
             data={data}
             cx="50%"
-            cy="48%"
-            innerRadius="46%"
+            cy="50%"
+            innerRadius="48%"
             outerRadius="66%"
             paddingAngle={2}
             dataKey="value"
-            animationDuration={180}
-            label={({ percent }) => percent ? `${Math.round(percent * 100)}%` : ''}
+            animationDuration={120}
+            label={false}
             labelLine={false}
+            isAnimationActive={false}
           >
             {data.map((_, i) => (
               <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="rgba(8,10,18,0.7)" strokeWidth={2} />
             ))}
           </Pie>
           <Tooltip content={<CustomTooltip />} />
-          <Legend
-            iconType="circle"
-            iconSize={7}
-            formatter={value => (
-              <span style={{ color: '#64748b', fontSize: 12 }}>{value}</span>
-            )}
-          />
           </PieChart>
         </ResponsiveContainer>
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+          {data.slice(0, 6).map((item, index) => (
+            <div key={item.name} className="flex min-w-0 items-center gap-1.5 text-[10px] text-[var(--dash-faint)]">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
+              <span className="truncate">{item.name}</span>
+            </div>
+          ))}
+        </div>
       </div>
       {empty && <p className="mt-2 text-center text-xs font-semibold text-[var(--dash-faint)]">Aguardando dados</p>}
     </div>

@@ -200,6 +200,14 @@ body {
   opacity: 0.26;
 }
 
+.dashboard-expanded-modal {
+  color: var(--dash-text);
+}
+
+.dashboard-expanded-modal::before {
+  display: none;
+}
+
 .dashboard-grid {
   grid-template-columns: repeat(12, minmax(0, 1fr));
   grid-auto-flow: row dense;

@@ -1181,7 +1181,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                     custoTotal={displayCustoTotal}
                     customRange={customDateRange}
                     editMode={editMode}
-                    loading={loading}
+                    loading={false}
                     selected={selectedWidgetIds.has(w.id)}
                     isGroupDragging={!!activeWidgetId && selectedWidgetIds.has(w.id) && w.id !== activeWidgetId}
                     onSelect={(id, multi) => {
