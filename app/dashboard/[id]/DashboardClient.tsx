@@ -983,6 +983,26 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 <Button
                   variant="outline"
                   size="sm"
+                  onClick={undoLayout}
+                  disabled={undoStack.length === 0}
+                  title="Desfazer última edição"
+                  className="shrink-0"
+                >
+                  <Undo2 size={13} />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={redoLayout}
+                  disabled={redoStack.length === 0}
+                  title="Refazer edição"
+                  className="shrink-0"
+                >
+                  <Redo2 size={13} />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={organizeLayout}
                   title="Organizar widgets em sequência"
                   className="shrink-0"
@@ -1016,33 +1036,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               </>
             )}
             {!editMode && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={undoLayout}
-                  disabled={undoStack.length === 0}
-                  title="Desfazer última edição"
-                  className="shrink-0"
-                >
-                  <Undo2 size={13} />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={redoLayout}
-                  disabled={redoStack.length === 0}
-                  title="Refazer edição"
-                  className="shrink-0"
-                >
-                  <Redo2 size={13} />
-                </Button>
-              </>
-            )}
-            {!editMode && (
               <Button variant="outline" size="sm" onClick={openProductsModal} className="shrink-0">
                 <Settings size={13} />
-                Produtos
+                Configurar produtos
               </Button>
             )}
           </div>
@@ -1192,56 +1188,102 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         maxWidth="max-w-lg"
       >
         <div className="space-y-4">
-          <p className="text-sm text-slate-500">
-            Selecione os produtos deste projeto. Somente vendas desses produtos aparecerão no dashboard.
-          </p>
+          {/* Header info */}
+          <div className="flex items-center justify-between rounded-xl border border-white/8 bg-white/3 px-4 py-3">
+            <p className="text-xs text-slate-400">
+              Somente vendas dos produtos selecionados aparecem no dashboard.
+            </p>
+            {linkedIds.length > 0 && (
+              <span className="ml-3 shrink-0 rounded-full bg-indigo-500/20 px-2.5 py-0.5 text-xs font-bold text-indigo-300">
+                {linkedIds.length} selecionado{linkedIds.length !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+
+          {/* Search */}
           <div className="relative">
-            <Search
-              size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600"
-            />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
             <input
               type="text"
               value={productSearch}
               onChange={e => setProductSearch(e.target.value)}
-              placeholder="Pesquisar produto pelo nome..."
+              placeholder="Buscar por nome ou ID..."
               className="h-10 w-full rounded-xl border border-white/10 bg-[#10101d] pl-9 pr-3 text-sm text-slate-200 placeholder-slate-600 outline-none transition-colors focus:border-indigo-500/60"
             />
           </div>
-          {allProducts.length === 0 ? (
-            <p className="py-4 text-center text-sm text-slate-600">
-              Nenhum produto cadastrado. Aguarde os webhooks da Hotmart.
-            </p>
-          ) : filteredProducts.length === 0 ? (
-            <p className="py-4 text-center text-sm text-slate-600">
-              Nenhum produto encontrado.
-            </p>
-          ) : (
-            <div className="max-h-60 space-y-1 overflow-y-auto">
-              {filteredProducts.map(p => (
-                <label
-                  key={p.id}
-                  className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-white/5"
-                >
-                  <input
-                    type="checkbox"
-                    checked={linkedIds.includes(p.id)}
-                    onChange={e =>
-                      setLinkedIds(prev =>
-                        e.target.checked ? [...prev, p.id] : prev.filter(id => id !== p.id),
-                      )
-                    }
-                    className="h-4 w-4 rounded accent-indigo-500"
-                  />
-                  <div>
-                    <p className="text-sm text-slate-200">{p.nome}</p>
-                    <p className="font-mono text-xs text-slate-600">{p.hotmart_id}</p>
-                  </div>
-                </label>
-              ))}
+
+          {/* Select all / deselect all */}
+          {allProducts.length > 0 && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => setLinkedIds(allProducts.map(p => p.id))}
+                className="text-xs font-medium text-indigo-400 transition-colors hover:text-indigo-300"
+              >
+                Selecionar todos
+              </button>
+              <span className="text-slate-700">·</span>
+              <button
+                onClick={() => setLinkedIds([])}
+                className="text-xs font-medium text-slate-500 transition-colors hover:text-slate-300"
+              >
+                Limpar seleção
+              </button>
             </div>
           )}
-          <div className="flex gap-2 pt-2">
+
+          {/* Product list */}
+          {allProducts.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-8">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5">
+                <Settings size={20} className="text-slate-600" />
+              </div>
+              <p className="text-sm text-slate-500">Nenhum produto cadastrado.</p>
+              <p className="text-xs text-slate-600">Aguarde os webhooks da Hotmart.</p>
+            </div>
+          ) : filteredProducts.length === 0 ? (
+            <p className="py-4 text-center text-sm text-slate-600">Nenhum produto encontrado.</p>
+          ) : (
+            <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
+              {filteredProducts.map(p => {
+                const checked = linkedIds.includes(p.id)
+                return (
+                  <label
+                    key={p.id}
+                    className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-3 transition-all ${
+                      checked
+                        ? 'border-indigo-500/30 bg-indigo-500/8'
+                        : 'border-transparent bg-white/3 hover:border-white/8 hover:bg-white/5'
+                    }`}
+                  >
+                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-black ${
+                      checked ? 'bg-indigo-500 text-white' : 'bg-white/8 text-slate-400'
+                    }`}>
+                      {checked
+                        ? <Check size={14} />
+                        : p.nome.charAt(0).toUpperCase()
+                      }
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-slate-200">{p.nome}</p>
+                      <p className="font-mono text-[11px] text-slate-600">{p.hotmart_id}</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={e =>
+                        setLinkedIds(prev =>
+                          e.target.checked ? [...prev, p.id] : prev.filter(id => id !== p.id),
+                        )
+                      }
+                      className="sr-only"
+                    />
+                  </label>
+                )
+              })}
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-1">
             <Button variant="ghost" className="flex-1" onClick={() => setShowProducts(false)}>
               Cancelar
             </Button>

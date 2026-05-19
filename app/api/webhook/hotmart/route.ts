@@ -48,8 +48,9 @@ export async function POST(req: NextRequest) {
     const priceObj = dados.purchase?.original_offer_price ?? dados.purchase?.price
     const priceValue: number = priceObj?.value ?? 0
     const moeda: string = priceObj?.currency_value ?? 'BRL'
+    // Only subtract marketplace commission when it's in the same currency as the sale price
     const marketplaceCommission: number = ((dados.commissions ?? []) as HotmartCommission[])
-      .find((c) => c.source === 'MARKETPLACE')?.value ?? 0
+      .find((c) => c.source === 'MARKETPLACE' && c.currency_value === moeda)?.value ?? 0
     const status = mapStatus(evento)
     const valor = status === 'abandoned'
       ? 0
