@@ -120,15 +120,19 @@ export function normalizePagamento(method?: string | null): string {
   if (!method) return 'Outros'
   const m = method.toUpperCase()
   if (m.includes('PAYPAL')) return 'PayPal'
+  if (m.includes('GOOGLE_PAY') || m.includes('GOOGLEPAY')) return 'Google Pay'
+  if (m.includes('SAMSUNG_PAY') || m.includes('SAMSUNGPAY')) return 'Samsung Pay'
   if (m.includes('APPLE_PAY') || m.includes('APPLEPAY')) return 'Apple Pay'
   if (m.includes('YAPE')) return 'Yape'
   if (m.includes('OXXO')) return 'Oxxo'
+  if (m.includes('CASH_PAYMENT')) return 'Dinheiro'
   if (m.includes('PIX')) return 'Pix'
   if (m.includes('VISA')) return 'Visa'
   if (m.includes('MASTERCARD') || m.includes('MASTER_CARD')) return 'Mastercard'
   if (m.includes('AMEX') || m.includes('AMERICAN_EXPRESS')) return 'Amex'
   if (m.includes('BOLETO') || m.includes('BILLET') || m.includes('BANK_SLIP')) return 'Boleto'
-  if (m.includes('CREDIT') || m.includes('CARD') || m.includes('CARTAO') || m.includes('CARTÃO') || m.includes('DEBIT'))
+  if (m.includes('DEBIT')) return 'Débito'
+  if (m.includes('CREDIT') || m.includes('CARD') || m.includes('CARTAO') || m.includes('CARTÃO'))
     return 'Cartão'
   return 'Outros'
 }

@@ -50,6 +50,22 @@ const GRID_ITEM_PADDING = 10
 const LAYOUT_STORAGE_PREFIX = 'dashboard-layout:'
 const THEME_STORAGE_KEY = 'dashboard-theme'
 
+function getMetricSnapRows(): [number, number, number] {
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 900
+  return [
+    Math.max(5, Math.round(vh * 0.05 / GRID_ROW_HEIGHT)),
+    Math.max(7, Math.round(vh * 0.07 / GRID_ROW_HEIGHT)),
+    Math.max(9, Math.round(vh * 0.09 / GRID_ROW_HEIGHT)),
+  ] as [number, number, number]
+}
+
+function snapToMetricRows(rowSpan: number): number {
+  const snaps = getMetricSnapRows()
+  return snaps.reduce((best, snap) =>
+    Math.abs(snap - rowSpan) < Math.abs(best - rowSpan) ? snap : best,
+  )
+}
+
 type DashboardTheme = 'dark' | 'light'
 
 type GridPlacement = {
@@ -73,7 +89,7 @@ function heightToRows(height?: string, type?: string) {
   if (height === 'small') return 6
   if (height === 'large') return 18
   if (height === 'extra') return 24
-  if (type === 'metric') return 7
+  if (type === 'metric') return getMetricSnapRows()[1]
   if (type === 'combined' || type === 'table') return 22
   if (type === 'line' || type === 'bar' || type === 'pie') return 18
   return 12
@@ -81,7 +97,9 @@ function heightToRows(height?: string, type?: string) {
 
 function normalizeRowSpan(widget: WidgetConfig) {
   const rowSpan = widget.row_span ?? heightToRows(widget.height, widget.type)
-  return rowSpan <= 4 ? heightToRows(widget.height, widget.type) : rowSpan
+  const raw = rowSpan <= 4 ? heightToRows(widget.height, widget.type) : rowSpan
+  if (widget.type === 'metric') return snapToMetricRows(raw)
+  return raw
 }
 
 function normalizeColSpan(span: number) {
@@ -287,6 +305,7 @@ function minColSpanForType(type?: string): number {
 }
 
 function minRowSpanForType(type?: string): number {
+  if (type === 'metric') return getMetricSnapRows()[0]
   if (type === 'pie') return 14
   if (type === 'line' || type === 'bar') return 11
   if (type === 'table' || type === 'combined') return 15
@@ -544,11 +563,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         GRID_COLUMNS - colSpan + 1,
         Math.max(1, Math.round(((currentCol - 1) * colStep + delta.x) / colStep) + 1),
       )
-      const intendedRow = Math.max(
+      const row_start = Math.max(
         1,
         Math.round(((currentRow - 1) * rowStep + delta.y) / rowStep) + 1,
       )
-      const row_start = Math.min(intendedRow, maxLayoutRow(widgets, widget.id))
 
       return { id, col_start, row_start, col_span: colSpan, row_span: rowSpan }
     },
@@ -724,6 +742,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
 
     row_span = Math.max(minRows, row_span)
+
+    if (widget.type === 'metric') {
+      row_span = snapToMetricRows(row_span)
+      if (affectsTop) {
+        row_start = Math.max(1, currentRow + currentRowSpan - row_span)
+      }
+    }
+
     return {
       id,
       col_start,
@@ -939,7 +965,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     const activeIds = selectedWidgetIds
     const deltaCol = previewPlacement.col_start - (dragged.col_start ?? 1)
     const deltaRow = previewPlacement.row_start - (dragged.row_start ?? 1)
-    const moved = widgets.map(w => {
+    return widgets.map(w => {
       if (w.id === draggedId) return applyPlacement(w, previewPlacement)
       if (activeIds.has(w.id)) {
         const colSpan = w.col_span ?? widthToSpan(w.width)
@@ -951,7 +977,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       }
       return w
     })
-    return resolveOverlapsMulti(moved, activeIds.has(draggedId) ? activeIds : new Set([draggedId, ...activeIds]))
   }, [previewPlacement, widgets, selectedWidgetIds])
 
   return (
