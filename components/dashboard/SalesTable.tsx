@@ -7,6 +7,7 @@ import {
   formatBRL,
   formatUSD,
   formatDateTime,
+  getSaleAmount,
   statusLabel,
   normalizePagamento,
   parseOrigem,
@@ -144,7 +145,9 @@ export function SalesTable({
                 </td>
               </tr>
             ) : (
-              filtered.map(v => (
+              filtered.map(v => {
+                const amount = getSaleAmount(v)
+                return (
                 <tr
                   key={v.id}
                   className="border-b border-[var(--dash-border)]/60 transition-colors last:border-0 hover:bg-white/5"
@@ -181,11 +184,11 @@ export function SalesTable({
                   <td className="px-4 py-2.5">
                     {v.moeda === 'USD' ? (
                       <div>
-                        <p className="text-xs font-semibold tabular-nums text-[var(--dash-text)]">{formatUSD(v.valor ?? 0)}</p>
-                        <p className="mt-0.5 text-[10px] tabular-nums text-[var(--dash-faint)]">≈ {formatBRL((v.valor ?? 0) * exchangeRate)}</p>
+                        <p className="text-xs font-semibold tabular-nums text-[var(--dash-text)]">{formatUSD(amount)}</p>
+                        <p className="mt-0.5 text-[10px] tabular-nums text-[var(--dash-faint)]">≈ {formatBRL(amount * exchangeRate)}</p>
                       </div>
                     ) : (
-                      <p className="text-xs font-semibold tabular-nums text-[var(--dash-text)]">{formatBRL(v.valor ?? 0)}</p>
+                      <p className="text-xs font-semibold tabular-nums text-[var(--dash-text)]">{formatBRL(amount)}</p>
                     )}
                   </td>
                   <td className="px-4 py-2.5">
@@ -197,7 +200,7 @@ export function SalesTable({
                     {parseOrigem(v.origem)}
                   </td>
                 </tr>
-              ))
+              )})
             )}
           </tbody>
         </table>
