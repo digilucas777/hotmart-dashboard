@@ -102,6 +102,7 @@ export type WidgetDataSource =
   | 'margem_lucro'
   | 'roas'
   | 'cpa'
+  | 'commission'
   | 'combined_by_day'
   | MetaDataSource
 

@@ -293,6 +293,14 @@ export function computeWidgetData(
         subValue: `${approved.length} vendas · custo ${formatBRL(custoTotal)}`,
       }
     }
+    case 'commission': {
+      const commission = totalConverted * 0.18
+      return {
+        kind: 'metric',
+        value: formatBRL(commission),
+        subValue: `18% de ${formatBRL(totalConverted)}`,
+      }
+    }
 
     case 'revenue_by_day': {
       const { from, to } = getPeriodRange(period)

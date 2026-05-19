@@ -8,6 +8,7 @@ import {
   BadgeX,
   Clock,
   AlertTriangle,
+  Percent,
 } from 'lucide-react'
 import type { WidgetDataSource } from '@/lib/types'
 
@@ -21,6 +22,7 @@ const ICON_MAP: Partial<Record<WidgetDataSource, React.ElementType>> = {
   refunds_count: BadgeX,
   pending_count: Clock,
   cancelled_count: AlertTriangle,
+  commission: Percent,
 }
 
 const COLOR_MAP: Partial<Record<WidgetDataSource, { icon: string; bg: string }>> = {
@@ -33,6 +35,7 @@ const COLOR_MAP: Partial<Record<WidgetDataSource, { icon: string; bg: string }>>
   refunds_count: { icon: 'text-red-400', bg: 'bg-red-500/12' },
   pending_count: { icon: 'text-yellow-400', bg: 'bg-yellow-500/12' },
   cancelled_count: { icon: 'text-orange-400', bg: 'bg-orange-500/12' },
+  commission: { icon: 'text-emerald-300', bg: 'bg-emerald-400/15' },
 }
 
 const DEFAULT_COLORS = { icon: 'text-cyan-300', bg: 'bg-cyan-400/15' }

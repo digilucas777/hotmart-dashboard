@@ -65,6 +65,7 @@ const METRIC_SOURCES: { value: WidgetDataSource; label: string }[] = [
   { value: 'margem_lucro',    label: 'Margem de Lucro (%)' },
   { value: 'roas',            label: 'ROAS (Retorno sobre Ads)' },
   { value: 'cpa',             label: 'CPA (Custo por Aquisição)' },
+  { value: 'commission',      label: 'Minha Comissão (18%)' },
 ]
 
 const LINE_SOURCES: { value: WidgetDataSource; label: string }[] = [
