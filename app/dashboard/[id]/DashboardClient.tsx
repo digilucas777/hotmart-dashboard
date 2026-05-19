@@ -290,7 +290,7 @@ function minRowSpanForType(type?: string): number {
   if (type === 'pie') return 14
   if (type === 'line' || type === 'bar') return 11
   if (type === 'table' || type === 'combined') return 15
-  return 7
+  return 8
 }
 
 export function DashboardClient({ projectId }: { projectId: string }) {
@@ -1000,6 +1000,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 </button>
 
                 {showDashboardSwitcher && (
+                  <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowDashboardSwitcher(false)} />
                   <div className="absolute right-0 top-full z-50 mt-3 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-[var(--dash-border)] bg-[var(--dash-panel)] p-2 shadow-2xl shadow-black/35 backdrop-blur-2xl">
                     <div className="px-3 py-2">
                       <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--dash-faint)]">Trocar dashboard</p>
@@ -1035,6 +1037,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                       })}
                     </div>
                   </div>
+                  </>
                 )}
               </div>
             )}

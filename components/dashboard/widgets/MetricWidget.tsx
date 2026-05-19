@@ -57,7 +57,7 @@ export function MetricWidget({
   const colors = COLOR_MAP[dataSource] ?? DEFAULT_COLORS
 
   return (
-    <div className="relative z-[1] flex h-full flex-col justify-between gap-2 p-4">
+    <div className="relative z-[1] flex h-full flex-col gap-3 p-4">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/35 to-transparent" />
       <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl shadow-md shadow-cyan-500/10 ${colors.bg}`}>
         <Icon size={16} className={colors.icon} />
