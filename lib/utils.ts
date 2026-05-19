@@ -208,7 +208,7 @@ export function buildPieData(vendas: Venda[]): PiePoint[] {
 
 // ---------- Widget data ----------
 
-export type SeriesPoint = { label: string; value: number; valueBRL?: number; valueUSD?: number }
+export type SeriesPoint = { label: string; value: number; valueBRL?: number; valueUSD?: number; currency?: 'BRL' | 'USD' | string }
 
 export type CombinedPoint = {
   label: string
@@ -225,7 +225,7 @@ export type WidgetComputedData =
   | { kind: 'combined'; points: CombinedPoint[] }
 
 export function getValueFormat(source: WidgetDataSource): 'brl' | 'count' {
-  const brlSources: WidgetDataSource[] = ['revenue_by_day', 'revenue_by_product']
+  const brlSources: WidgetDataSource[] = ['revenue_by_day']
   return brlSources.includes(source) ? 'brl' : 'count'
 }
 
@@ -386,15 +386,17 @@ export function computeWidgetData(
       return { kind: 'series', points: base.map(p => ({ label: p.label, value: p.count })) }
     }
     case 'revenue_by_product': {
-      const groups: Record<string, number> = {}
+      const groups: Record<string, { label: string; value: number; currency: string }> = {}
       approved.forEach(v => {
-        const val = v.moeda === 'USD' ? (v.valor ?? 0) * exchangeRate : (v.valor ?? 0)
-        groups[v.produto] = (groups[v.produto] ?? 0) + val
+        const currency = v.moeda === 'USD' ? 'USD' : 'BRL'
+        const key = `${v.produto || 'Produto'}__${currency}`
+        const current = groups[key] ?? { label: v.produto || 'Produto', value: 0, currency }
+        current.value += v.valor ?? 0
+        groups[key] = current
       })
       return {
         kind: 'series',
-        points: Object.entries(groups)
-          .map(([label, value]) => ({ label, value }))
+        points: Object.values(groups)
           .sort((a, b) => b.value - a.value)
           .slice(0, 10),
       }

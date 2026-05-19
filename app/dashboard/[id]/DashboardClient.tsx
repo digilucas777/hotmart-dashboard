@@ -852,6 +852,34 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const displayCustoTotal = custoTotal
   const approvedRecentVendas = recentVendas.filter(v => v.status === 'approved')
   const latestSale = approvedRecentVendas[0]
+  const countryDisplay = (country?: string | null) => {
+    const code = (country || '').trim().toUpperCase()
+    const labels: Record<string, string> = {
+      BR: '🇧🇷 Brasil',
+      US: '🇺🇸 US',
+      USA: '🇺🇸 US',
+      GB: '🇬🇧 UK',
+      UK: '🇬🇧 UK',
+      PT: '🇵🇹 Portugal',
+      ES: '🇪🇸 Espanha',
+      FR: '🇫🇷 França',
+      DE: '🇩🇪 Alemanha',
+      IT: '🇮🇹 Itália',
+      CA: '🇨🇦 Canadá',
+      AU: '🇦🇺 Austrália',
+      MX: '🇲🇽 México',
+      AR: '🇦🇷 Argentina',
+      CL: '🇨🇱 Chile',
+      CO: '🇨🇴 Colômbia',
+    }
+    return labels[code] ?? (code || 'Unknown')
+  }
+  const formatSaleAmount = (venda: Venda) => {
+    const value = venda.valor ?? 0
+    return venda.moeda === 'USD'
+      ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)
+      : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+  }
   const countryRanking = useMemo(() => {
     const groups = new Map<string, { label: string; count: number; revenue: number }>()
     for (const venda of vendas.filter(v => v.status === 'approved')) {
@@ -913,7 +941,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   return (
     <div className="dashboard-shell min-h-screen text-[var(--dash-text)]" data-dashboard-theme={theme}>
       <header
-        className="sticky top-0 z-40 border-b border-[var(--dash-border)] bg-[color:var(--dash-bg)]/80 shadow-2xl shadow-black/20 backdrop-blur-2xl"
+        className="sticky top-0 z-40 border-b border-[var(--dash-border)] bg-[color:var(--dash-bg)]/88 shadow-lg shadow-black/10 backdrop-blur-sm"
       >
         <div className="mx-auto flex min-h-16 max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
           <Link
@@ -1000,7 +1028,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       </header>
 
       <main className="dashboard-main mx-auto max-w-[1400px] px-6 py-8">
-        <div className="dashboard-toolbar sticky top-[4.75rem] z-30 mb-6 flex flex-col gap-2 rounded-2xl border border-[var(--dash-border)] bg-[rgba(12,14,24,0.82)] p-2 shadow-[0_10px_28px_rgba(0,0,0,0.18)] backdrop-blur-md lg:flex-row lg:items-start lg:justify-between">
+        <div className="dashboard-toolbar sticky top-16 z-30 mb-6 flex flex-col gap-2 overflow-visible rounded-2xl border border-[var(--dash-border)] bg-[rgba(12,14,24,0.88)] p-2 shadow-sm backdrop-blur-sm lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
             <PeriodFilter
               value={period}
@@ -1141,7 +1169,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             </Button>
           </div>
         ) : (
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="relative">
           <DndContext
             sensors={sensors}
             onDragStart={handleDragStart}
@@ -1221,8 +1249,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 ) : null}
               </DragOverlay>
           </DndContext>
-          <aside className="dashboard-panel h-fit rounded-2xl p-3 xl:sticky xl:top-24">
-            <div className="mb-3 flex items-center gap-2 rounded-xl border border-emerald-400/15 bg-emerald-400/5 px-3 py-2">
+          <aside className="dashboard-panel fixed right-4 top-32 z-20 hidden h-fit w-56 rounded-2xl p-2.5 xl:block">
+            <div className="mb-2 flex items-center gap-2 rounded-xl border border-emerald-400/15 bg-emerald-400/5 px-2.5 py-1.5">
               <span className="relative flex h-2.5 w-2.5">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-45" />
                 <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-300" />
@@ -1232,25 +1260,24 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 <p className="truncate text-[11px] text-[var(--dash-faint)]">Última venda {formatRelativeTime(latestSale?.data_venda)}</p>
               </div>
             </div>
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-2 flex items-center justify-between">
               <h3 className="text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-muted)]">Últimas vendas</h3>
               <span className="h-2 w-2 rounded-full bg-emerald-300" />
             </div>
-            <div className="relative max-h-[390px] space-y-1.5 overflow-hidden">
+            <div className="relative max-h-[320px] space-y-1 overflow-hidden">
               {approvedRecentVendas.length === 0 ? (
                 <p className="py-6 text-center text-xs text-[var(--dash-faint)]">Aguardando vendas</p>
               ) : approvedRecentVendas.map(venda => {
-                const country = (venda.pais || '').trim().toUpperCase()
-                const countryLabel = country === 'GB' || country === 'UK' ? '🇬🇧 UK' : country ? `🌐 ${country}` : '🌐 Unknown'
+                const renderedCountryLabel = countryDisplay(venda.pais)
                 return (
-                <div key={venda.id} className="group rounded-xl border border-white/7 bg-white/[0.03] px-2.5 py-2 transition-colors hover:border-emerald-300/20 hover:bg-white/[0.055]">
-                  <div className="mb-0.5 flex items-center justify-between gap-2">
-                    <span className="text-xs font-black text-[var(--dash-text)]">
-                      {countryLabel} • {venda.moeda === 'USD' ? `$${(venda.valor ?? 0).toFixed(0)}` : `R$${(venda.valor ?? 0).toFixed(0)}`}
+                <div key={venda.id} className="group rounded-lg border border-white/7 bg-white/[0.03] px-2 py-1.5 transition-colors hover:border-emerald-300/20 hover:bg-white/[0.055]">
+                  <div className="mb-0.5 flex items-center justify-between gap-1.5">
+                    <span className="truncate text-[11px] font-semibold text-[var(--dash-text)]">
+                      {renderedCountryLabel} • {formatSaleAmount(venda)}
                     </span>
-                    <span className="rounded-full bg-emerald-400/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-emerald-300">Live</span>
+                    <span className="shrink-0 rounded-full bg-emerald-400/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-emerald-300">Live</span>
                   </div>
-                  <p className="line-clamp-2 text-xs font-semibold text-[var(--dash-muted)]">{venda.produto ?? 'Produto'}</p>
+                  <p className="line-clamp-2 text-[11px] font-medium leading-snug text-[var(--dash-muted)]">{venda.produto ?? 'Produto'}</p>
                   <p className="mt-1 text-[10px] text-[var(--dash-faint)]">{formatRelativeTime(venda.data_venda)}</p>
                 </div>
               )})}

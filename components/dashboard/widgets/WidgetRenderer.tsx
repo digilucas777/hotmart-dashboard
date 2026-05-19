@@ -1,27 +1,27 @@
 'use client'
 
-import { memo, useEffect, useState, useRef } from 'react'
-import { createPortal } from 'react-dom'
+import { memo, useRef, useState } from 'react'
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react'
 import { useDraggable } from '@dnd-kit/core'
-import { Copy, GripVertical, Pencil, Trash2, X } from 'lucide-react'
+import { Copy, GripVertical, Pencil, Trash2 } from 'lucide-react'
 import { computeComparableMetric, computeWidgetData, formatPeriodComparisonLabel, getValueFormat } from '@/lib/utils'
-import type { WidgetConfig, Venda, Period } from '@/lib/types'
-import { MetricWidget } from './MetricWidget'
-import { LineChartWidget } from './LineChartWidget'
-import { BarChartWidget } from './BarChartWidget'
-import { PieWidget } from './PieWidget'
-import { CombinedChartWidget } from './CombinedChartWidget'
+import type { Period, Venda, WidgetConfig } from '@/lib/types'
 import { SalesTable } from '@/components/dashboard/SalesTable'
-import { MetaMetricWidget } from './meta/MetaMetricWidget'
-import { MetaFunnelWidget } from './meta/MetaFunnelWidget'
-import { MetaChartWidget } from './meta/MetaChartWidget'
-import { MetaCampaignWidget } from './meta/MetaCampaignWidget'
-import { MetaCreativeWidget } from './meta/MetaCreativeWidget'
 import { computeMetaWidgetData } from '@/lib/meta-ads-mock'
+import { BarChartWidget } from './BarChartWidget'
+import { CombinedChartWidget } from './CombinedChartWidget'
+import { LineChartWidget } from './LineChartWidget'
+import { MetricWidget } from './MetricWidget'
+import { PieWidget } from './PieWidget'
+import { MetaCampaignWidget } from './meta/MetaCampaignWidget'
+import { MetaChartWidget } from './meta/MetaChartWidget'
+import { MetaCreativeWidget } from './meta/MetaCreativeWidget'
+import { MetaFunnelWidget } from './meta/MetaFunnelWidget'
+import { MetaMetricWidget } from './meta/MetaMetricWidget'
 
 const GRID_ROW_HEIGHT = 20
 const GRID_ITEM_PADDING = 10
+
 export type ResizeDirection =
   | 'left'
   | 'right'
@@ -75,7 +75,6 @@ function WidgetRendererBase({
   const [liveSize, setLiveSize] = useState<{ w: number; h: number } | null>(null)
   const [resizePct, setResizePct] = useState<{ w: number; h: number } | null>(null)
   const [chartPeriod, setChartPeriod] = useState<Period>(period)
-  const [expanded, setExpanded] = useState(false)
 
   const { attributes, listeners, setNodeRef, isDragging } =
     useDraggable({ id: config.id, disabled: !editMode })
@@ -83,7 +82,6 @@ function WidgetRendererBase({
   const isMetaWidget = config.type.startsWith('meta-')
   const isChartWidget = config.type === 'line' || config.type === 'bar' || config.type === 'meta-chart'
   const isTimeSeries = config.data_source === 'revenue_by_day' || config.data_source === 'sales_by_day'
-  const canExpand = ['line', 'bar', 'pie', 'combined', 'table', 'meta-chart', 'meta-funnel', 'meta-campaign', 'meta-creative'].includes(config.type)
   const effectivePeriod = isChartWidget && isTimeSeries && period !== 'custom' ? chartPeriod : period
 
   const data = isMetaWidget
@@ -130,54 +128,48 @@ function WidgetRendererBase({
     const grid = card.closest('.dashboard-grid') as HTMLElement | null
     const gridTotalWidth = grid?.clientWidth ?? 1200
     const gridTotalHeight = Math.max(600, grid?.scrollHeight ?? 800)
-
     const startX = e.clientX
     const startY = e.clientY
     const startW = card.offsetWidth
     const startH = card.offsetHeight
-
     const affectsLeft = direction.includes('left')
     const affectsRight = direction.includes('right')
     const affectsTop = direction.includes('top')
     const affectsBottom = direction.includes('bottom')
-
-    // Maximum resize bounds: cannot go past the grid's right/bottom edge
     const cardRect = card.getBoundingClientRect()
     const gridRect = grid?.getBoundingClientRect()
     const maxW = gridRect ? gridRect.right - cardRect.left : gridTotalWidth
     const maxH = gridTotalHeight
 
-    function onMouseMove(ev: MouseEvent) {
+    function getSize(ev: MouseEvent) {
       const deltaX = ev.clientX - startX
       const deltaY = ev.clientY - startY
-      const newW = !affectsLeft && !affectsRight
+      const width = !affectsLeft && !affectsRight
         ? startW
         : Math.min(maxW, Math.max(110, startW + (affectsLeft ? -deltaX : deltaX)))
-      const newH = !affectsTop && !affectsBottom
+      const height = !affectsTop && !affectsBottom
         ? startH
         : Math.min(maxH, Math.max(90, startH + (affectsTop ? -deltaY : deltaY)))
-      setLiveSize({ w: newW, h: newH })
+      return { width, height, deltaX, deltaY }
+    }
+
+    function onMouseMove(ev: MouseEvent) {
+      const next = getSize(ev)
+      setLiveSize({ w: next.width, h: next.height })
       setResizePct({
-        w: Math.round((newW / gridTotalWidth) * 100),
-        h: Math.round((newH / gridTotalHeight) * 100),
+        w: Math.round((next.width / gridTotalWidth) * 100),
+        h: Math.round((next.height / gridTotalHeight) * 100),
       })
-      onPreviewResize?.(config.id, newW, newH, direction, deltaX, deltaY)
+      onPreviewResize?.(config.id, next.width, next.height, direction, next.deltaX, next.deltaY)
     }
 
     function onMouseUp(ev: MouseEvent) {
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
-      const deltaX = ev.clientX - startX
-      const deltaY = ev.clientY - startY
-      const newW = !affectsLeft && !affectsRight
-        ? startW
-        : Math.min(maxW, Math.max(110, startW + (affectsLeft ? -deltaX : deltaX)))
-      const newH = !affectsTop && !affectsBottom
-        ? startH
-        : Math.min(maxH, Math.max(90, startH + (affectsTop ? -deltaY : deltaY)))
+      const next = getSize(ev)
       setLiveSize(null)
       setResizePct(null)
-      onCommitResize?.(config.id, newW, newH, direction, deltaX, deltaY)
+      onCommitResize?.(config.id, next.width, next.height, direction, next.deltaX, next.deltaY)
     }
 
     window.addEventListener('mousemove', onMouseMove)
@@ -193,7 +185,6 @@ function WidgetRendererBase({
   } as CSSProperties
 
   const isSelected = selected && editMode && !isDragging
-
   const cardStyle: CSSProperties = {
     ...cardHeightStyle,
     overflow: 'hidden',
@@ -201,15 +192,6 @@ function WidgetRendererBase({
       boxShadow: '0 0 0 2px rgba(34, 211, 238, 0.55), 0 0 28px rgba(34, 211, 238, 0.22), 0 0 60px rgba(34, 211, 238, 0.08)',
     } : {}),
   }
-
-  useEffect(() => {
-    if (!expanded) return
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') setExpanded(false)
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [expanded])
 
   return (
     <div
@@ -224,19 +206,15 @@ function WidgetRendererBase({
         ref={cardRef}
         {...(editMode ? attributes : {})}
         {...(editMode ? listeners : {})}
-        onClick={(e) => {
-          if (canExpand && !editMode && !(e.target as HTMLElement).closest('button,input,a')) setExpanded(true)
-        }}
         className={`dashboard-card group relative h-full rounded-2xl transition-all duration-200 ${
           isDragging
             ? 'border-cyan-400/50 shadow-2xl shadow-cyan-500/10'
             : isSelected
               ? 'border-cyan-400/35'
               : 'hover:border-[var(--dash-border-strong)]'
-        } ${editMode ? 'cursor-grab active:cursor-grabbing' : canExpand ? 'cursor-zoom-in' : ''}`}
+        } ${editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
         style={cardStyle}
       >
-        {/* Premium selection ring overlay */}
         {isSelected && (
           <div
             className="pointer-events-none absolute inset-0 z-20 rounded-2xl"
@@ -247,7 +225,6 @@ function WidgetRendererBase({
           />
         )}
 
-        {/* Resize percentage badge */}
         {liveSize && resizePct && (
           <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center">
             <div
@@ -338,7 +315,6 @@ function WidgetRendererBase({
           </div>
         )}
 
-        {/* Hotmart widgets */}
         {config.type === 'metric' && data.kind === 'metric' && (
           <MetricWidget
             title={config.title}
@@ -383,8 +359,6 @@ function WidgetRendererBase({
         {config.type === 'table' && data.kind === 'table' && (
           <SalesTable vendas={data.vendas} exchangeRate={exchangeRate} heightMode="fill" />
         )}
-
-        {/* Meta Ads widgets */}
         {config.type === 'meta-metric' && data.kind === 'meta-metric' && (
           <MetaMetricWidget title={config.title} data={data} />
         )}
@@ -407,82 +381,6 @@ function WidgetRendererBase({
           <MetaCreativeWidget title={config.title} data={data} />
         )}
       </div>
-      {expanded && !editMode && canExpand && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/45 p-3 sm:p-6" onClick={() => setExpanded(false)}>
-          <div
-            className="dashboard-expanded-modal flex w-full max-w-[1400px] flex-col overflow-hidden rounded-2xl border border-[var(--dash-border)] bg-[var(--dash-panel-strong)] shadow-2xl"
-            style={{ maxHeight: '90vh', height: 'min(90vh, 820px)' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--dash-border)] px-5 py-3">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">Analytics expandido</p>
-                <h2 className="text-lg font-black text-[var(--dash-text)]">{config.title}</h2>
-                <p className="mt-1 text-xs text-[var(--dash-faint)]">Período ativo • comparativo automático</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-xs font-bold text-[var(--dash-muted)] hover:text-[var(--dash-text)]">Exportar PNG</button>
-                <button className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-xs font-bold text-[var(--dash-muted)] hover:text-[var(--dash-text)]">PDF</button>
-                <button onClick={() => setExpanded(false)} className="rounded-xl p-2 text-[var(--dash-faint)] hover:bg-white/5 hover:text-[var(--dash-text)]">
-                  <X size={19} />
-                </button>
-              </div>
-            </div>
-            <div className="grid min-h-0 flex-1 gap-3 overflow-auto p-3 lg:grid-cols-[minmax(0,1fr)_260px]">
-              <div className="min-h-[360px] rounded-2xl border border-white/8 bg-white/[0.025] p-3">
-                {config.type === 'line' && data.kind === 'series' && (
-                  <LineChartWidget title={config.title} points={data.points} isBRL={isBRL} dualCurrency={data.dualCurrency} chartHeight={480} />
-                )}
-                {config.type === 'bar' && data.kind === 'series' && (
-                  <BarChartWidget title={config.title} points={data.points} isBRL={isBRL} dualCurrency={data.dualCurrency} chartHeight={480} />
-                )}
-                {config.type === 'pie' && data.kind === 'series' && (
-                  <PieWidget title={config.title} points={data.points} chartHeight={480} />
-                )}
-                {config.type === 'combined' && data.kind === 'combined' && (
-                  <CombinedChartWidget title={config.title} vendas={combinedVendas ?? vendas} chartHeight={520} />
-                )}
-                {config.type === 'table' && data.kind === 'table' && (
-                  <SalesTable vendas={data.vendas} exchangeRate={exchangeRate} heightMode="fill" />
-                )}
-                {config.type === 'meta-chart' && data.kind === 'meta-chart' && (
-                  <MetaChartWidget title={config.title} data={data} chartHeight={480} localPeriod={chartPeriod} onChangePeriod={setChartPeriod} />
-                )}
-                {config.type === 'meta-funnel' && data.kind === 'meta-funnel' && (
-                  <MetaFunnelWidget title={config.title} data={data} />
-                )}
-                {config.type === 'meta-campaign' && data.kind === 'meta-campaign' && (
-                  <MetaCampaignWidget title={config.title} data={data} />
-                )}
-                {config.type === 'meta-creative' && data.kind === 'meta-creative' && (
-                  <MetaCreativeWidget title={config.title} data={data} />
-                )}
-              </div>
-              <div className="space-y-3">
-                {[
-                  ['Comparativo', comparison ?? `vs ${formatPeriodComparisonLabel(period)}`],
-                  ['Amostra', `${vendas.length} registros no período`],
-                  ['Status', loading ? 'Sincronizando' : 'Atualizado'],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-2xl border border-white/8 bg-white/[0.035] p-3">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">{label}</p>
-                    <p className="mt-2 text-sm font-bold text-[var(--dash-text)]">{value}</p>
-                  </div>
-                ))}
-                <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">Insights rápidos</p>
-                  <p className="mt-2 text-xs leading-relaxed text-[var(--dash-muted)]">Revise tendências, compare períodos e exporte visões sem sair do layout.</p>
-                </div>
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center justify-between border-t border-[var(--dash-border)] px-5 py-2.5 text-xs text-[var(--dash-faint)]">
-              <span>ESC fecha • clique fora fecha</span>
-              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_12px_rgba(52,211,153,0.8)]" />Atualização ativa</span>
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )}
     </div>
   )
 }

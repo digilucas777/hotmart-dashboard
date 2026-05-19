@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, Clock3, X } from 'lucide-react'
 import type { Period } from '@/lib/types'
 import { formatPeriodContext } from '@/lib/utils'
@@ -78,6 +78,15 @@ export function PeriodFilter({
     setDraftTo(isoDate(to))
   }
 
+  useEffect(() => {
+    if (!showCustom) return
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setShowCustom(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [showCustom])
+
   return (
     <div className="flex flex-col gap-2">
       <div className="dashboard-panel flex max-w-full gap-1.5 overflow-x-auto rounded-xl p-1 sm:flex-wrap">
@@ -122,8 +131,8 @@ export function PeriodFilter({
       </div>
 
       {showCustom && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4 backdrop-blur-xl">
-          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#10101d]/95 shadow-2xl shadow-cyan-500/10">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 px-4" onClick={() => setShowCustom(false)}>
+          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#10101d]/95 shadow-2xl shadow-cyan-500/10" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-white/8 px-5 py-4">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-cyan-400/12 text-cyan-300">
@@ -171,6 +180,12 @@ export function PeriodFilter({
                   </button>
                 ))}
               </div>
+              <button
+                onClick={() => setShowCustom(false)}
+                className="h-11 w-full rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-bold text-slate-300 transition-colors hover:bg-white/[0.07] hover:text-slate-100"
+              >
+                Cancelar
+              </button>
               <button
                 onClick={applyCustom}
                 disabled={!draftFrom || !draftTo}

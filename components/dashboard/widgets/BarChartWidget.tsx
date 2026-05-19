@@ -30,7 +30,7 @@ function CustomTooltip({
   dualCurrency,
 }: {
   active?: boolean
-  payload?: { value: number; dataKey: string }[]
+  payload?: { value: number; dataKey: string; payload?: SeriesPoint }[]
   label?: string
   isBRL: boolean
   dualCurrency?: boolean
@@ -49,7 +49,13 @@ function CustomTooltip({
           )}
         </>
       ) : (
-        <p className="text-sm font-semibold text-slate-100">{isBRL ? formatBRL(payload[0].value) : payload[0].value.toLocaleString('pt-BR')}</p>
+        <p className="text-sm font-semibold text-slate-100">
+          {payload[0].payload?.currency === 'USD'
+            ? formatUSD(payload[0].value)
+            : payload[0].payload?.currency === 'BRL'
+              ? formatBRL(payload[0].value)
+              : isBRL ? formatBRL(payload[0].value) : payload[0].value.toLocaleString('pt-BR')}
+        </p>
       )}
     </div>
   )
@@ -114,11 +120,11 @@ export function BarChartWidget({
           {dualCurrency ? (
             <>
               <Legend formatter={(value) => value === 'valueBRL' ? 'BRL' : 'USD'} wrapperStyle={{ fontSize: 11, color: '#64748b' }} />
-              <Bar dataKey="valueBRL" name="valueBRL" fill={BAR_COLORS.brl} radius={[6, 6, 0, 0]} maxBarSize={32} isAnimationActive />
-              <Bar dataKey="valueUSD" name="valueUSD" fill={BAR_COLORS.usd} radius={[6, 6, 0, 0]} maxBarSize={32} isAnimationActive />
+              <Bar dataKey="valueBRL" name="valueBRL" fill={BAR_COLORS.brl} radius={[6, 6, 0, 0]} maxBarSize={32} isAnimationActive={false} />
+              <Bar dataKey="valueUSD" name="valueUSD" fill={BAR_COLORS.usd} radius={[6, 6, 0, 0]} maxBarSize={32} isAnimationActive={false} />
             </>
           ) : (
-            <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={48} isAnimationActive>
+            <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={48} isAnimationActive={false}>
               {displayPoints.map((_, i) => <Cell key={i} fill={BAR_COLORS_LIST[i % BAR_COLORS_LIST.length]} />)}
             </Bar>
           )}
