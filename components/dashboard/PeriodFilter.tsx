@@ -80,14 +80,14 @@ export function PeriodFilter({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="dashboard-panel flex max-w-full gap-2 overflow-x-auto rounded-2xl p-1.5 sm:flex-wrap">
+      <div className="dashboard-panel flex max-w-full gap-1.5 overflow-x-auto rounded-xl p-1 sm:flex-wrap">
         {PERIODS.map(p => {
           const active = value === p.value
           return (
             <button
               key={p.value}
               onClick={() => onChange(p.value)}
-              className={`shrink-0 rounded-xl px-3.5 py-2 text-sm font-semibold transition-all duration-150 ${
+              className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
                 active
                   ? 'bg-gradient-to-r from-cyan-500 to-violet-500 text-white shadow-lg shadow-cyan-500/20'
                   : 'border border-[var(--dash-border)] bg-white/5 text-[var(--dash-muted)] hover:border-[var(--dash-border-strong)] hover:bg-white/10 hover:text-[var(--dash-text)]'
@@ -99,7 +99,7 @@ export function PeriodFilter({
         })}
         <button
           onClick={openCustom}
-          className={`shrink-0 rounded-xl px-3.5 py-2 text-sm font-semibold transition-all duration-150 ${
+          className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
             value === 'custom'
               ? 'bg-gradient-to-r from-cyan-500 to-violet-500 text-white shadow-lg shadow-cyan-500/20'
               : 'border border-[var(--dash-border)] bg-white/5 text-[var(--dash-muted)] hover:border-[var(--dash-border-strong)] hover:bg-white/10 hover:text-[var(--dash-text)]'
@@ -110,12 +110,12 @@ export function PeriodFilter({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 px-1 text-xs leading-relaxed text-[var(--dash-faint)]">
-        <span className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.035] px-3 py-1.5">
+        <span className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.035] px-2.5 py-1">
           <CalendarDays size={13} className="text-cyan-300" />
           <span className="font-semibold text-[var(--dash-muted)]">Período analisado:</span>
           <span className="font-bold text-[var(--dash-text)]">{rangeLabel.rest ?? rangeLabel.prefix}</span>
         </span>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.025] px-3 py-1.5">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.025] px-2.5 py-1">
           <Clock3 size={12} className="text-[var(--dash-faint)]" />
           {updatedLabel}
         </span>

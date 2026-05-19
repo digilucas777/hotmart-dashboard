@@ -12,11 +12,9 @@ import {
   Plus,
   LayoutDashboard,
   Pencil,
-  Moon,
   Rocket,
   Save,
   Search,
-  Sun,
   Undo2,
   Redo2,
   X,
@@ -354,26 +352,23 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   }, [])
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNowTick(Date.now()), 1000)
+    const timer = window.setInterval(() => setNowTick(Date.now()), 10_000)
     return () => window.clearInterval(timer)
   }, [])
 
   useEffect(() => {
-    queueMicrotask(() => {
+    function syncTheme() {
       const stored = window.localStorage.getItem(THEME_STORAGE_KEY)
       if (stored === 'dark' || stored === 'light') setTheme(stored)
-    })
+    }
+    queueMicrotask(syncTheme)
+    window.addEventListener('storage', syncTheme)
+    window.addEventListener('dash-theme-change', syncTheme)
+    return () => {
+      window.removeEventListener('storage', syncTheme)
+      window.removeEventListener('dash-theme-change', syncTheme)
+    }
   }, [])
-
-  function toggleTheme() {
-    setTheme(current => {
-      const next = current === 'dark' ? 'light' : 'dark'
-      window.localStorage.setItem(THEME_STORAGE_KEY, next)
-      document.documentElement.dataset.dashboardTheme = next
-      window.dispatchEvent(new Event('dash-theme-change'))
-      return next
-    })
-  }
 
   useEffect(() => {
     supabase
@@ -1001,18 +996,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             )}
           </div>
           <div className="ml-auto" />
-          <button
-            onClick={toggleTheme}
-            title={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--dash-border)] bg-[var(--dash-panel)] text-[var(--dash-text)] shadow-lg transition-all hover:border-[var(--dash-border-strong)] hover:text-[var(--dash-neon)]"
-          >
-            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
-          </button>
         </div>
       </header>
 
       <main className="dashboard-main mx-auto max-w-[1400px] px-6 py-8">
-        <div className="dashboard-toolbar sticky top-[4.9rem] z-30 mb-8 flex flex-col gap-3 rounded-3xl border border-[var(--dash-border)] bg-[rgba(12,14,24,0.72)] p-3 shadow-[0_18px_60px_rgba(0,0,0,0.26)] backdrop-blur-2xl lg:flex-row lg:items-start lg:justify-between">
+        <div className="dashboard-toolbar sticky top-[4.75rem] z-30 mb-6 flex flex-col gap-2 rounded-2xl border border-[var(--dash-border)] bg-[rgba(12,14,24,0.82)] p-2 shadow-[0_10px_28px_rgba(0,0,0,0.18)] backdrop-blur-md lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
             <PeriodFilter
               value={period}
@@ -1022,16 +1010,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               updatedAt={lastUpdatedAt}
               onCustomChange={(from, to) => { setCustomFrom(from); setCustomTo(to) }}
             />
-          </div>
-          <div className="dashboard-panel flex shrink-0 items-center gap-3 rounded-2xl px-4 py-3 shadow-[0_0_35px_rgba(16,185,129,0.08)]">
-            <span className="relative flex h-3 w-3">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-              <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-300 shadow-[0_0_16px_rgba(52,211,153,0.75)]" />
-            </span>
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-300">Ao vivo</p>
-              <p className="text-xs text-[var(--dash-faint)]">Última venda {formatRelativeTime(latestSale?.data_venda)}</p>
-            </div>
           </div>
           <div className="dashboard-action-bar dashboard-panel ml-auto flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto rounded-2xl p-1.5">
             <button
@@ -1243,32 +1221,42 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 ) : null}
               </DragOverlay>
           </DndContext>
-          <aside className="dashboard-panel h-fit rounded-2xl p-4 xl:sticky xl:top-24">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-muted)]">Últimas vendas</h3>
-              <span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_14px_rgba(52,211,153,0.8)]" />
+          <aside className="dashboard-panel h-fit rounded-2xl p-3 xl:sticky xl:top-24">
+            <div className="mb-3 flex items-center gap-2 rounded-xl border border-emerald-400/15 bg-emerald-400/5 px-3 py-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-45" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-300" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-300">Ao vivo</p>
+                <p className="truncate text-[11px] text-[var(--dash-faint)]">Última venda {formatRelativeTime(latestSale?.data_venda)}</p>
+              </div>
             </div>
-            <div className="relative max-h-[520px] space-y-2 overflow-hidden">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-muted)]">Últimas vendas</h3>
+              <span className="h-2 w-2 rounded-full bg-emerald-300" />
+            </div>
+            <div className="relative max-h-[390px] space-y-1.5 overflow-hidden">
               {approvedRecentVendas.length === 0 ? (
                 <p className="py-6 text-center text-xs text-[var(--dash-faint)]">Aguardando vendas</p>
               ) : approvedRecentVendas.map(venda => {
                 const country = (venda.pais || '').trim().toUpperCase()
                 const countryLabel = country === 'GB' || country === 'UK' ? '🇬🇧 UK' : country ? `🌐 ${country}` : '🌐 Unknown'
                 return (
-                <div key={venda.id} className="group animate-[premiumSlideIn_.35s_ease-out] rounded-2xl border border-white/7 bg-white/[0.035] px-3 py-3 transition-all hover:border-emerald-300/20 hover:bg-white/[0.06] hover:shadow-[0_14px_35px_rgba(16,185,129,0.08)]">
-                  <div className="mb-1 flex items-center justify-between gap-3">
+                <div key={venda.id} className="group rounded-xl border border-white/7 bg-white/[0.03] px-2.5 py-2 transition-colors hover:border-emerald-300/20 hover:bg-white/[0.055]">
+                  <div className="mb-0.5 flex items-center justify-between gap-2">
                     <span className="text-xs font-black text-[var(--dash-text)]">
                       {countryLabel} • {venda.moeda === 'USD' ? `$${(venda.valor ?? 0).toFixed(0)}` : `R$${(venda.valor ?? 0).toFixed(0)}`}
                     </span>
-                    <span className="rounded-full bg-emerald-400/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-300">Live</span>
+                    <span className="rounded-full bg-emerald-400/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-emerald-300">Live</span>
                   </div>
                   <p className="line-clamp-2 text-xs font-semibold text-[var(--dash-muted)]">{venda.produto ?? 'Produto'}</p>
-                  <p className="mt-2 text-[10px] text-[var(--dash-faint)]">{formatRelativeTime(venda.data_venda)}</p>
+                  <p className="mt-1 text-[10px] text-[var(--dash-faint)]">{formatRelativeTime(venda.data_venda)}</p>
                 </div>
               )})}
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-[var(--dash-panel)] to-transparent" />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-[var(--dash-panel)] to-transparent" />
             </div>
-            <div className="mt-5 border-t border-white/8 pt-4">
+            <div className="mt-4 border-t border-white/8 pt-3">
               <h3 className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-muted)]">Insights automáticos</h3>
               <div className="space-y-2">
                 {insights.map((item, index) => (
@@ -1278,7 +1266,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 ))}
               </div>
             </div>
-            <div className="mt-5 border-t border-white/8 pt-4">
+            <div className="mt-4 border-t border-white/8 pt-3">
               <h3 className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-muted)]">Mapa de países</h3>
               <div className="space-y-2">
                 {(countryRanking.length ? countryRanking : [{ label: 'Unknown', count: 0, revenue: 0 }]).map((country, index) => (

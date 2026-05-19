@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { memo, useEffect, useState, useRef } from 'react'
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import { Copy, GripVertical, Pencil, Trash2, X } from 'lucide-react'
@@ -31,7 +31,7 @@ export type ResizeDirection =
   | 'bottom-left'
   | 'bottom-right'
 
-export function WidgetRenderer({
+function WidgetRendererBase({
   config,
   vendas,
   previousVendas,
@@ -231,7 +231,7 @@ export function WidgetRenderer({
             ? 'border-cyan-400/50 shadow-2xl shadow-cyan-500/10'
             : isSelected
               ? 'border-cyan-400/35'
-              : 'hover:border-[var(--dash-border-strong)] hover:shadow-[0_22px_65px_var(--dash-glow-blue)]'
+              : 'hover:border-[var(--dash-border-strong)]'
         } ${editMode ? 'cursor-grab active:cursor-grabbing' : canExpand ? 'cursor-zoom-in' : ''}`}
         style={cardStyle}
       >
@@ -332,7 +332,7 @@ export function WidgetRenderer({
         )}
 
         {loading && (
-          <div className="pointer-events-none absolute inset-0 z-40 rounded-2xl bg-[var(--dash-panel)]/82 p-5 backdrop-blur-md">
+          <div className="pointer-events-none absolute inset-0 z-40 rounded-2xl bg-[var(--dash-panel)]/88 p-5">
             <div className="h-full animate-pulse space-y-4">
               <div className="h-10 w-10 rounded-xl bg-white/10" />
               <div className="h-3 w-1/3 rounded-full bg-white/10" />
@@ -412,13 +412,17 @@ export function WidgetRenderer({
         )}
       </div>
       {expanded && !editMode && canExpand && (
-        <div className="fixed inset-0 z-[90] animate-[premiumFadeIn_.18s_ease-out] bg-black/75 p-3 backdrop-blur-2xl sm:p-8" onClick={() => setExpanded(false)}>
-          <div className="dashboard-card mx-auto flex h-full max-w-7xl flex-col overflow-hidden rounded-3xl" onClick={e => e.stopPropagation()}>
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-[var(--dash-border)] px-5 py-4">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-3 sm:p-6" onClick={() => setExpanded(false)}>
+          <div
+            className="dashboard-card flex w-full max-w-[1400px] flex-col overflow-hidden rounded-2xl"
+            style={{ maxHeight: '90vh' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--dash-border)] px-5 py-3">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">Analytics expandido</p>
                 <h2 className="text-lg font-black text-[var(--dash-text)]">{config.title}</h2>
-                <p className="mt-1 text-xs text-[var(--dash-faint)]">Período ativo • comparativo automático • atualizado em tempo real</p>
+                <p className="mt-1 text-xs text-[var(--dash-faint)]">Período ativo • comparativo automático</p>
               </div>
               <div className="flex items-center gap-2">
                 <button className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2 text-xs font-bold text-[var(--dash-muted)] hover:text-[var(--dash-text)]">Exportar PNG</button>
@@ -428,25 +432,25 @@ export function WidgetRenderer({
                 </button>
               </div>
             </div>
-            <div className="grid min-h-0 flex-1 gap-4 overflow-auto p-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-              <div className="min-h-[420px] rounded-3xl border border-white/8 bg-white/[0.025] p-3">
+            <div className="grid min-h-0 flex-1 gap-3 overflow-auto p-3 lg:grid-cols-[minmax(0,1fr)_260px]">
+              <div className="min-h-[360px] rounded-2xl border border-white/8 bg-white/[0.025] p-3">
                 {config.type === 'line' && data.kind === 'series' && (
-                  <LineChartWidget title={config.title} points={data.points} isBRL={isBRL} dualCurrency={data.dualCurrency} chartHeight={560} />
+                  <LineChartWidget title={config.title} points={data.points} isBRL={isBRL} dualCurrency={data.dualCurrency} chartHeight={480} />
                 )}
                 {config.type === 'bar' && data.kind === 'series' && (
-                  <BarChartWidget title={config.title} points={data.points} isBRL={isBRL} dualCurrency={data.dualCurrency} chartHeight={560} />
+                  <BarChartWidget title={config.title} points={data.points} isBRL={isBRL} dualCurrency={data.dualCurrency} chartHeight={480} />
                 )}
                 {config.type === 'pie' && data.kind === 'series' && (
-                  <PieWidget title={config.title} points={data.points} chartHeight={560} />
+                  <PieWidget title={config.title} points={data.points} chartHeight={480} />
                 )}
                 {config.type === 'combined' && data.kind === 'combined' && (
-                  <CombinedChartWidget title={config.title} vendas={combinedVendas ?? vendas} chartHeight={620} />
+                  <CombinedChartWidget title={config.title} vendas={combinedVendas ?? vendas} chartHeight={520} />
                 )}
                 {config.type === 'table' && data.kind === 'table' && (
                   <SalesTable vendas={data.vendas} exchangeRate={exchangeRate} heightMode="fill" />
                 )}
                 {config.type === 'meta-chart' && data.kind === 'meta-chart' && (
-                  <MetaChartWidget title={config.title} data={data} chartHeight={560} localPeriod={chartPeriod} onChangePeriod={setChartPeriod} />
+                  <MetaChartWidget title={config.title} data={data} chartHeight={480} localPeriod={chartPeriod} onChangePeriod={setChartPeriod} />
                 )}
                 {config.type === 'meta-funnel' && data.kind === 'meta-funnel' && (
                   <MetaFunnelWidget title={config.title} data={data} />
@@ -464,18 +468,18 @@ export function WidgetRenderer({
                   ['Amostra', `${vendas.length} registros no período`],
                   ['Status', loading ? 'Sincronizando' : 'Atualizado'],
                 ].map(([label, value]) => (
-                  <div key={label} className="rounded-3xl border border-white/8 bg-white/[0.035] p-4">
+                  <div key={label} className="rounded-2xl border border-white/8 bg-white/[0.035] p-3">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">{label}</p>
                     <p className="mt-2 text-sm font-bold text-[var(--dash-text)]">{value}</p>
                   </div>
                 ))}
-                <div className="rounded-3xl border border-white/8 bg-white/[0.035] p-4">
+                <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-3">
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">Insights rápidos</p>
                   <p className="mt-2 text-xs leading-relaxed text-[var(--dash-muted)]">Revise tendências, compare períodos e exporte visões sem sair do layout.</p>
                 </div>
               </div>
             </div>
-            <div className="flex shrink-0 items-center justify-between border-t border-[var(--dash-border)] px-5 py-3 text-xs text-[var(--dash-faint)]">
+            <div className="flex shrink-0 items-center justify-between border-t border-[var(--dash-border)] px-5 py-2.5 text-xs text-[var(--dash-faint)]">
               <span>ESC fecha • clique fora fecha</span>
               <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_12px_rgba(52,211,153,0.8)]" />Atualização ativa</span>
             </div>
@@ -485,3 +489,18 @@ export function WidgetRenderer({
     </div>
   )
 }
+
+export const WidgetRenderer = memo(WidgetRendererBase, (prev, next) =>
+  prev.config === next.config &&
+  prev.vendas === next.vendas &&
+  prev.previousVendas === next.previousVendas &&
+  prev.combinedVendas === next.combinedVendas &&
+  prev.period === next.period &&
+  prev.exchangeRate === next.exchangeRate &&
+  prev.custoTotal === next.custoTotal &&
+  prev.customRange === next.customRange &&
+  prev.editMode === next.editMode &&
+  prev.loading === next.loading &&
+  prev.selected === next.selected &&
+  prev.isGroupDragging === next.isGroupDragging
+)

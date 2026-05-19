@@ -59,16 +59,16 @@ export function PieWidget({
           <p className="text-lg font-black text-[var(--dash-text)]">{topPercent}%</p>
         </div>
         <ResponsiveContainer width="100%" height={chartHeight}>
-          <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+          <PieChart margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
           <Pie
             data={data}
             cx="50%"
-            cy="46%"
-            innerRadius="48%"
-            outerRadius="68%"
-            paddingAngle={3}
+            cy="48%"
+            innerRadius="46%"
+            outerRadius="66%"
+            paddingAngle={2}
             dataKey="value"
-            animationDuration={700}
+            animationDuration={180}
             label={({ percent }) => percent ? `${Math.round(percent * 100)}%` : ''}
             labelLine={false}
           >
