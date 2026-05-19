@@ -279,6 +279,20 @@ function persistLocalLayout(projectId: string, widgets: WidgetConfig[]) {
   )
 }
 
+function minColSpanForType(type?: string): number {
+  if (type === 'pie') return 3
+  if (type === 'line' || type === 'bar') return 4
+  if (type === 'table' || type === 'combined') return 5
+  return 2
+}
+
+function minRowSpanForType(type?: string): number {
+  if (type === 'pie') return 14
+  if (type === 'line' || type === 'bar') return 11
+  if (type === 'table' || type === 'combined') return 15
+  return 7
+}
+
 export function DashboardClient({ projectId }: { projectId: string }) {
   const router = useRouter()
   const [projeto, setProjeto] = useState<Projeto | null>(null)
@@ -697,17 +711,19 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       col_span = normalizeColSpan(Math.round((width + GRID_ITEM_PADDING * 2) / colWidth))
     }
 
-    col_span = Math.min(GRID_COLUMNS - col_start + 1, Math.max(2, normalizeColSpan(col_span)))
+    const minCols = minColSpanForType(widget.type)
+    const minRows = minRowSpanForType(widget.type)
+    col_span = Math.min(GRID_COLUMNS - col_start + 1, Math.max(minCols, normalizeColSpan(col_span)))
 
     if (affectsTop) {
       const rowDelta = Math.round(deltaY / GRID_ROW_HEIGHT)
-      row_start = Math.min(currentRow + currentRowSpan - 7, Math.max(1, currentRow + rowDelta))
+      row_start = Math.min(currentRow + currentRowSpan - minRows, Math.max(1, currentRow + rowDelta))
       row_span = currentRowSpan - (row_start - currentRow)
     } else if (affectsBottom) {
-      row_span = Math.max(7, Math.round((height + GRID_ITEM_PADDING * 2) / GRID_ROW_HEIGHT))
+      row_span = Math.max(minRows, Math.round((height + GRID_ITEM_PADDING * 2) / GRID_ROW_HEIGHT))
     }
 
-    row_span = Math.max(7, row_span)
+    row_span = Math.max(minRows, row_span)
     return {
       id,
       col_start,
@@ -1249,7 +1265,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 ) : null}
               </DragOverlay>
           </DndContext>
-          <aside className="dashboard-panel fixed right-4 top-28 z-20 hidden h-fit w-56 rounded-xl p-2 xl:block">
+          <aside className="dashboard-panel fixed right-4 top-28 z-20 hidden max-h-[calc(100vh-8rem)] w-56 overflow-y-auto rounded-xl p-2 xl:block">
             <div className="mb-2 flex items-center gap-2 rounded-lg border border-emerald-400/12 bg-emerald-400/[0.04] px-2 py-1.5">
               <span className="relative flex h-2.5 w-2.5">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-45" />

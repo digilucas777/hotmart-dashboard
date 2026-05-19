@@ -67,9 +67,10 @@ export function PieWidget({
                 data={data}
                 cx="50%"
                 cy="50%"
-                innerRadius="48%"
-                outerRadius="90%"
+                innerRadius="58%"
+                outerRadius="86%"
                 paddingAngle={2}
+                minAngle={4}
                 dataKey="value"
                 label={false}
                 labelLine={false}

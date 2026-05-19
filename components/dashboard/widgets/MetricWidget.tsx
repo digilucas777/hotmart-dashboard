@@ -62,9 +62,9 @@ export function MetricWidget({
       <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl shadow-md shadow-cyan-500/10 ${colors.bg}`}>
         <Icon size={16} className={colors.icon} />
       </div>
-      <div className="min-w-0">
-        <p className="text-xs font-semibold leading-4 text-[var(--dash-faint)]">{title}</p>
-        <p className="mt-1.5 text-[1.6rem] font-extrabold leading-none text-[var(--dash-text)] drop-shadow">
+      <div className="min-w-0 overflow-hidden">
+        <p className="truncate text-xs font-semibold leading-4 text-[var(--dash-faint)]">{title}</p>
+        <p className="mt-1.5 overflow-hidden text-[1.6rem] font-extrabold leading-tight text-[var(--dash-text)] drop-shadow [word-break:break-word]">
           {value}
         </p>
         {subValue && <p className="mt-1 line-clamp-2 text-xs leading-4 text-[var(--dash-faint)]">{subValue}</p>}
