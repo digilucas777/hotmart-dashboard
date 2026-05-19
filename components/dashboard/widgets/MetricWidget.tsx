@@ -57,17 +57,17 @@ export function MetricWidget({
   const colors = COLOR_MAP[dataSource] ?? DEFAULT_COLORS
 
   return (
-    <div className="relative z-[1] flex h-full flex-col justify-between gap-3 p-5">
+    <div className="relative z-[1] flex h-full flex-col justify-between gap-4 p-5">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/35 to-transparent" />
-      <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl shadow-lg shadow-cyan-500/15 ${colors.bg}`}>
-        <Icon size={17} className={colors.icon} />
+      <div className={`inline-flex h-11 w-11 items-center justify-center rounded-xl shadow-md shadow-cyan-500/10 ${colors.bg}`}>
+        <Icon size={18} className={colors.icon} />
       </div>
-      <div>
-        <p className="text-xs font-medium text-[var(--dash-faint)]">{title}</p>
-        <p className="mt-1 text-[1.65rem] font-extrabold leading-tight text-[var(--dash-text)] drop-shadow">
+      <div className="min-w-0">
+        <p className="text-xs font-semibold leading-4 text-[var(--dash-faint)]">{title}</p>
+        <p className="mt-2 text-[1.7rem] font-extrabold leading-none text-[var(--dash-text)] drop-shadow">
           {value}
         </p>
-        {subValue && <p className="mt-0.5 text-xs text-[var(--dash-faint)]">{subValue}</p>}
+        {subValue && <p className="mt-2 line-clamp-2 text-xs leading-4 text-[var(--dash-faint)]">{subValue}</p>}
         {comparison && (
           <p className={`mt-2 text-xs font-bold ${comparison.startsWith('↑') ? 'text-emerald-300' : comparison.startsWith('↓') ? 'text-red-300' : 'text-[var(--dash-faint)]'}`}>
             {comparison}

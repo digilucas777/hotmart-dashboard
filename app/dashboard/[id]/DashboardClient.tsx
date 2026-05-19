@@ -943,7 +943,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       <header
         className="sticky top-0 z-40 border-b border-[var(--dash-border)] bg-[color:var(--dash-bg)]/88 shadow-lg shadow-black/10 backdrop-blur-sm"
       >
-        <div className="mx-auto flex min-h-16 max-w-[1400px] flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
+        <div className="mx-auto flex min-h-14 max-w-[1400px] flex-wrap items-center gap-2.5 px-4 py-2 sm:px-6">
           <Link
             href="/dashboard"
             className="flex items-center gap-1.5 text-sm text-[var(--dash-faint)] transition-colors hover:text-[var(--dash-text)]"
@@ -952,9 +952,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             Dashboards
           </Link>
           <div className="hidden h-5 w-px bg-[var(--dash-border)] sm:block" />
-          <div className="dashboard-topbar flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-3 py-2 sm:px-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 via-blue-500 to-violet-500 text-white shadow-lg shadow-cyan-500/20">
-              <Rocket size={19} />
+          <div className="dashboard-topbar flex min-w-0 flex-1 items-center gap-2.5 rounded-2xl px-2.5 py-1.5 sm:px-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 via-blue-500 to-violet-500 text-white shadow-md shadow-cyan-500/15">
+              <Rocket size={18} />
             </div>
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dash-faint)]">
@@ -968,10 +968,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               <div className="relative">
                 <button
                   onClick={() => setShowDashboardSwitcher(prev => !prev)}
-                  className="flex min-w-0 items-center gap-3 rounded-2xl border border-[var(--dash-border)] bg-[var(--dash-panel)] px-3 py-2 text-left shadow-lg shadow-black/10 transition-all hover:-translate-y-0.5 hover:border-[var(--dash-border-strong)] sm:min-w-64"
+                  className="flex min-w-0 items-center gap-2.5 rounded-xl border border-[var(--dash-border)] bg-[var(--dash-panel)] px-2.5 py-1.5 text-left shadow-md shadow-black/10 transition-colors hover:border-[var(--dash-border-strong)] sm:min-w-60"
                   title="Trocar dashboard"
                 >
-                  <div className="grid h-9 w-11 shrink-0 grid-cols-3 items-end gap-1 rounded-xl bg-gradient-to-br from-cyan-400/20 to-violet-500/20 p-2">
+                  <div className="grid h-8 w-10 shrink-0 grid-cols-3 items-end gap-1 rounded-lg bg-gradient-to-br from-cyan-400/20 to-violet-500/20 p-1.5">
                     <span className="h-3 rounded-full bg-cyan-300/80" />
                     <span className="h-5 rounded-full bg-violet-300/80" />
                     <span className="h-4 rounded-full bg-sky-200/80" />
@@ -1027,8 +1027,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         </div>
       </header>
 
-      <main className="dashboard-main mx-auto max-w-[1400px] px-6 py-8">
-        <div className="dashboard-toolbar sticky top-16 z-30 mb-6 flex flex-col gap-2 overflow-visible rounded-2xl border border-[var(--dash-border)] bg-[rgba(12,14,24,0.88)] p-2 shadow-sm backdrop-blur-sm lg:flex-row lg:items-start lg:justify-between">
+      <main className="dashboard-main mx-auto max-w-[1400px] px-6 py-6">
+        <div className="dashboard-toolbar sticky top-14 z-30 mb-5 flex flex-col gap-1.5 overflow-visible rounded-xl border border-[var(--dash-border)] bg-[rgba(12,14,24,0.88)] p-1.5 shadow-sm backdrop-blur-sm lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
             <PeriodFilter
               value={period}
@@ -1039,11 +1039,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               onCustomChange={(from, to) => { setCustomFrom(from); setCustomTo(to) }}
             />
           </div>
-          <div className="dashboard-action-bar dashboard-panel ml-auto flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto rounded-2xl p-1.5">
+          <div className="dashboard-action-bar dashboard-panel ml-auto flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-1.5 overflow-x-auto rounded-xl p-1">
             <button
               onClick={fetchVendas}
               title="Atualizar"
-              className="flex shrink-0 items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 transition-transform hover:-translate-y-0.5"
+              className="flex shrink-0 items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-violet-500 px-3 py-1.5 text-sm font-semibold text-white shadow-md shadow-cyan-500/15 transition-colors"
             >
               <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
               Atualizar
@@ -1249,58 +1249,58 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 ) : null}
               </DragOverlay>
           </DndContext>
-          <aside className="dashboard-panel fixed right-4 top-32 z-20 hidden h-fit w-56 rounded-2xl p-2.5 xl:block">
-            <div className="mb-2 flex items-center gap-2 rounded-xl border border-emerald-400/15 bg-emerald-400/5 px-2.5 py-1.5">
+          <aside className="dashboard-panel fixed right-4 top-28 z-20 hidden h-fit w-56 rounded-xl p-2 xl:block">
+            <div className="mb-2 flex items-center gap-2 rounded-lg border border-emerald-400/12 bg-emerald-400/[0.04] px-2 py-1.5">
               <span className="relative flex h-2.5 w-2.5">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-45" />
                 <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-300" />
               </span>
               <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-300">Ao vivo</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300">Ao vivo</p>
                 <p className="truncate text-[11px] text-[var(--dash-faint)]">Última venda {formatRelativeTime(latestSale?.data_venda)}</p>
               </div>
             </div>
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-muted)]">Últimas vendas</h3>
+              <h3 className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--dash-muted)]">Últimas vendas</h3>
               <span className="h-2 w-2 rounded-full bg-emerald-300" />
             </div>
-            <div className="relative max-h-[320px] space-y-1 overflow-hidden">
+            <div className="relative max-h-[360px] space-y-1 overflow-y-auto pr-1">
               {approvedRecentVendas.length === 0 ? (
                 <p className="py-6 text-center text-xs text-[var(--dash-faint)]">Aguardando vendas</p>
               ) : approvedRecentVendas.map(venda => {
                 const renderedCountryLabel = countryDisplay(venda.pais)
                 return (
-                <div key={venda.id} className="group rounded-lg border border-white/7 bg-white/[0.03] px-2 py-1.5 transition-colors hover:border-emerald-300/20 hover:bg-white/[0.055]">
-                  <div className="mb-0.5 flex items-center justify-between gap-1.5">
-                    <span className="truncate text-[11px] font-semibold text-[var(--dash-text)]">
+                <div key={venda.id} className="group rounded-lg border border-white/[0.06] bg-white/[0.025] px-2 py-1.5 transition-colors hover:border-emerald-300/18 hover:bg-white/[0.045]">
+                  <div className="mb-0.5 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5">
+                    <span className="truncate text-[11px] font-medium text-[var(--dash-text)]">
                       {renderedCountryLabel} • {formatSaleAmount(venda)}
                     </span>
-                    <span className="shrink-0 rounded-full bg-emerald-400/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-emerald-300">Live</span>
+                    <span className="shrink-0 rounded-full bg-emerald-400/[0.08] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-emerald-300">Live</span>
                   </div>
-                  <p className="line-clamp-2 text-[11px] font-medium leading-snug text-[var(--dash-muted)]">{venda.produto ?? 'Produto'}</p>
+                  <p className="truncate text-[11px] font-normal leading-snug text-[var(--dash-muted)]">{venda.produto ?? 'Produto'}</p>
                   <p className="mt-1 text-[10px] text-[var(--dash-faint)]">{formatRelativeTime(venda.data_venda)}</p>
                 </div>
               )})}
               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-[var(--dash-panel)] to-transparent" />
             </div>
-            <div className="mt-4 border-t border-white/8 pt-3">
+            <div className="mt-3 border-t border-white/[0.06] pt-2.5">
               <h3 className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-muted)]">Insights automáticos</h3>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {insights.map((item, index) => (
-                  <div key={index} className="rounded-2xl border border-white/7 bg-white/[0.03] px-3 py-2 text-xs text-[var(--dash-muted)]">
+                  <div key={index} className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-2.5 py-1.5 text-[11px] leading-4 text-[var(--dash-muted)]">
                     {item}
                   </div>
                 ))}
               </div>
             </div>
-            <div className="mt-4 border-t border-white/8 pt-3">
+            <div className="mt-3 border-t border-white/[0.06] pt-2.5">
               <h3 className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-muted)]">Mapa de países</h3>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {(countryRanking.length ? countryRanking : [{ label: 'Unknown', count: 0, revenue: 0 }]).map((country, index) => (
-                  <div key={country.label} className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-white/[0.025] px-3 py-2">
+                  <div key={country.label} className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-lg bg-white/[0.025] px-2 py-1.5">
                     <div>
                       <p className="text-xs font-bold text-[var(--dash-text)]">{country.label === 'Unknown' ? '🌐 Unknown' : `🌐 ${country.label}`}</p>
-                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/5">
+                      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/5">
                         <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-400" style={{ width: `${Math.max(8, 100 - index * 18)}%` }} />
                       </div>
                     </div>
