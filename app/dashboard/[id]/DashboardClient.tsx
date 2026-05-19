@@ -216,36 +216,37 @@ function resolveOverlapsMulti(layout: WidgetConfig[], activeIds: Set<string>) {
   return next
 }
 
-// After a drag drop, if the dragged widget is the bottom-most in the grid,
-// pull it up to touch the nearest widget above (eliminates trailing empty space).
-function applyBottomMagnet(layout: WidgetConfig[], draggedId: string): WidgetConfig[] {
-  const dragged = layout.find(w => w.id === draggedId)
-  if (!dragged) return layout
-  const rowStart = dragged.row_start ?? 1
-  const rowSpan = normalizeRowSpan(dragged)
-  const rowEnd = rowStart + rowSpan
-  const colStart = dragged.col_start ?? 1
-  const colSpan = dragged.col_span ?? widthToSpan(dragged.width)
-
-  const isBottomMost = layout.every(w =>
-    w.id === draggedId || (w.row_start ?? 1) + normalizeRowSpan(w) <= rowEnd,
+// After any drop, pull every bottom-most widget up to touch the nearest widget above it,
+// eliminating trailing empty space at the end of the grid.
+function applyBottomMagnet(layout: WidgetConfig[]): WidgetConfig[] {
+  if (layout.length === 0) return layout
+  const maxRowEnd = Math.max(...layout.map(w => (w.row_start ?? 1) + normalizeRowSpan(w)))
+  const bottomIds = new Set(
+    layout
+      .filter(w => (w.row_start ?? 1) + normalizeRowSpan(w) === maxRowEnd)
+      .map(w => w.id),
   )
-  if (!isBottomMost) return layout
-
-  const above = layout
-    .filter(w => {
-      if (w.id === draggedId) return false
-      const wCol = w.col_start ?? 1
-      const wSpan = w.col_span ?? widthToSpan(w.width)
-      return wCol < colStart + colSpan && wCol + wSpan > colStart
-    })
-    .map(w => (w.row_start ?? 1) + normalizeRowSpan(w))
-
-  const newRowStart = above.length > 0 ? Math.max(...above) : 1
-  if (newRowStart < rowStart) {
-    return layout.map(w => w.id === draggedId ? { ...w, row_start: newRowStart } : w)
+  let result = layout
+  for (const id of bottomIds) {
+    const widget = result.find(w => w.id === id)
+    if (!widget) continue
+    const rowStart = widget.row_start ?? 1
+    const colStart = widget.col_start ?? 1
+    const colSpan = widget.col_span ?? widthToSpan(widget.width)
+    const above = result
+      .filter(w => {
+        if (bottomIds.has(w.id)) return false
+        const wCol = w.col_start ?? 1
+        const wSpan = w.col_span ?? widthToSpan(w.width)
+        return wCol < colStart + colSpan && wCol + wSpan > colStart
+      })
+      .map(w => (w.row_start ?? 1) + normalizeRowSpan(w))
+    const newRowStart = above.length > 0 ? Math.max(...above) : 1
+    if (newRowStart < rowStart) {
+      result = result.map(w => w.id === id ? { ...w, row_start: newRowStart } : w)
+    }
   }
-  return layout
+  return result
 }
 
 function compactLayout(widgets: WidgetConfig[]) {
@@ -632,6 +633,30 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         const activeIds = selectedWidgetIdsRef.current
         const deltaCol = placement.col_start - (dragged.col_start ?? 1)
         const deltaRow = placement.row_start - (dragged.row_start ?? 1)
+
+        // Single-widget drag: if dropped on exactly one other widget, swap positions.
+        if (activeIds.size <= 1) {
+          const newBox = { col: placement.col_start, row: placement.row_start, colSpan: placement.col_span, rowSpan: placement.row_span }
+          const overlapping = prev.filter(w => {
+            if (w.id === draggedId) return false
+            return collidesBounds(newBox, {
+              col: w.col_start ?? 1,
+              row: w.row_start ?? 1,
+              colSpan: w.col_span ?? widthToSpan(w.width),
+              rowSpan: normalizeRowSpan(w),
+            })
+          })
+          if (overlapping.length === 1) {
+            const target = overlapping[0]
+            const swapped = prev.map(w => {
+              if (w.id === draggedId) return { ...w, col_start: placement.col_start, row_start: placement.row_start }
+              if (w.id === target.id) return { ...w, col_start: dragged.col_start ?? 1, row_start: dragged.row_start ?? 1 }
+              return w
+            })
+            return applyBottomMagnet(resolveOverlapsMulti(swapped, new Set([draggedId])))
+          }
+        }
+
         const moved = prev.map(w => {
           if (w.id === draggedId) return { ...w, col_start: placement.col_start, row_start: placement.row_start }
           if (!activeIds.has(w.id)) return w
@@ -642,7 +667,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             row_start: Math.max(1, (w.row_start ?? 1) + deltaRow),
           }
         })
-        return applyBottomMagnet(resolveOverlapsMulti(moved, activeIds), draggedId)
+        return applyBottomMagnet(resolveOverlapsMulti(moved, activeIds))
       })
     },
     [dragPreview, getPlacementFromDelta, pushHistory],
@@ -1155,6 +1180,36 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 >
                   <Redo2 size={13} />
                 </Button>
+                {selectedWidgetIds.size === 1 && widgets.find(w => w.id === [...selectedWidgetIds][0])?.type === 'metric' && (() => {
+                  const sid = [...selectedWidgetIds][0]!
+                  const sw = widgets.find(w => w.id === sid)!
+                  const cur = normalizeRowSpan(sw)
+                  const labels: ['P', 'M', 'G'] = ['P', 'M', 'G']
+                  const tips = ['Pequeno: ícone + título + valor', 'Médio: + detalhe', 'Grande: + comparação']
+                  return (
+                    <>
+                      <div className="mx-0.5 h-4 w-px shrink-0 bg-[var(--dash-border)]" />
+                      {labels.map((label, i) => (
+                        <button
+                          key={label}
+                          title={tips[i]}
+                          onClick={() => {
+                            pushHistory()
+                            setWidgets(prev => prev.map(w => w.id === sid ? { ...w, row_span: METRIC_SNAP_ROWS[i]! } : w))
+                          }}
+                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-black transition-all ${
+                            cur === METRIC_SNAP_ROWS[i]
+                              ? 'bg-gradient-to-r from-cyan-500 to-violet-500 text-white shadow-md shadow-cyan-500/20'
+                              : 'border border-[var(--dash-border)] bg-white/5 text-[var(--dash-faint)] hover:text-[var(--dash-text)]'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                      <div className="mx-0.5 h-4 w-px shrink-0 bg-[var(--dash-border)]" />
+                    </>
+                  )
+                })()}
                 <Button
                   variant="outline"
                   size="sm"
