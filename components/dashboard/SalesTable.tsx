@@ -74,8 +74,7 @@ export function SalesTable({
     'Produto',
     'Pagamento',
     'País',
-    'Valor BRL',
-    'Valor USD',
+    'Valor',
     'Status',
     'Origem',
   ]
@@ -138,7 +137,7 @@ export function SalesTable({
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={10}
+                  colSpan={9}
                   className="px-5 py-12 text-center text-sm text-[var(--dash-faint)]"
                 >
                   Nenhuma transação encontrada
@@ -179,15 +178,15 @@ export function SalesTable({
                   <td className="px-5 py-3.5 text-xs text-[var(--dash-faint)]">
                     {v.pais ?? '—'}
                   </td>
-                  <td className="px-5 py-3.5 text-xs font-semibold tabular-nums text-[var(--dash-text)]">
-                    {v.moeda === 'USD'
-                      ? formatBRL((v.valor ?? 0) * exchangeRate)
-                      : formatBRL(v.valor ?? 0)}
-                  </td>
-                  <td className="px-5 py-3.5 text-xs tabular-nums text-[var(--dash-faint)]">
-                    {v.moeda === 'USD'
-                      ? formatUSD(v.valor ?? 0)
-                      : '—'}
+                  <td className="px-5 py-3.5">
+                    {v.moeda === 'USD' ? (
+                      <div>
+                        <p className="text-xs font-semibold tabular-nums text-[var(--dash-text)]">{formatUSD(v.valor ?? 0)}</p>
+                        <p className="mt-0.5 text-[10px] tabular-nums text-[var(--dash-faint)]">≈ {formatBRL((v.valor ?? 0) * exchangeRate)}</p>
+                      </div>
+                    ) : (
+                      <p className="text-xs font-semibold tabular-nums text-[var(--dash-text)]">{formatBRL(v.valor ?? 0)}</p>
+                    )}
                   </td>
                   <td className="px-5 py-3.5">
                     <Badge variant={STATUS_VARIANT[v.status] ?? 'default'}>

@@ -34,7 +34,7 @@ import {
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { supabase } from '@/lib/supabase'
-import { getPeriodRange, generateDemoVendas, generateDemoCusto } from '@/lib/utils'
+import { getPeriodRange } from '@/lib/utils'
 import type { Venda, Projeto, Produto, Period, WidgetConfig, WidgetType, WidgetDataSource } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
 import { AddWidgetModal } from '@/components/dashboard/AddWidgetModal'
@@ -817,16 +817,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const isReady = !loading && !loadingWidgets
   const hasUnsavedLayout = !sameLayout(widgets, savedWidgets)
   const previewPlacement = dragPreview ?? resizePreview
-  const isDemoMode = isReady && vendas.length === 0
-  const displayVendas = useMemo(
-    () => isDemoMode ? generateDemoVendas(period, customDateRange) : vendas,
-    [isDemoMode, vendas, period, customDateRange],
-  )
-  const displayCombinedVendas = useMemo(
-    () => isDemoMode ? generateDemoVendas('30d') : combinedVendas,
-    [isDemoMode, combinedVendas],
-  )
-  const displayCustoTotal = isDemoMode ? generateDemoCusto(period, customDateRange) : custoTotal
+  const displayVendas = vendas
+  const displayCombinedVendas = combinedVendas
+  const displayCustoTotal = custoTotal
   const filteredProducts = useMemo(() => {
     const query = productSearch.trim().toLowerCase()
     if (!query) return allProducts
@@ -1073,13 +1066,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             Erro ao criar widget: {widgetError}
           </div>
         )}
-        {isDemoMode && !loadingWidgets && widgets.length > 0 && (
-          <div className="mb-5 flex items-center gap-2 rounded-xl border border-cyan-400/15 bg-cyan-400/5 px-4 py-2.5 text-xs text-cyan-300/70">
-            <span className="font-bold">Demo</span>
-            Sem vendas no período selecionado — dados simulados para visualização.
-          </div>
-        )}
-
         {!isReady ? (
           <div className="flex h-72 items-center justify-center">
             <Spinner size={32} />

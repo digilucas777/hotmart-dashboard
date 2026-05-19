@@ -76,7 +76,8 @@ export function WidgetRenderer({
 
   const isMetaWidget = config.type.startsWith('meta-')
   const isChartWidget = config.type === 'line' || config.type === 'bar' || config.type === 'meta-chart'
-  const effectivePeriod = isChartWidget && period !== 'custom' ? chartPeriod : period
+  const isTimeSeries = config.data_source === 'revenue_by_day' || config.data_source === 'sales_by_day'
+  const effectivePeriod = isChartWidget && isTimeSeries && period !== 'custom' ? chartPeriod : period
 
   const data = isMetaWidget
     ? computeMetaWidgetData(config.data_source, effectivePeriod)
@@ -317,8 +318,8 @@ export function WidgetRenderer({
             isBRL={isBRL}
             dualCurrency={data.dualCurrency}
             chartHeight={chartHeight}
-            localPeriod={chartPeriod}
-            onChangePeriod={setChartPeriod}
+            localPeriod={isTimeSeries ? chartPeriod : undefined}
+            onChangePeriod={isTimeSeries ? setChartPeriod : undefined}
           />
         )}
         {config.type === 'bar' && data.kind === 'series' && (
@@ -328,8 +329,8 @@ export function WidgetRenderer({
             isBRL={isBRL}
             dualCurrency={data.dualCurrency}
             chartHeight={chartHeight}
-            localPeriod={chartPeriod}
-            onChangePeriod={setChartPeriod}
+            localPeriod={isTimeSeries ? chartPeriod : undefined}
+            onChangePeriod={isTimeSeries ? setChartPeriod : undefined}
           />
         )}
         {config.type === 'pie' && data.kind === 'series' && (

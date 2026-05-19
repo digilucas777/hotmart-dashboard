@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { ShoppingCart, RefreshCw, Search } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { SalesTable } from '@/components/dashboard/SalesTable'
-import type { Venda, Produto } from '@/lib/types'
+import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
+import { getPeriodRange } from '@/lib/utils'
+import type { Venda, Produto, Period } from '@/lib/types'
 import { Spinner } from '@/components/ui/Spinner'
 import { MultiSelect } from '@/components/ui/MultiSelect'
 
@@ -22,13 +24,32 @@ export default function VendasPage() {
   const [loading, setLoading] = useState(true)
   const [exchangeRate, setExchangeRate] = useState(5.85)
 
-  // Filtros
+  const [period, setPeriod] = useState<Period>('30d')
+  const [customFrom, setCustomFrom] = useState<string>(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  })
+  const [customTo, setCustomTo] = useState<string>(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  })
+
   const [produtoFilter, setProdutoFilter] = useState<string[]>([])
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
   const [statusFilter, setStatusFilter] = useState<string[]>([])
   const [origemFilter, setOrigemFilter] = useState('')
   const [origemInput, setOrigemInput] = useState('')
+
+  const customDateRange = useMemo(() => {
+    if (period !== 'custom') return undefined
+    const parseLocal = (s: string) => {
+      const [y, m, d] = s.split('-').map(Number)
+      return new Date(y!, m! - 1, d!)
+    }
+    return {
+      from: parseLocal(customFrom),
+      to: new Date(parseLocal(customTo).getTime() + 86_400_000),
+    }
+  }, [period, customFrom, customTo])
 
   useEffect(() => {
     fetch('/api/exchange-rate')
@@ -48,23 +69,20 @@ export default function VendasPage() {
   const fetchVendas = useCallback(async () => {
     setLoading(true)
     try {
+      const { from, to } = getPeriodRange(period, customDateRange)
+
       let query = supabase
         .from('vendas')
         .select('*')
         .order('data_venda', { ascending: false })
+        .gte('data_venda', from.toISOString())
+        .lt('data_venda', to.toISOString())
 
       if (produtoFilter.length > 0) {
         const hotmartIds = produtos
           .filter(p => produtoFilter.includes(p.id))
           .map(p => p.hotmart_id)
         if (hotmartIds.length > 0) query = query.in('hotmart_produto_id', hotmartIds)
-      }
-
-      if (dateFrom) query = query.gte('data_venda', new Date(dateFrom).toISOString())
-      if (dateTo) {
-        const toDate = new Date(dateTo)
-        toDate.setDate(toDate.getDate() + 1)
-        query = query.lt('data_venda', toDate.toISOString())
       }
 
       if (statusFilter.length > 0) query = query.in('status', statusFilter)
@@ -75,7 +93,7 @@ export default function VendasPage() {
     } finally {
       setLoading(false)
     }
-  }, [produtoFilter, dateFrom, dateTo, statusFilter, origemFilter, produtos])
+  }, [period, customDateRange, produtoFilter, statusFilter, origemFilter, produtos])
 
   useEffect(() => {
     fetchVendas()
@@ -85,8 +103,7 @@ export default function VendasPage() {
     setOrigemFilter(origemInput)
   }
 
-  const inputClass =
-    'rounded-lg border border-white/10 bg-[#191929] px-3 py-2 text-xs text-slate-200 outline-none focus:border-indigo-500/60'
+  const hasFilters = produtoFilter.length > 0 || statusFilter.length > 0 || origemFilter
 
   return (
     <div className="min-h-screen">
@@ -115,49 +132,36 @@ export default function VendasPage() {
       </header>
 
       <main className="mx-auto max-w-[1400px] px-6 py-8">
+        {/* Period filter */}
+        <div className="mb-5">
+          <PeriodFilter
+            value={period}
+            onChange={setPeriod}
+            customFrom={customFrom}
+            customTo={customTo}
+            onCustomChange={(from, to) => { setCustomFrom(from); setCustomTo(to) }}
+          />
+        </div>
+
         {/* Filter bar */}
         <div className="mb-6 flex flex-wrap items-end gap-3 rounded-2xl border border-white/7 bg-[#191929] p-5">
-          <div className="flex flex-col gap-1">
-            <MultiSelect
-              label="Produto"
-              options={produtos.map(p => ({ value: p.id, label: p.nome }))}
-              values={produtoFilter}
-              onChange={setProdutoFilter}
-              placeholder="Todos os produtos"
-              searchable
-              searchPlaceholder="Buscar produto..."
-            />
-          </div>
+          <MultiSelect
+            label="Produto"
+            options={produtos.map(p => ({ value: p.id, label: p.nome }))}
+            values={produtoFilter}
+            onChange={setProdutoFilter}
+            placeholder="Todos os produtos"
+            searchable
+            searchPlaceholder="Buscar produto..."
+          />
 
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-500">De</label>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={e => setDateFrom(e.target.value)}
-              className={inputClass}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-500">Até</label>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={e => setDateTo(e.target.value)}
-              className={inputClass}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <MultiSelect
-              label="Status"
-              options={STATUS_OPTIONS}
-              values={statusFilter}
-              onChange={setStatusFilter}
-              placeholder="Todos os status"
-            />
-          </div>
+          <MultiSelect
+            label="Status"
+            options={STATUS_OPTIONS}
+            values={statusFilter}
+            onChange={setStatusFilter}
+            placeholder="Todos os status"
+          />
 
           <div className="flex flex-col gap-1">
             <label className="text-xs text-slate-500">Origem</label>
@@ -189,12 +193,10 @@ export default function VendasPage() {
             </div>
           </div>
 
-          {(produtoFilter.length > 0 || dateFrom || dateTo || statusFilter.length > 0 || origemFilter) && (
+          {hasFilters && (
             <button
               onClick={() => {
                 setProdutoFilter([])
-                setDateFrom('')
-                setDateTo('')
                 setStatusFilter([])
                 setOrigemFilter('')
                 setOrigemInput('')
