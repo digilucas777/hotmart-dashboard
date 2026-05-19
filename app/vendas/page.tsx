@@ -22,9 +22,10 @@ export default function VendasPage() {
   const [vendas, setVendas] = useState<Venda[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [loading, setLoading] = useState(true)
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null)
   const [exchangeRate, setExchangeRate] = useState(5.85)
 
-  const [period, setPeriod] = useState<Period>('30d')
+  const [period, setPeriod] = useState<Period>('thisMonth')
   const [customFrom, setCustomFrom] = useState<string>(() => {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
@@ -90,6 +91,7 @@ export default function VendasPage() {
 
       const { data } = await query
       setVendas((data ?? []) as Venda[])
+      setLastUpdatedAt(new Date())
     } finally {
       setLoading(false)
     }
@@ -139,6 +141,7 @@ export default function VendasPage() {
             onChange={setPeriod}
             customFrom={customFrom}
             customTo={customTo}
+            updatedAt={lastUpdatedAt}
             onCustomChange={(from, to) => { setCustomFrom(from); setCustomTo(to) }}
           />
         </div>

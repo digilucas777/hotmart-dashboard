@@ -8,6 +8,8 @@ export type Venda = {
   comprador_nome: string
   comprador_email: string
   valor: number
+  valor_recebido?: number | null
+  comissao_coprodutor?: number | null
   moeda: string
   status: Status
   data_venda: string
@@ -34,7 +36,7 @@ export type Produto = {
   nome: string
 }
 
-export type Period = 'today' | 'yesterday' | '7d' | '30d' | '90d' | '180d' | '365d' | 'thisMonth' | 'lastMonth' | 'custom'
+export type Period = 'today' | 'yesterday' | 'thisWeek' | 'lastWeek' | 'thisMonth' | 'lastMonth' | 'custom'
 
 export type WidgetType =
   | 'metric'

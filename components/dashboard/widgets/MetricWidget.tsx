@@ -45,11 +45,13 @@ export function MetricWidget({
   value,
   subValue,
   dataSource,
+  comparison,
 }: {
   title: string
   value: string
   subValue: string
   dataSource: WidgetDataSource
+  comparison?: string | null
 }) {
   const Icon = ICON_MAP[dataSource] ?? DollarSign
   const colors = COLOR_MAP[dataSource] ?? DEFAULT_COLORS
@@ -66,6 +68,11 @@ export function MetricWidget({
           {value}
         </p>
         {subValue && <p className="mt-0.5 text-xs text-[var(--dash-faint)]">{subValue}</p>}
+        {comparison && (
+          <p className={`mt-2 text-xs font-bold ${comparison.startsWith('↑') ? 'text-emerald-300' : comparison.startsWith('↓') ? 'text-red-300' : 'text-[var(--dash-faint)]'}`}>
+            {comparison}
+          </p>
+        )}
       </div>
     </div>
   )

@@ -34,7 +34,7 @@ import {
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { supabase } from '@/lib/supabase'
-import { getPeriodRange } from '@/lib/utils'
+import { formatRelativeTime, getPeriodRange, getPreviousPeriodRange } from '@/lib/utils'
 import type { Venda, Projeto, Produto, Period, WidgetConfig, WidgetType, WidgetDataSource } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
 import { AddWidgetModal } from '@/components/dashboard/AddWidgetModal'
@@ -287,6 +287,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [dashboardOptions, setDashboardOptions] = useState<Projeto[]>([])
   const [showDashboardSwitcher, setShowDashboardSwitcher] = useState(false)
   const [vendas, setVendas] = useState<Venda[]>([])
+  const [previousVendas, setPreviousVendas] = useState<Venda[]>([])
+  const [recentVendas, setRecentVendas] = useState<Venda[]>([])
   const [combinedVendas, setCombinedVendas] = useState<Venda[]>([])
   const [period, setPeriod] = useState<Period>('today')
   const [customFrom, setCustomFrom] = useState<string>(() => {
@@ -300,6 +302,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [exchangeRate, setExchangeRate] = useState(5.85)
   const [theme, setTheme] = useState<DashboardTheme>('dark')
   const [loading, setLoading] = useState(true)
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null)
+  const [nowTick, setNowTick] = useState(() => Date.now())
   const [custoTotal, setCustoTotal] = useState(0)
 
   const [widgets, setWidgets] = useState<WidgetConfig[]>([])
@@ -347,6 +351,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       .then(r => r.json())
       .then((d: { rate: number }) => setExchangeRate(d.rate ?? 5.85))
       .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowTick(Date.now()), 1000)
+    return () => window.clearInterval(timer)
   }, [])
 
   useEffect(() => {
@@ -409,6 +418,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
       if (produtoIds.length === 0) {
         setVendas([])
+        setPreviousVendas([])
+        setRecentVendas([])
         setCombinedVendas([])
         return
       }
@@ -422,11 +433,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
       if (hotmartIds.length === 0) {
         setVendas([])
+        setPreviousVendas([])
+        setRecentVendas([])
         setCombinedVendas([])
         return
       }
 
       const { from, to } = getPeriodRange(period, customDateRange)
+      const previousRange = getPreviousPeriodRange(period, customDateRange)
 
       const { data } = await supabase
         .from('vendas')
@@ -437,6 +451,25 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         .order('data_venda', { ascending: false })
 
       setVendas((data ?? []) as Venda[])
+
+      const { data: previousData } = await supabase
+        .from('vendas')
+        .select('*')
+        .in('hotmart_produto_id', hotmartIds)
+        .gte('data_venda', previousRange.from.toISOString())
+        .lt('data_venda', previousRange.to.toISOString())
+        .order('data_venda', { ascending: false })
+
+      setPreviousVendas((previousData ?? []) as Venda[])
+
+      const { data: recentData } = await supabase
+        .from('vendas')
+        .select('*')
+        .in('hotmart_produto_id', hotmartIds)
+        .order('data_venda', { ascending: false })
+        .limit(8)
+
+      setRecentVendas((recentData ?? []) as Venda[])
 
       const now = new Date()
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -452,6 +485,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         .order('data_venda', { ascending: false })
 
       setCombinedVendas((combinedData ?? []) as Venda[])
+      setLastUpdatedAt(new Date())
     } finally {
       setLoading(false)
     }
@@ -814,12 +848,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     return () => document.removeEventListener('click', handleDocClick)
   }, [editMode])
 
-  const isReady = !loading && !loadingWidgets
+  const isReady = !loadingWidgets
   const hasUnsavedLayout = !sameLayout(widgets, savedWidgets)
   const previewPlacement = dragPreview ?? resizePreview
   const displayVendas = vendas
   const displayCombinedVendas = combinedVendas
   const displayCustoTotal = custoTotal
+  const latestSale = recentVendas.find(v => v.status === 'approved') ?? recentVendas[0]
+  void nowTick
   const filteredProducts = useMemo(() => {
     const query = productSearch.trim().toLowerCase()
     if (!query) return allProducts
@@ -954,8 +990,19 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             onChange={setPeriod}
             customFrom={customFrom}
             customTo={customTo}
+            updatedAt={lastUpdatedAt}
             onCustomChange={(from, to) => { setCustomFrom(from); setCustomTo(to) }}
           />
+          <div className="dashboard-panel flex items-center gap-3 rounded-2xl px-4 py-3 shadow-[0_0_35px_rgba(16,185,129,0.08)]">
+            <span className="relative flex h-3 w-3">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-300 shadow-[0_0_16px_rgba(52,211,153,0.75)]" />
+            </span>
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-300">Ao vivo</p>
+              <p className="text-xs text-[var(--dash-faint)]">Última venda {formatRelativeTime(latestSale?.data_venda)}</p>
+            </div>
+          </div>
           <div className="dashboard-action-bar dashboard-panel flex max-w-full flex-nowrap items-center justify-end gap-2 overflow-x-auto rounded-2xl p-1.5">
             <button
               onClick={fetchVendas}
@@ -1086,6 +1133,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             </Button>
           </div>
         ) : (
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
           <DndContext
             sensors={sensors}
             onDragStart={handleDragStart}
@@ -1118,12 +1166,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                     key={w.id}
                     config={w}
                     vendas={displayVendas}
+                    previousVendas={previousVendas}
                     combinedVendas={displayCombinedVendas}
                     period={period}
                     exchangeRate={exchangeRate}
                     custoTotal={displayCustoTotal}
                     customRange={customDateRange}
                     editMode={editMode}
+                    loading={loading}
                     selected={selectedWidgetIds.has(w.id)}
                     isGroupDragging={!!activeWidgetId && selectedWidgetIds.has(w.id) && w.id !== activeWidgetId}
                     onSelect={(id, multi) => {
@@ -1163,6 +1213,28 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 ) : null}
               </DragOverlay>
           </DndContext>
+          <aside className="dashboard-panel h-fit rounded-2xl p-4 xl:sticky xl:top-24">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-muted)]">Últimas vendas</h3>
+              <span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_14px_rgba(52,211,153,0.8)]" />
+            </div>
+            <div className="space-y-2">
+              {recentVendas.length === 0 ? (
+                <p className="py-6 text-center text-xs text-[var(--dash-faint)]">Aguardando vendas</p>
+              ) : recentVendas.map(venda => (
+                <div key={venda.id} className="rounded-2xl border border-white/7 bg-white/[0.035] px-3 py-3">
+                  <div className="mb-1 flex items-center justify-between gap-3">
+                    <span className="text-xs font-black text-[var(--dash-text)]">
+                      {venda.pais === 'GB' || venda.pais === 'UK' ? '🇬🇧 UK' : venda.pais ?? '🌐'} • {venda.moeda === 'USD' ? `$${(venda.valor ?? 0).toFixed(0)}` : `R$${(venda.valor ?? 0).toFixed(0)}`}
+                    </span>
+                    <span className="text-[10px] text-[var(--dash-faint)]">{formatRelativeTime(venda.data_venda)}</span>
+                  </div>
+                  <p className="line-clamp-2 text-xs font-semibold text-[var(--dash-muted)]">{venda.produto ?? 'Produto'}</p>
+                </div>
+              ))}
+            </div>
+          </aside>
+          </div>
         )}
       </main>
 

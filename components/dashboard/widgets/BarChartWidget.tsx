@@ -16,9 +16,9 @@ import type { SeriesPoint } from '@/lib/utils'
 import type { Period } from '@/lib/types'
 
 const CHART_PERIODS: { value: Period; label: string }[] = [
-  { value: '7d', label: '7d' },
-  { value: '30d', label: '30d' },
-  { value: '90d', label: '90d' },
+  { value: 'thisWeek', label: 'Semana' },
+  { value: 'thisMonth', label: 'Mês' },
+  { value: 'lastMonth', label: 'Último mês' },
 ]
 
 const BAR_COLORS = {

@@ -69,7 +69,7 @@ export function CombinedChartWidget({
   vendas: Venda[]
   chartHeight?: number
 }) {
-  const [internalPeriod, setInternalPeriod] = useState<Period>('7d')
+  const [internalPeriod, setInternalPeriod] = useState<Period>('thisWeek')
   const points = useMemo(() => {
     const data = computeWidgetData(vendas, 'combined_by_day', internalPeriod, 1)
     return data.kind === 'combined' ? data.points : []
@@ -77,12 +77,10 @@ export function CombinedChartWidget({
 
   const periods: { value: Period; label: string }[] = [
     { value: 'today', label: 'Hoje' },
-    { value: '7d', label: '7 dias' },
-    { value: '30d', label: '30 dias' },
-    { value: '90d', label: '3 meses' },
-    { value: '180d', label: '6 meses' },
-    { value: '365d', label: '1 ano' },
+    { value: 'thisWeek', label: 'Esta semana' },
+    { value: 'lastWeek', label: 'Semana passada' },
     { value: 'thisMonth', label: 'Este mês' },
+    { value: 'lastMonth', label: 'Último mês' },
   ]
 
   return (

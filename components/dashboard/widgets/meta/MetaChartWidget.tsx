@@ -14,9 +14,9 @@ import type { MetaChartResult } from '@/lib/meta-ads-mock'
 import type { Period } from '@/lib/types'
 
 const CHART_PERIODS: { value: Period; label: string }[] = [
-  { value: '7d', label: '7d' },
-  { value: '30d', label: '30d' },
-  { value: '90d', label: '90d' },
+  { value: 'thisWeek', label: 'Semana' },
+  { value: 'thisMonth', label: 'Mês' },
+  { value: 'lastMonth', label: 'Último mês' },
 ]
 
 function fmtAxis(v: number, format: MetaChartResult['format']): string {

@@ -19,17 +19,14 @@ function hashStr(s: string): number {
 const PERIOD_DAYS: Partial<Record<Period, number>> = {
   today: 1,
   yesterday: 1,
-  '7d': 7,
-  '30d': 30,
-  '90d': 90,
-  '180d': 180,
-  '365d': 365,
+  thisWeek: 7,
+  lastWeek: 7,
   thisMonth: 25,
   lastMonth: 30,
 }
 
 function periodDays(period: Period): number {
-  return periodDays(period) ?? 30
+  return PERIOD_DAYS[period] ?? 30
 }
 
 function generateDates(period: Period): string[] {

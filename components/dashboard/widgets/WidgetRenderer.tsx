@@ -3,8 +3,8 @@
 import { useState, useRef } from 'react'
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react'
 import { useDraggable } from '@dnd-kit/core'
-import { Copy, GripVertical, Pencil, Trash2 } from 'lucide-react'
-import { computeWidgetData, getValueFormat } from '@/lib/utils'
+import { Copy, GripVertical, Pencil, Trash2, X } from 'lucide-react'
+import { computeComparableMetric, computeWidgetData, formatPeriodComparisonLabel, getValueFormat } from '@/lib/utils'
 import type { WidgetConfig, Venda, Period } from '@/lib/types'
 import { MetricWidget } from './MetricWidget'
 import { LineChartWidget } from './LineChartWidget'
@@ -34,12 +34,14 @@ export type ResizeDirection =
 export function WidgetRenderer({
   config,
   vendas,
+  previousVendas,
   combinedVendas,
   period,
   exchangeRate,
   custoTotal = 0,
   customRange,
   editMode,
+  loading,
   selected,
   isGroupDragging = false,
   onSelect,
@@ -51,12 +53,14 @@ export function WidgetRenderer({
 }: {
   config: WidgetConfig
   vendas: Venda[]
+  previousVendas?: Venda[]
   combinedVendas?: Venda[]
   period: Period
   exchangeRate: number
   custoTotal?: number
   customRange?: { from: Date; to: Date }
   editMode: boolean
+  loading?: boolean
   selected: boolean
   onSelect: (id: string, multi?: boolean) => void
   onDelete: (id: string) => void
@@ -70,6 +74,7 @@ export function WidgetRenderer({
   const [liveSize, setLiveSize] = useState<{ w: number; h: number } | null>(null)
   const [resizePct, setResizePct] = useState<{ w: number; h: number } | null>(null)
   const [chartPeriod, setChartPeriod] = useState<Period>(period)
+  const [expanded, setExpanded] = useState(false)
 
   const { attributes, listeners, setNodeRef, isDragging } =
     useDraggable({ id: config.id, disabled: !editMode })
@@ -84,6 +89,16 @@ export function WidgetRenderer({
     : computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, custoTotal, customRange)
 
   const isBRL = !isMetaWidget && getValueFormat(config.data_source) === 'brl'
+  const comparison = !isMetaWidget && data.kind === 'metric' && previousVendas
+    ? (() => {
+        const current = computeComparableMetric(vendas, config.data_source, exchangeRate, custoTotal)
+        const previous = computeComparableMetric(previousVendas, config.data_source, exchangeRate, custoTotal)
+        if (current === null || previous === null || previous === 0) return null
+        const pct = ((current - previous) / Math.abs(previous)) * 100
+        if (Math.abs(pct) < 0.1) return `• 0% vs ${formatPeriodComparisonLabel(period)}`
+        return `${pct > 0 ? '↑' : '↓'} ${pct > 0 ? '+' : ''}${pct.toFixed(0)}% vs ${formatPeriodComparisonLabel(period)}`
+      })()
+    : null
 
   const chartHeight = liveSize
     ? Math.max(120, liveSize.h - 80)
@@ -198,6 +213,9 @@ export function WidgetRenderer({
         ref={cardRef}
         {...(editMode ? attributes : {})}
         {...(editMode ? listeners : {})}
+        onClick={(e) => {
+          if (!editMode && !(e.target as HTMLElement).closest('button,input,a')) setExpanded(true)
+        }}
         className={`dashboard-card group relative h-full rounded-2xl transition-all duration-200 ${
           isDragging
             ? 'border-cyan-400/50 shadow-2xl shadow-cyan-500/10'
@@ -302,6 +320,17 @@ export function WidgetRenderer({
           </>
         )}
 
+        {loading && (
+          <div className="pointer-events-none absolute inset-0 z-40 rounded-2xl bg-[var(--dash-panel)]/82 p-5 backdrop-blur-md">
+            <div className="h-full animate-pulse space-y-4">
+              <div className="h-10 w-10 rounded-xl bg-white/10" />
+              <div className="h-3 w-1/3 rounded-full bg-white/10" />
+              <div className="h-8 w-2/3 rounded-full bg-white/10" />
+              <div className="h-3 w-1/2 rounded-full bg-white/10" />
+            </div>
+          </div>
+        )}
+
         {/* Hotmart widgets */}
         {config.type === 'metric' && data.kind === 'metric' && (
           <MetricWidget
@@ -309,6 +338,7 @@ export function WidgetRenderer({
             value={data.value}
             subValue={data.subValue}
             dataSource={config.data_source}
+            comparison={comparison}
           />
         )}
         {config.type === 'line' && data.kind === 'series' && (
@@ -370,6 +400,41 @@ export function WidgetRenderer({
           <MetaCreativeWidget title={config.title} data={data} />
         )}
       </div>
+      {expanded && !editMode && (
+        <div className="fixed inset-0 z-[90] bg-black/75 p-4 backdrop-blur-2xl sm:p-8" onClick={() => setExpanded(false)}>
+          <div className="dashboard-card mx-auto flex h-full max-w-7xl flex-col overflow-hidden rounded-3xl" onClick={e => e.stopPropagation()}>
+            <div className="flex shrink-0 items-center justify-between border-b border-[var(--dash-border)] px-5 py-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">Widget expandido</p>
+                <h2 className="text-lg font-black text-[var(--dash-text)]">{config.title}</h2>
+              </div>
+              <button onClick={() => setExpanded(false)} className="rounded-xl p-2 text-[var(--dash-faint)] hover:bg-white/5 hover:text-[var(--dash-text)]">
+                <X size={19} />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-2">
+              {config.type === 'metric' && data.kind === 'metric' && (
+                <MetricWidget title={config.title} value={data.value} subValue={data.subValue} dataSource={config.data_source} comparison={comparison} />
+              )}
+              {config.type === 'line' && data.kind === 'series' && (
+                <LineChartWidget title={config.title} points={data.points} isBRL={isBRL} dualCurrency={data.dualCurrency} chartHeight={520} />
+              )}
+              {config.type === 'bar' && data.kind === 'series' && (
+                <BarChartWidget title={config.title} points={data.points} isBRL={isBRL} dualCurrency={data.dualCurrency} chartHeight={520} />
+              )}
+              {config.type === 'pie' && data.kind === 'series' && (
+                <PieWidget title={config.title} points={data.points} chartHeight={520} />
+              )}
+              {config.type === 'combined' && data.kind === 'combined' && (
+                <CombinedChartWidget title={config.title} vendas={combinedVendas ?? vendas} chartHeight={620} />
+              )}
+              {config.type === 'table' && data.kind === 'table' && (
+                <SalesTable vendas={data.vendas} exchangeRate={exchangeRate} heightMode="fill" />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

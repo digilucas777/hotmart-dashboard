@@ -9,43 +9,24 @@ export function getPeriodRange(period: Period, customRange?: { from: Date; to: D
   }
   const now = new Date()
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const day = 86_400_000
+  const weekStart = new Date(todayStart)
+  weekStart.setDate(todayStart.getDate() - ((todayStart.getDay() + 6) % 7))
 
   switch (period) {
     case 'today':
-      return { from: todayStart, to: new Date(todayStart.getTime() + 86_400_000) }
+      return { from: todayStart, to: new Date(todayStart.getTime() + day) }
     case 'yesterday': {
-      const yd = new Date(todayStart.getTime() - 86_400_000)
+      const yd = new Date(todayStart.getTime() - day)
       return { from: yd, to: todayStart }
     }
-    case '7d':
-      return {
-        from: new Date(todayStart.getTime() - 6 * 86_400_000),
-        to: new Date(todayStart.getTime() + 86_400_000),
-      }
-    case '30d':
-      return {
-        from: new Date(todayStart.getTime() - 29 * 86_400_000),
-        to: new Date(todayStart.getTime() + 86_400_000),
-      }
-    case '90d':
-      return {
-        from: new Date(todayStart.getTime() - 89 * 86_400_000),
-        to: new Date(todayStart.getTime() + 86_400_000),
-      }
-    case '180d':
-      return {
-        from: new Date(todayStart.getTime() - 179 * 86_400_000),
-        to: new Date(todayStart.getTime() + 86_400_000),
-      }
-    case '365d':
-      return {
-        from: new Date(todayStart.getTime() - 364 * 86_400_000),
-        to: new Date(todayStart.getTime() + 86_400_000),
-      }
+    case 'thisWeek':
+      return { from: weekStart, to: new Date(todayStart.getTime() + day) }
+    case 'lastWeek':
+      return { from: new Date(weekStart.getTime() - 7 * day), to: weekStart }
     case 'thisMonth': {
       const first = new Date(now.getFullYear(), now.getMonth(), 1)
-      const last = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-      return { from: first, to: new Date(last.getTime() + 86_400_000) }
+      return { from: first, to: new Date(todayStart.getTime() + day) }
     }
     case 'lastMonth': {
       const first = new Date(now.getFullYear(), now.getMonth() - 1, 1)
@@ -53,6 +34,44 @@ export function getPeriodRange(period: Period, customRange?: { from: Date; to: D
       return { from: first, to: new Date(last.getTime() + 86_400_000) }
     }
   }
+}
+
+export function getPreviousPeriodRange(period: Period, customRange?: { from: Date; to: Date }): { from: Date; to: Date } {
+  const current = getPeriodRange(period, customRange)
+  const duration = current.to.getTime() - current.from.getTime()
+  return { from: new Date(current.from.getTime() - duration), to: current.from }
+}
+
+export function formatShortDate(d: Date): string {
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+export function formatPeriodContext(period: Period, customRange?: { from: Date; to: Date }): string {
+  const { from, to } = getPeriodRange(period, customRange)
+  const inclusiveTo = new Date(to.getTime() - 1)
+  const monthName = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' })
+  const labels: Record<Period, string> = {
+    today: `Hoje • ${formatShortDate(from)}/${from.getFullYear()}`,
+    yesterday: `Ontem • ${formatShortDate(from)}/${from.getFullYear()}`,
+    thisWeek: `Esta semana • ${formatShortDate(from)} -> ${formatShortDate(inclusiveTo)}`,
+    lastWeek: `Semana passada • ${formatShortDate(from)} -> ${formatShortDate(inclusiveTo)}`,
+    thisMonth: `Este mês • ${monthName.format(from)}`,
+    lastMonth: `Último mês • ${monthName.format(from)}`,
+    custom: `Personalizado • ${formatShortDate(from)} -> ${formatShortDate(inclusiveTo)}`,
+  }
+  return labels[period]
+}
+
+export function formatRelativeTime(iso?: string | null): string {
+  if (!iso) return 'sem vendas ainda'
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
+  if (seconds < 60) return `há ${seconds} segundo${seconds === 1 ? '' : 's'}`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `há ${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `há ${hours} h`
+  const days = Math.floor(hours / 24)
+  return `há ${days} dia${days === 1 ? '' : 's'}`
 }
 
 export function formatBRL(value: number): string {
@@ -473,6 +492,65 @@ export function computeWidgetData(
   }
 }
 
+export function computeComparableMetric(
+  vendas: Venda[],
+  dataSource: WidgetDataSource,
+  exchangeRate: number,
+  custoTotal = 0,
+): number | null {
+  const approved = vendas.filter(v => v.status === 'approved')
+  const sumConverted = (arr: Venda[]) =>
+    arr.reduce((sum, v) => sum + (v.moeda === 'USD' ? (v.valor ?? 0) * exchangeRate : (v.valor ?? 0)), 0)
+  const totalConverted = sumConverted(approved)
+  const totalBRL = approved.filter(v => v.moeda === 'BRL').reduce((s, v) => s + (v.valor ?? 0), 0)
+  const totalUSD = approved.filter(v => v.moeda === 'USD').reduce((s, v) => s + (v.valor ?? 0), 0)
+  switch (dataSource) {
+    case 'total_converted':
+      return totalConverted
+    case 'total_brl':
+      return totalBRL
+    case 'total_usd':
+      return totalUSD
+    case 'sales_count':
+      return approved.length
+    case 'approval_rate':
+      return vendas.length > 0 ? (approved.length / vendas.length) * 100 : 0
+    case 'avg_ticket':
+      return approved.length > 0 ? totalConverted / approved.length : 0
+    case 'refunds_count':
+      return vendas.filter(v => v.status === 'refunded').length
+    case 'pending_count':
+      return vendas.filter(v => v.status === 'pending').length
+    case 'cancelled_count':
+      return vendas.filter(v => v.status === 'cancelled').length
+    case 'lucro':
+      return totalConverted - custoTotal
+    case 'margem_lucro':
+      return totalConverted > 0 ? ((totalConverted - custoTotal) / totalConverted) * 100 : 0
+    case 'roas':
+      return custoTotal > 0 ? totalConverted / custoTotal : null
+    case 'cpa':
+      return custoTotal > 0 && approved.length > 0 ? custoTotal / approved.length : null
+    case 'commission':
+      return totalConverted * 0.18
+    default:
+      return null
+  }
+}
+
+export function formatPeriodComparisonLabel(period: Period): string {
+  const labels: Record<Period, string> = {
+    today: 'ontem',
+    yesterday: 'dia anterior',
+    thisWeek: 'semana passada',
+    lastWeek: 'semana anterior',
+    thisMonth: 'mês anterior',
+    lastMonth: 'mês anterior',
+    custom: 'período anterior',
+  }
+  return labels[period]
+}
+
 const DEMO_PRODUTOS = ['Método Acelerador Digital', 'Mentoria Premium 2.0', 'Curso Tráfego Pro']
 const DEMO_NOMES = ['Lucas Mendes', 'Ana Costa', 'Pedro Oliveira', 'Maria Santos', 'João Ferreira', 'Carla Lima', 'Rafael Souza', 'Juliana Rocha']
 const DEMO_PAGAMENTOS = ['CREDIT_CARD', 'CREDIT_CARD', 'PIX', 'PIX', 'CREDIT_CARD', 'BOLETO']
@@ -519,13 +597,13 @@ export function generateDemoVendas(period: Period, customRange?: { from: Date; t
 }
 
 const DEMO_CUSTO_PER_DAY: Partial<Record<Period, number>> = {
-  today: 450, yesterday: 430, '7d': 420, '30d': 410, '90d': 400, '180d': 395, '365d': 390, thisMonth: 415, lastMonth: 425,
+  today: 450, yesterday: 430, thisWeek: 420, lastWeek: 410, thisMonth: 415, lastMonth: 425,
 }
 export function generateDemoCusto(period: Period, customRange?: { from: Date; to: Date }): number {
   if (period === 'custom' && customRange) {
     const days = Math.max(1, Math.ceil((customRange.to.getTime() - customRange.from.getTime()) / 86_400_000))
     return days * 420
   }
-  const daysMap: Partial<Record<Period, number>> = { today: 1, yesterday: 1, '7d': 7, '30d': 30, '90d': 90, '180d': 180, '365d': 365, thisMonth: 25, lastMonth: 30 }
+  const daysMap: Partial<Record<Period, number>> = { today: 1, yesterday: 1, thisWeek: 7, lastWeek: 7, thisMonth: 25, lastMonth: 30 }
   return (daysMap[period] ?? 1) * (DEMO_CUSTO_PER_DAY[period] ?? 420)
 }
