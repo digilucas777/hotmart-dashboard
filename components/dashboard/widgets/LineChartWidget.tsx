@@ -117,11 +117,11 @@ export function LineChartWidget({
           {dualCurrency ? (
             <>
               <Legend formatter={(value) => value === 'valueBRL' ? 'BRL' : 'USD'} wrapperStyle={{ fontSize: 11, color: '#64748b' }} />
-              <Line type="monotone" dataKey="valueBRL" stroke="#22c55e" strokeWidth={2.4} dot={false} activeDot={{ r: 4, fill: '#22c55e', strokeWidth: 0 }} isAnimationActive />
-              <Line type="monotone" dataKey="valueUSD" stroke="#00d4ff" strokeWidth={2.4} dot={false} activeDot={{ r: 4, fill: '#00d4ff', strokeWidth: 0 }} isAnimationActive />
+              <Line type="monotone" dataKey="valueBRL" stroke="#22c55e" strokeWidth={2.4} dot={false} activeDot={{ r: 4, fill: '#22c55e', strokeWidth: 0 }} isAnimationActive={false} />
+              <Line type="monotone" dataKey="valueUSD" stroke="#00d4ff" strokeWidth={2.4} dot={false} activeDot={{ r: 4, fill: '#00d4ff', strokeWidth: 0 }} isAnimationActive={false} />
             </>
           ) : (
-            <Line type="monotone" dataKey="value" stroke="#00d4ff" strokeWidth={2.6} dot={false} activeDot={{ r: 4, fill: '#00d4ff', strokeWidth: 0 }} isAnimationActive />
+            <Line type="monotone" dataKey="value" stroke="#00d4ff" strokeWidth={2.6} dot={false} activeDot={{ r: 4, fill: '#00d4ff', strokeWidth: 0 }} isAnimationActive={false} />
           )}
         </LineChart>
       </ResponsiveContainer>

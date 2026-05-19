@@ -46,7 +46,7 @@ export function PieWidget({
   const total = data.reduce((sum, item) => sum + item.value, 0)
   const top = data.reduce((best, item) => item.value > best.value ? item : best, data[0])
   const topPercent = total > 0 ? Math.round((top.value / total) * 100) : 0
-  const chartAreaHeight = Math.max(150, Math.min(chartHeight - 36, 280))
+  const chartAreaHeight = Math.max(160, Math.min(chartHeight - 12, 320))
 
   return (
     <div className="relative z-[1] flex h-full flex-col p-4">
@@ -55,10 +55,10 @@ export function PieWidget({
         {empty && <span className="rounded-full bg-white/5 px-2 py-1 text-[10px] font-bold text-[var(--dash-faint)]">Demo</span>}
       </div>
       <div className="relative flex min-h-0 flex-1 flex-col justify-start">
-        <div className="relative grid shrink-0 place-items-center" style={{ height: chartAreaHeight, transform: 'translateY(-4px)' }}>
+        <div className="relative grid shrink-0 place-items-center" style={{ height: chartAreaHeight }}>
           <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
-            <div className="flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full border border-[var(--dash-border)] bg-[color:var(--dash-panel)]/92 text-center shadow-sm">
-              <p className="text-[1.4rem] font-black leading-none text-[var(--dash-text)]">{topPercent}%</p>
+            <div className="flex h-[5rem] w-[5rem] items-center justify-center rounded-full border border-[var(--dash-border)] bg-[color:var(--dash-panel)]/92 text-center shadow-sm">
+              <p className="text-[1.6rem] font-black leading-none text-[var(--dash-text)]">{topPercent}%</p>
             </div>
           </div>
           <ResponsiveContainer width="100%" height="100%">
@@ -67,8 +67,8 @@ export function PieWidget({
                 data={data}
                 cx="50%"
                 cy="50%"
-                innerRadius="56%"
-                outerRadius="82%"
+                innerRadius="48%"
+                outerRadius="90%"
                 paddingAngle={2}
                 dataKey="value"
                 label={false}
@@ -83,10 +83,10 @@ export function PieWidget({
             </PieChart>
           </ResponsiveContainer>
         </div>
-        <div className="-mt-1 grid max-h-24 grid-cols-1 gap-x-3 gap-y-1.5 overflow-y-auto pr-1 sm:grid-cols-2">
+        <div className="mt-1 grid max-h-28 grid-cols-1 gap-x-3 gap-y-2 overflow-y-auto pr-1 sm:grid-cols-2">
           {data.map((item, index) => (
-            <div key={item.name} className="flex min-w-0 items-center gap-2 text-[11px] font-medium text-[var(--dash-muted)]">
-              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
+            <div key={item.name} className="flex min-w-0 items-center gap-2 text-xs font-medium text-[var(--dash-text)]">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
               <span className="truncate leading-4">{item.name}</span>
             </div>
           ))}

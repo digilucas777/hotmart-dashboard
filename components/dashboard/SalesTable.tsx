@@ -86,7 +86,7 @@ export function SalesTable({
   return (
     <div className={`dashboard-card flex ${heightClass} min-h-0 flex-col rounded-2xl`}>
       {/* Toolbar */}
-      <div className="relative z-[1] flex shrink-0 flex-col gap-3 border-b border-[var(--dash-border)] p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="relative z-[1] flex shrink-0 flex-col gap-3 border-b border-[var(--dash-border)] p-4 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-sm font-semibold text-[var(--dash-text)]">Transações</h3>
         <div className="flex flex-wrap items-center gap-2">
           {STATUS_FILTERS.map(f => (
@@ -126,7 +126,7 @@ export function SalesTable({
               {COLS.map(col => (
                 <th
                   key={col}
-                  className="px-5 py-3 text-left text-xs font-medium text-[var(--dash-faint)]"
+                  className="px-4 py-2.5 text-left text-xs font-medium text-[var(--dash-faint)]"
                 >
                   {col}
                 </th>
@@ -149,17 +149,17 @@ export function SalesTable({
                   key={v.id}
                   className="border-b border-[var(--dash-border)]/60 transition-colors last:border-0 hover:bg-white/5"
                 >
-                  <td className="px-5 py-3.5 font-mono text-xs text-[var(--dash-faint)]">
+                  <td className="px-4 py-2.5 font-mono text-xs text-[var(--dash-faint)]">
                     {formatDateTime(v.data_venda)}
                   </td>
-                  <td className="px-5 py-3.5 font-mono text-xs text-[var(--dash-faint)]">
+                  <td className="px-4 py-2.5 font-mono text-xs text-[var(--dash-faint)]">
                     {v.hotmart_id ? (
                       <span title={v.hotmart_id} className="block max-w-[100px] truncate">
                         {v.hotmart_id}
                       </span>
                     ) : '—'}
                   </td>
-                  <td className="px-5 py-3.5">
+                  <td className="px-4 py-2.5">
                     <p className="text-xs font-medium text-[var(--dash-text)]">
                       {v.comprador_nome ?? '—'}
                     </p>
@@ -167,18 +167,18 @@ export function SalesTable({
                       {v.comprador_email ?? '—'}
                     </p>
                   </td>
-                  <td className="px-5 py-3.5 text-xs text-[var(--dash-muted)] [word-break:break-word]">
+                  <td className="px-4 py-2.5 text-xs text-[var(--dash-muted)] [word-break:break-word]">
                     {v.produto ?? '—'}
                   </td>
-                  <td className="px-5 py-3.5">
+                  <td className="px-4 py-2.5">
                     <Badge variant={v.forma_pagamento ? 'info' : 'default'}>
                       {normalizePagamento(v.forma_pagamento)}
                     </Badge>
                   </td>
-                  <td className="px-5 py-3.5 text-xs text-[var(--dash-faint)]">
+                  <td className="px-4 py-2.5 text-xs text-[var(--dash-faint)]">
                     {v.pais ?? '—'}
                   </td>
-                  <td className="px-5 py-3.5">
+                  <td className="px-4 py-2.5">
                     {v.moeda === 'USD' ? (
                       <div>
                         <p className="text-xs font-semibold tabular-nums text-[var(--dash-text)]">{formatUSD(v.valor ?? 0)}</p>
@@ -188,12 +188,12 @@ export function SalesTable({
                       <p className="text-xs font-semibold tabular-nums text-[var(--dash-text)]">{formatBRL(v.valor ?? 0)}</p>
                     )}
                   </td>
-                  <td className="px-5 py-3.5">
+                  <td className="px-4 py-2.5">
                     <Badge variant={STATUS_VARIANT[v.status] ?? 'default'}>
                       {statusLabel(v.status)}
                     </Badge>
                   </td>
-                  <td className="px-5 py-3.5 text-xs text-[var(--dash-faint)]">
+                  <td className="px-4 py-2.5 text-xs text-[var(--dash-faint)]">
                     {parseOrigem(v.origem)}
                   </td>
                 </tr>
@@ -203,7 +203,7 @@ export function SalesTable({
         </table>
       </div>
 
-      <div className="relative z-[1] shrink-0 border-t border-[var(--dash-border)] px-5 py-3">
+      <div className="relative z-[1] shrink-0 border-t border-[var(--dash-border)] px-4 py-2">
         <p className="text-xs text-[var(--dash-faint)]">
           {filtered.length} transaç{filtered.length === 1 ? 'ão' : 'ões'}
         </p>
