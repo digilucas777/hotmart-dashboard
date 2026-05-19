@@ -390,18 +390,19 @@ export function computeWidgetData(
       return { kind: 'series', points: base.map(p => ({ label: p.label, value: p.count })) }
     }
     case 'revenue_by_product': {
-      const groups: Record<string, { label: string; value: number; currency: string }> = {}
+      const groups: Record<string, { label: string; value: number; valueBRL: number; currency: string }> = {}
       approved.forEach(v => {
         const currency = v.moeda === 'USD' ? 'USD' : 'BRL'
         const key = `${v.produto || 'Produto'}__${currency}`
-        const current = groups[key] ?? { label: v.produto || 'Produto', value: 0, currency }
+        const current = groups[key] ?? { label: v.produto || 'Produto', value: 0, valueBRL: 0, currency }
         current.value += v.valor ?? 0
+        current.valueBRL += currency === 'USD' ? (v.valor ?? 0) * exchangeRate : (v.valor ?? 0)
         groups[key] = current
       })
       return {
         kind: 'series',
         points: Object.values(groups)
-          .sort((a, b) => b.value - a.value)
+          .sort((a, b) => b.valueBRL - a.valueBRL)
           .slice(0, 10),
       }
     }

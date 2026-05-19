@@ -50,18 +50,14 @@ const GRID_ITEM_PADDING = 10
 const LAYOUT_STORAGE_PREFIX = 'dashboard-layout:'
 const THEME_STORAGE_KEY = 'dashboard-theme'
 
-function getMetricSnapRows(): [number, number, number] {
-  const vh = typeof window !== 'undefined' ? window.innerHeight : 900
-  return [
-    Math.max(5, Math.round(vh * 0.05 / GRID_ROW_HEIGHT)),
-    Math.max(7, Math.round(vh * 0.07 / GRID_ROW_HEIGHT)),
-    Math.max(9, Math.round(vh * 0.09 / GRID_ROW_HEIGHT)),
-  ] as [number, number, number]
-}
+// Three content-aware snap heights for metric cards:
+// 7 rows = icon + title + value
+// 8 rows = + subValue
+// 9 rows = + comparison
+const METRIC_SNAP_ROWS: [number, number, number] = [7, 8, 9]
 
 function snapToMetricRows(rowSpan: number): number {
-  const snaps = getMetricSnapRows()
-  return snaps.reduce((best, snap) =>
+  return METRIC_SNAP_ROWS.reduce((best, snap) =>
     Math.abs(snap - rowSpan) < Math.abs(best - rowSpan) ? snap : best,
   )
 }
@@ -89,7 +85,7 @@ function heightToRows(height?: string, type?: string) {
   if (height === 'small') return 6
   if (height === 'large') return 18
   if (height === 'extra') return 24
-  if (type === 'metric') return getMetricSnapRows()[1]
+  if (type === 'metric') return METRIC_SNAP_ROWS[1]
   if (type === 'combined' || type === 'table') return 22
   if (type === 'line' || type === 'bar' || type === 'pie') return 18
   return 12
@@ -220,6 +216,38 @@ function resolveOverlapsMulti(layout: WidgetConfig[], activeIds: Set<string>) {
   return next
 }
 
+// After a drag drop, if the dragged widget is the bottom-most in the grid,
+// pull it up to touch the nearest widget above (eliminates trailing empty space).
+function applyBottomMagnet(layout: WidgetConfig[], draggedId: string): WidgetConfig[] {
+  const dragged = layout.find(w => w.id === draggedId)
+  if (!dragged) return layout
+  const rowStart = dragged.row_start ?? 1
+  const rowSpan = normalizeRowSpan(dragged)
+  const rowEnd = rowStart + rowSpan
+  const colStart = dragged.col_start ?? 1
+  const colSpan = dragged.col_span ?? widthToSpan(dragged.width)
+
+  const isBottomMost = layout.every(w =>
+    w.id === draggedId || (w.row_start ?? 1) + normalizeRowSpan(w) <= rowEnd,
+  )
+  if (!isBottomMost) return layout
+
+  const above = layout
+    .filter(w => {
+      if (w.id === draggedId) return false
+      const wCol = w.col_start ?? 1
+      const wSpan = w.col_span ?? widthToSpan(w.width)
+      return wCol < colStart + colSpan && wCol + wSpan > colStart
+    })
+    .map(w => (w.row_start ?? 1) + normalizeRowSpan(w))
+
+  const newRowStart = above.length > 0 ? Math.max(...above) : 1
+  if (newRowStart < rowStart) {
+    return layout.map(w => w.id === draggedId ? { ...w, row_start: newRowStart } : w)
+  }
+  return layout
+}
+
 function compactLayout(widgets: WidgetConfig[]) {
   // Sort by visual position first so compacting preserves the user's intended order.
   const sorted = [...widgets].sort(
@@ -305,7 +333,7 @@ function minColSpanForType(type?: string): number {
 }
 
 function minRowSpanForType(type?: string): number {
-  if (type === 'metric') return getMetricSnapRows()[0]
+  if (type === 'metric') return METRIC_SNAP_ROWS[0]
   if (type === 'pie') return 14
   if (type === 'line' || type === 'bar') return 11
   if (type === 'table' || type === 'combined') return 15
@@ -614,7 +642,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             row_start: Math.max(1, (w.row_start ?? 1) + deltaRow),
           }
         })
-        return resolveOverlapsMulti(moved, activeIds)
+        return applyBottomMagnet(resolveOverlapsMulti(moved, activeIds), draggedId)
       })
     },
     [dragPreview, getPlacementFromDelta, pushHistory],

@@ -82,6 +82,7 @@ function WidgetRendererBase({
   const isMetaWidget = config.type.startsWith('meta-')
   const isChartWidget = config.type === 'line' || config.type === 'bar' || config.type === 'meta-chart'
   const isTimeSeries = config.data_source === 'revenue_by_day' || config.data_source === 'sales_by_day'
+  const isProductChart = config.data_source === 'revenue_by_product' || config.data_source === 'count_by_product'
   const effectivePeriod = isChartWidget && isTimeSeries && period !== 'custom' ? chartPeriod : period
 
   const data = isMetaWidget
@@ -344,6 +345,7 @@ function WidgetRendererBase({
             chartHeight={chartHeight}
             localPeriod={isTimeSeries ? chartPeriod : undefined}
             onChangePeriod={isTimeSeries ? setChartPeriod : undefined}
+            rotateLabels={isProductChart}
           />
         )}
         {config.type === 'pie' && data.kind === 'series' && (

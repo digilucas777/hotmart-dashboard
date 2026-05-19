@@ -22,6 +22,18 @@ const DEMO_POINTS: SeriesPoint[] = [
 const BAR_COLORS = { brl: '#00d4ff', usd: '#a78bfa' }
 const BAR_COLORS_LIST = [BAR_COLORS.brl, BAR_COLORS.usd, '#22c55e', '#38bdf8']
 
+function CustomXAxisTick({ x, y, payload }: { x?: number; y?: number; payload?: { value: string } }) {
+  const raw = payload?.value ?? ''
+  const label = raw.length > 15 ? raw.slice(0, 15) + '…' : raw
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text x={0} y={0} dy={8} textAnchor="end" fill="#64748b" fontSize={10} transform="rotate(-35)">
+        {label}
+      </text>
+    </g>
+  )
+}
+
 function CustomTooltip({
   active,
   payload,
@@ -36,6 +48,7 @@ function CustomTooltip({
   dualCurrency?: boolean
 }) {
   if (!active || !payload?.length) return null
+  const point = payload[0].payload
   return (
     <div className="rounded-2xl border border-cyan-300/20 bg-[#080a12]/95 px-3 py-2.5 text-white shadow-[0_0_28px_rgba(0,212,255,0.18)] backdrop-blur-xl">
       <p className="mb-1 text-xs text-slate-400">{label}</p>
@@ -48,13 +61,16 @@ function CustomTooltip({
             <p className="text-xs font-semibold text-cyan-300">USD: {formatUSD(payload.find(p => p.dataKey === 'valueUSD')!.value)}</p>
           )}
         </>
+      ) : point?.currency === 'USD' && point?.valueBRL != null ? (
+        <>
+          <p className="text-sm font-semibold text-emerald-300">{formatBRL(point.valueBRL)}</p>
+          <p className="text-xs font-medium text-cyan-300">({formatUSD(payload[0].value)})</p>
+        </>
       ) : (
         <p className="text-sm font-semibold text-slate-100">
-          {payload[0].payload?.currency === 'USD'
-            ? formatUSD(payload[0].value)
-            : payload[0].payload?.currency === 'BRL'
-              ? formatBRL(payload[0].value)
-              : isBRL ? formatBRL(payload[0].value) : payload[0].value.toLocaleString('pt-BR')}
+          {point?.currency === 'BRL' || isBRL
+            ? formatBRL(payload[0].value)
+            : payload[0].value.toLocaleString('pt-BR')}
         </p>
       )}
     </div>
@@ -69,6 +85,7 @@ export function BarChartWidget({
   chartHeight = 220,
   localPeriod,
   onChangePeriod,
+  rotateLabels = false,
 }: {
   title: string
   points: SeriesPoint[]
@@ -77,6 +94,7 @@ export function BarChartWidget({
   chartHeight?: number
   localPeriod?: Period
   onChangePeriod?: (p: Period) => void
+  rotateLabels?: boolean
 }) {
   const empty = points.length === 0 || points.every(point => (point.value ?? 0) === 0 && (point.valueBRL ?? 0) === 0 && (point.valueUSD ?? 0) === 0)
   const displayPoints = empty ? DEMO_POINTS : points
@@ -102,9 +120,16 @@ export function BarChartWidget({
         )}
       </div>
       <ResponsiveContainer width="100%" height={chartHeight}>
-        <BarChart data={displayPoints} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+        <BarChart data={displayPoints} margin={{ top: 4, right: 8, left: 0, bottom: rotateLabels ? 44 : 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.045)" vertical={false} />
-          <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+          <XAxis
+            dataKey="label"
+            tick={rotateLabels ? <CustomXAxisTick /> : { fill: '#64748b', fontSize: 11 }}
+            axisLine={false}
+            tickLine={false}
+            interval={rotateLabels ? 0 : 'preserveStartEnd'}
+            height={rotateLabels ? 60 : 30}
+          />
           <YAxis
             tick={{ fill: '#64748b', fontSize: 11 }}
             axisLine={false}
