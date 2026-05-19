@@ -38,6 +38,7 @@ export function WidgetRenderer({
   period,
   exchangeRate,
   custoTotal = 0,
+  customRange,
   editMode,
   selected,
   isGroupDragging = false,
@@ -54,6 +55,7 @@ export function WidgetRenderer({
   period: Period
   exchangeRate: number
   custoTotal?: number
+  customRange?: { from: Date; to: Date }
   editMode: boolean
   selected: boolean
   onSelect: (id: string, multi?: boolean) => void
@@ -74,11 +76,11 @@ export function WidgetRenderer({
 
   const isMetaWidget = config.type.startsWith('meta-')
   const isChartWidget = config.type === 'line' || config.type === 'bar' || config.type === 'meta-chart'
-  const effectivePeriod = isChartWidget ? chartPeriod : period
+  const effectivePeriod = isChartWidget && period !== 'custom' ? chartPeriod : period
 
   const data = isMetaWidget
     ? computeMetaWidgetData(config.data_source, effectivePeriod)
-    : computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, custoTotal)
+    : computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, custoTotal, customRange)
 
   const isBRL = !isMetaWidget && getValueFormat(config.data_source) === 'brl'
 

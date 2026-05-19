@@ -1,6 +1,12 @@
 import type { Period, Venda, WidgetDataSource, Status } from './types'
 
-export function getPeriodRange(period: Period): { from: Date; to: Date } {
+export function getPeriodRange(period: Period, customRange?: { from: Date; to: Date }): { from: Date; to: Date } {
+  if (period === 'custom') {
+    if (customRange) return customRange
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    return { from: todayStart, to: new Date(todayStart.getTime() + 86_400_000) }
+  }
   const now = new Date()
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
 
@@ -110,11 +116,13 @@ export function normalizePagamento(method?: string | null): string {
 
 export type ChartPoint = { label: string; valor: number; count: number }
 
-export function buildChartData(vendas: Venda[], period: Period): ChartPoint[] {
+export function buildChartData(vendas: Venda[], period: Period, customRange?: { from: Date; to: Date }): ChartPoint[] {
   const approved = vendas.filter(v => v.status === 'approved')
-  const { from, to } = getPeriodRange(period)
+  const { from, to } = getPeriodRange(period, customRange)
+  const isHourly = period === 'today' || period === 'yesterday' ||
+    (period === 'custom' && !!customRange && customRange.to.getTime() - customRange.from.getTime() <= 86_400_000)
 
-  if (period === 'today' || period === 'yesterday') {
+  if (isHourly) {
     const buckets: Record<string, ChartPoint> = {}
     for (let h = 0; h < 24; h++) {
       const label = `${h.toString().padStart(2, '0')}h`
@@ -208,6 +216,7 @@ export function computeWidgetData(
   period: Period,
   exchangeRate: number,
   custoTotal = 0,
+  customRange?: { from: Date; to: Date },
 ): WidgetComputedData {
   const approved = vendas.filter(v => v.status === 'approved')
   const refunded = vendas.filter(v => v.status === 'refunded')
@@ -303,8 +312,9 @@ export function computeWidgetData(
     }
 
     case 'revenue_by_day': {
-      const { from, to } = getPeriodRange(period)
-      const isHourly = period === 'today' || period === 'yesterday'
+      const { from, to } = getPeriodRange(period, customRange)
+      const isHourly = period === 'today' || period === 'yesterday' ||
+        (period === 'custom' && !!customRange && customRange.to.getTime() - customRange.from.getTime() <= 86_400_000)
 
       const buckets: Record<string, { brl: number; usd: number }> = {}
 
@@ -353,7 +363,7 @@ export function computeWidgetData(
     }
 
     case 'sales_by_day': {
-      const base = buildChartData(vendas, period)
+      const base = buildChartData(vendas, period, customRange)
       return { kind: 'series', points: base.map(p => ({ label: p.label, value: p.count })) }
     }
     case 'revenue_by_product': {
@@ -421,8 +431,9 @@ export function computeWidgetData(
       return { kind: 'table', vendas }
 
     case 'combined_by_day': {
-      const { from, to } = getPeriodRange(period)
-      const isHourly = period === 'today' || period === 'yesterday'
+      const { from, to } = getPeriodRange(period, customRange)
+      const isHourly = period === 'today' || period === 'yesterday' ||
+        (period === 'custom' && !!customRange && customRange.to.getTime() - customRange.from.getTime() <= 86_400_000)
       const buckets: Record<string, CombinedPoint> = {}
 
       if (isHourly) {
@@ -476,8 +487,8 @@ function demoStatus(seed: number): Status {
   return 'approved'
 }
 
-export function generateDemoVendas(period: Period): Venda[] {
-  const { from, to } = getPeriodRange(period)
+export function generateDemoVendas(period: Period, customRange?: { from: Date; to: Date }): Venda[] {
+  const { from, to } = getPeriodRange(period, customRange)
   const durationMs = to.getTime() - from.getTime()
   const days = Math.max(1, Math.ceil(durationMs / 86_400_000))
   const count = Math.min(200, Math.max(3, Math.round(5.5 * days)))
@@ -507,10 +518,14 @@ export function generateDemoVendas(period: Period): Venda[] {
   }).sort((a, b) => new Date(b.data_venda).getTime() - new Date(a.data_venda).getTime())
 }
 
-const DEMO_CUSTO_PER_DAY: Record<Period, number> = {
+const DEMO_CUSTO_PER_DAY: Partial<Record<Period, number>> = {
   today: 450, yesterday: 430, '7d': 420, '30d': 410, '90d': 400, '180d': 395, '365d': 390, thisMonth: 415, lastMonth: 425,
 }
-export function generateDemoCusto(period: Period): number {
-  const daysMap: Record<Period, number> = { today: 1, yesterday: 1, '7d': 7, '30d': 30, '90d': 90, '180d': 180, '365d': 365, thisMonth: 25, lastMonth: 30 }
+export function generateDemoCusto(period: Period, customRange?: { from: Date; to: Date }): number {
+  if (period === 'custom' && customRange) {
+    const days = Math.max(1, Math.ceil((customRange.to.getTime() - customRange.from.getTime()) / 86_400_000))
+    return days * 420
+  }
+  const daysMap: Partial<Record<Period, number>> = { today: 1, yesterday: 1, '7d': 7, '30d': 30, '90d': 90, '180d': 180, '365d': 365, thisMonth: 25, lastMonth: 30 }
   return (daysMap[period] ?? 1) * (DEMO_CUSTO_PER_DAY[period] ?? 420)
 }

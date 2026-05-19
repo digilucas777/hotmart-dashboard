@@ -289,6 +289,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [vendas, setVendas] = useState<Venda[]>([])
   const [combinedVendas, setCombinedVendas] = useState<Venda[]>([])
   const [period, setPeriod] = useState<Period>('today')
+  const [customFrom, setCustomFrom] = useState<string>(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  })
+  const [customTo, setCustomTo] = useState<string>(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  })
   const [exchangeRate, setExchangeRate] = useState(5.85)
   const [theme, setTheme] = useState<DashboardTheme>('dark')
   const [loading, setLoading] = useState(true)
@@ -317,6 +325,17 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [linkedIds, setLinkedIds] = useState<string[]>([])
   const [productSearch, setProductSearch] = useState('')
   const [savingProducts, setSavingProducts] = useState(false)
+
+  const customDateRange = useMemo((): { from: Date; to: Date } | undefined => {
+    if (period !== 'custom') return undefined
+    const parseLocal = (s: string) => {
+      const [y, m, d] = s.split('-').map(Number)
+      return new Date(y!, m! - 1, d!)
+    }
+    const from = parseLocal(customFrom)
+    const to = new Date(parseLocal(customTo).getTime() + 86_400_000)
+    return { from, to }
+  }, [period, customFrom, customTo])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -407,7 +426,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         return
       }
 
-      const { from, to } = getPeriodRange(period)
+      const { from, to } = getPeriodRange(period, customDateRange)
 
       const { data } = await supabase
         .from('vendas')
@@ -436,14 +455,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     } finally {
       setLoading(false)
     }
-  }, [projectId, period])
+  }, [projectId, period, customDateRange])
 
   useEffect(() => {
     void Promise.resolve().then(fetchVendas)
   }, [fetchVendas])
 
   const fetchCustos = useCallback(async () => {
-    const { from, to } = getPeriodRange(period)
+    const { from, to } = getPeriodRange(period, customDateRange)
     const { data } = await supabase
       .from('projeto_custos')
       .select('custo_brl')
@@ -451,7 +470,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       .gte('data', from.toISOString().split('T')[0])
       .lt('data', to.toISOString().split('T')[0])
     setCustoTotal((data ?? []).reduce((sum: number, row: { custo_brl: number }) => sum + (row.custo_brl ?? 0), 0))
-  }, [projectId, period])
+  }, [projectId, period, customDateRange])
 
   useEffect(() => {
     void Promise.resolve().then(fetchCustos)
@@ -800,14 +819,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const previewPlacement = dragPreview ?? resizePreview
   const isDemoMode = isReady && vendas.length === 0
   const displayVendas = useMemo(
-    () => isDemoMode ? generateDemoVendas(period) : vendas,
-    [isDemoMode, vendas, period],
+    () => isDemoMode ? generateDemoVendas(period, customDateRange) : vendas,
+    [isDemoMode, vendas, period, customDateRange],
   )
   const displayCombinedVendas = useMemo(
     () => isDemoMode ? generateDemoVendas('30d') : combinedVendas,
     [isDemoMode, combinedVendas],
   )
-  const displayCustoTotal = isDemoMode ? generateDemoCusto(period) : custoTotal
+  const displayCustoTotal = isDemoMode ? generateDemoCusto(period, customDateRange) : custoTotal
   const filteredProducts = useMemo(() => {
     const query = productSearch.trim().toLowerCase()
     if (!query) return allProducts
@@ -937,7 +956,13 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
       <main className="dashboard-main mx-auto max-w-[1400px] px-6 py-8">
         <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-          <PeriodFilter value={period} onChange={setPeriod} />
+          <PeriodFilter
+            value={period}
+            onChange={setPeriod}
+            customFrom={customFrom}
+            customTo={customTo}
+            onCustomChange={(from, to) => { setCustomFrom(from); setCustomTo(to) }}
+          />
           <div className="dashboard-action-bar dashboard-panel flex max-w-full flex-nowrap items-center justify-end gap-2 overflow-x-auto rounded-2xl p-1.5">
             <button
               onClick={fetchVendas}
@@ -1115,6 +1140,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                     period={period}
                     exchangeRate={exchangeRate}
                     custoTotal={displayCustoTotal}
+                    customRange={customDateRange}
                     editMode={editMode}
                     selected={selectedWidgetIds.has(w.id)}
                     isGroupDragging={!!activeWidgetId && selectedWidgetIds.has(w.id) && w.id !== activeWidgetId}

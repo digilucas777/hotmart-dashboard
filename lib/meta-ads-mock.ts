@@ -16,7 +16,7 @@ function hashStr(s: string): number {
   return Math.abs(h)
 }
 
-const PERIOD_DAYS: Record<Period, number> = {
+const PERIOD_DAYS: Partial<Record<Period, number>> = {
   today: 1,
   yesterday: 1,
   '7d': 7,
@@ -28,8 +28,12 @@ const PERIOD_DAYS: Record<Period, number> = {
   lastMonth: 30,
 }
 
+function periodDays(period: Period): number {
+  return periodDays(period) ?? 30
+}
+
 function generateDates(period: Period): string[] {
-  const days = Math.min(30, PERIOD_DAYS[period])
+  const days = Math.min(30, periodDays(period))
   const now = new Date()
   return Array.from({ length: days }, (_, i) => {
     const d = new Date(now)
@@ -149,7 +153,7 @@ const METRIC_CONFIG: Record<string, MetricCfg> = {
 function getMetricValue(source: string, period: Period): number {
   const cfg = METRIC_CONFIG[source]
   if (!cfg) return 0
-  const days = PERIOD_DAYS[period]
+  const days = periodDays(period)
   const rng = seededRandom(hashStr(source + period))
   const variance = 0.75 + rng() * 0.5 // 0.75 to 1.25
   const raw = cfg.baseValue * (cfg.periodScaled ? days : 1) * variance
@@ -234,7 +238,7 @@ export function computeMetaWidgetData(dataSource: WidgetDataSource, period: Peri
 
   // ── Conversion funnel ──
   if (src === 'meta_funnel') {
-    const days = PERIOD_DAYS[period]
+    const days = periodDays(period)
     const rng = seededRandom(hashStr('funnel' + period))
     const impressions = Math.round(48000 * days * (0.8 + rng() * 0.4))
     const clicks      = Math.round(impressions  * (0.020 + rng() * 0.025))
@@ -257,7 +261,7 @@ export function computeMetaWidgetData(dataSource: WidgetDataSource, period: Peri
 
   // ── Campaigns table ──
   if (src === 'meta_campaigns') {
-    const days = PERIOD_DAYS[period]
+    const days = periodDays(period)
     const rng = seededRandom(hashStr('campaigns' + period))
     const names = [
       'Tráfego Frio — Conversão',
@@ -296,7 +300,7 @@ export function computeMetaWidgetData(dataSource: WidgetDataSource, period: Peri
   // ── Creatives ranking ──
   if (src === 'meta_creatives_ctr' || src === 'meta_creatives_roas') {
     const sortBy = src === 'meta_creatives_ctr' ? 'ctr' : 'roas'
-    const days = PERIOD_DAYS[period]
+    const days = periodDays(period)
     const rng = seededRandom(hashStr('creatives' + period + src))
     const names = [
       'Ad Depoimento — Lucas v2',
