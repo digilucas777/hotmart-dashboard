@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     const status = mapStatus(evento)
     const valorOperacionalFinal = status === 'abandoned'
       ? 0
-      : roundMoney(comissaoProdutor + coproducerCommission + comissaoAfiliado - taxaHotmart)
+      : roundMoney(valorBruto - taxaHotmart)
 
     const paymentType: string | null = dados.purchase?.payment?.type ?? null
     const cardBrand: string | null = dados.purchase?.payment?.card_type ?? dados.purchase?.payment?.brand ?? null
