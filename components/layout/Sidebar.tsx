@@ -57,8 +57,13 @@ export function Sidebar() {
 
   return (
     <aside
-      className="app-sidebar sticky top-0 z-50 flex h-screen flex-shrink-0 flex-col overflow-hidden"
+      className="app-sidebar flex flex-shrink-0 flex-col overflow-hidden"
       style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        height: '100vh',
+        zIndex: 50,
         width: expanded ? '220px' : '60px',
         transition: 'width 0.2s ease',
         background: '#07080d',
