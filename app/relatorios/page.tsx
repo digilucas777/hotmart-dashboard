@@ -1,10 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bell,
   CheckCircle2,
   Clock,
+  Clipboard,
+  Download,
   FileText,
   MessageCircle,
   Phone,
@@ -60,6 +62,7 @@ const METRIC_OPTIONS: { value: WidgetDataSource; label: string }[] = [
   { value: 'lucro', label: 'Lucro' },
   { value: 'roas', label: 'ROAS' },
   { value: 'cpa', label: 'CPA' },
+  { value: 'top_produtos', label: 'Top 5 Produtos' },
 ]
 
 const FREQUENCIES = [
@@ -100,6 +103,31 @@ function reportRange(period: string) {
   if (period === '6m') return { from: new Date(now.getFullYear(), now.getMonth() - 6, now.getDate()), to: new Date(today.getTime() + day) }
   if (period === '1y') return { from: new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()), to: new Date(today.getTime() + day) }
   return { from: today, to: new Date(today.getTime() + day) }
+}
+
+function buildTopProdutos(vendas: Venda[]): string {
+  const approved = vendas.filter(v => v.status === 'approved')
+  const map = new Map<string, { count: number; brl: number; usd: number }>()
+  for (const v of approved) {
+    const name = v.produto ?? 'Desconhecido'
+    const entry = map.get(name) ?? { count: 0, brl: 0, usd: 0 }
+    entry.count++
+    if (v.moeda === 'USD') entry.usd += getOfficialSaleAmount(v)
+    else entry.brl += getOfficialSaleAmount(v)
+    map.set(name, entry)
+  }
+  const sorted = Array.from(map.entries())
+    .sort((a, b) => (b[1].brl + b[1].usd * 5.85) - (a[1].brl + a[1].usd * 5.85))
+    .slice(0, 5)
+  if (sorted.length === 0) return '🏆 Top Produtos:\n  Nenhuma venda no período.'
+  const lines = ['🏆 Top Produtos:']
+  sorted.forEach(([name, { count, brl, usd }], i) => {
+    const brlPart = brl > 0 ? formatBRL(brl) + ' BRL' : ''
+    const usdPart = usd > 0 ? formatUSD(usd) + ' USD' : ''
+    const value = [brlPart, usdPart].filter(Boolean).join(' / ')
+    lines.push(`  ${i + 1}. ${name} — ${count} venda${count !== 1 ? 's' : ''} | ${value}`)
+  })
+  return lines.join('\n')
 }
 
 function buildMetricValue(vendas: Venda[], metric: WidgetDataSource) {
@@ -162,6 +190,7 @@ export default function RelatoriosPage() {
     'avg_ticket',
   ])
 
+  const previewRef = useRef<HTMLDivElement>(null)
   const selectedProject = projetos.find(p => p.id === form.projeto_id)
 
   const loadBase = useCallback(async () => {
@@ -240,8 +269,12 @@ export default function RelatoriosPage() {
     ]
 
     metricas.forEach(metric => {
-      const option = METRIC_OPTIONS.find(o => o.value === metric)
-      lines.push(`• ${option?.label ?? metric}: ${buildMetricValue(vendas, metric)}`)
+      if (metric === 'top_produtos') {
+        lines.push('', buildTopProdutos(vendas))
+      } else {
+        const option = METRIC_OPTIONS.find(o => o.value === metric)
+        lines.push(`• ${option?.label ?? metric}: ${buildMetricValue(vendas, metric)}`)
+      }
     })
 
     lines.push('', `Período: ${PERIOD_OPTIONS.find(p => p.value === form.periodo)?.label ?? form.periodo}`)
@@ -360,6 +393,43 @@ export default function RelatoriosPage() {
 
   function toggleMetric(metric: WidgetDataSource) {
     setMetricas(prev => prev.includes(metric) ? prev.filter(m => m !== metric) : [...prev, metric])
+  }
+
+  async function copyToClipboard() {
+    await navigator.clipboard.writeText(messageText)
+  }
+
+  function exportTxt() {
+    const blob = new Blob([messageText], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'relatorio.txt'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function exportImage() {
+    if (!previewRef.current) return
+    const html2canvas = (await import('html2canvas')).default
+    const canvas = await html2canvas(previewRef.current, { backgroundColor: '#0d2018' })
+    const a = document.createElement('a')
+    a.href = canvas.toDataURL('image/png')
+    a.download = 'relatorio.png'
+    a.click()
+  }
+
+  async function exportPdf() {
+    const { jsPDF } = await import('jspdf')
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+    const lines = doc.splitTextToSize(messageText, 500)
+    doc.setFontSize(11)
+    doc.text(lines, 40, 40)
+    doc.save('relatorio.pdf')
+  }
+
+  function openWhatsApp() {
+    window.open(`https://wa.me/?text=${encodeURIComponent(messageText)}`, '_blank')
   }
 
   async function sendNow() {
@@ -618,7 +688,45 @@ export default function RelatoriosPage() {
                   ))}
                 </div>
 
-                <div className="mt-5 flex justify-end">
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    onClick={copyToClipboard}
+                    className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/10"
+                  >
+                    <Clipboard size={13} />
+                    Copiar
+                  </button>
+                  <button
+                    onClick={exportTxt}
+                    className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/10"
+                  >
+                    <Download size={13} />
+                    Exportar TXT
+                  </button>
+                  <button
+                    onClick={exportImage}
+                    className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/10"
+                  >
+                    <Download size={13} />
+                    Exportar Imagem
+                  </button>
+                  <button
+                    onClick={exportPdf}
+                    className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/10"
+                  >
+                    <Download size={13} />
+                    Exportar PDF
+                  </button>
+                  <button
+                    onClick={openWhatsApp}
+                    className="flex items-center gap-1.5 rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-1.5 text-xs text-green-400 transition-colors hover:bg-green-500/20"
+                  >
+                    <MessageCircle size={13} />
+                    Abrir WhatsApp
+                  </button>
+                </div>
+
+                <div className="mt-4 flex justify-end">
                   <Button
                     variant="outline"
                     onClick={sendNow}
@@ -649,7 +757,7 @@ export default function RelatoriosPage() {
                     <h2 className="text-sm font-bold text-slate-100">Prévia WhatsApp</h2>
                     <Send size={17} className="text-green-400" />
                   </div>
-                  <div className="rounded-2xl bg-[#0d2018] p-4">
+                  <div ref={previewRef} className="rounded-2xl bg-[#0d2018] p-4">
                     <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-green-50">{messageText}</pre>
                   </div>
                 </div>
