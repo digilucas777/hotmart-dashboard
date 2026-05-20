@@ -117,7 +117,7 @@ function buildTopProdutos(vendas: Venda[]): string {
     map.set(name, entry)
   }
   const sorted = Array.from(map.entries())
-    .sort((a, b) => (b[1].brl + b[1].usd * 5.85) - (a[1].brl + a[1].usd * 5.85))
+    .sort((a, b) => b[1].count - a[1].count)
     .slice(0, 5)
   if (sorted.length === 0) return '🏆 Top Produtos:\n  Nenhuma venda no período.'
   const lines = ['🏆 Top Produtos:']
@@ -278,9 +278,8 @@ export default function RelatoriosPage() {
     })
 
     lines.push('', `Período: ${PERIOD_OPTIONS.find(p => p.value === form.periodo)?.label ?? form.periodo}`)
-    lines.push(`Envio: ${FREQUENCIES.find(f => f.value === form.frequencia)?.label ?? form.frequencia} às ${form.horario}`)
     return lines.join('\n')
-  }, [form.frequencia, form.horario, form.mensagem, form.periodo, metricas, selectedProject?.nome, vendas])
+  }, [form.mensagem, form.periodo, metricas, selectedProject?.nome, vendas])
 
   useEffect(() => {
     setMessageText(generatedMessage)
@@ -399,33 +398,29 @@ export default function RelatoriosPage() {
     await navigator.clipboard.writeText(messageText)
   }
 
-  function exportTxt() {
-    const blob = new Blob([messageText], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'relatorio.txt'
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
   async function exportImage() {
     if (!previewRef.current) return
-    const html2canvas = (await import('html2canvas')).default
-    const canvas = await html2canvas(previewRef.current, { backgroundColor: '#0d2018' })
-    const a = document.createElement('a')
-    a.href = canvas.toDataURL('image/png')
-    a.download = 'relatorio.png'
-    a.click()
-  }
-
-  async function exportPdf() {
-    const { jsPDF } = await import('jspdf')
-    const doc = new jsPDF({ unit: 'pt', format: 'a4' })
-    const lines = doc.splitTextToSize(messageText, 500)
-    doc.setFontSize(11)
-    doc.text(lines, 40, 40)
-    doc.save('relatorio.pdf')
+    try {
+      const html2canvas = (await import('html2canvas')).default
+      const canvas = await html2canvas(previewRef.current, {
+        backgroundColor: '#0d2018',
+        useCORS: true,
+        scale: 2,
+        logging: false,
+      })
+      const a = document.createElement('a')
+      a.href = canvas.toDataURL('image/png')
+      a.download = 'relatorio.png'
+      a.click()
+    } catch {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const domtoimage = await import('dom-to-image' as any)
+      const dataUrl = await domtoimage.default.toPng(previewRef.current, { bgcolor: '#0d2018', quality: 1 })
+      const a = document.createElement('a')
+      a.href = dataUrl
+      a.download = 'relatorio.png'
+      a.click()
+    }
   }
 
   function openWhatsApp() {
@@ -664,6 +659,17 @@ export default function RelatoriosPage() {
                   <Bell size={18} className="text-indigo-400" />
                 </div>
 
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs text-slate-500">Mensagem</span>
+                  <button
+                    onClick={copyToClipboard}
+                    className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/10"
+                  >
+                    <Clipboard size={13} />
+                    Copiar
+                  </button>
+                </div>
+
                 <textarea
                   value={messageText}
                   onChange={e => setMessageText(e.target.value)}
@@ -690,32 +696,11 @@ export default function RelatoriosPage() {
 
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
-                    onClick={copyToClipboard}
-                    className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/10"
-                  >
-                    <Clipboard size={13} />
-                    Copiar
-                  </button>
-                  <button
-                    onClick={exportTxt}
-                    className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/10"
-                  >
-                    <Download size={13} />
-                    Exportar TXT
-                  </button>
-                  <button
                     onClick={exportImage}
                     className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/10"
                   >
                     <Download size={13} />
                     Exportar Imagem
-                  </button>
-                  <button
-                    onClick={exportPdf}
-                    className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/10"
-                  >
-                    <Download size={13} />
-                    Exportar PDF
                   </button>
                   <button
                     onClick={openWhatsApp}
@@ -760,6 +745,9 @@ export default function RelatoriosPage() {
                   <div ref={previewRef} className="rounded-2xl bg-[#0d2018] p-4">
                     <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-green-50">{messageText}</pre>
                   </div>
+                  <p className="mt-2 px-1 text-xs text-slate-500">
+                    Envio: {FREQUENCIES.find(f => f.value === form.frequencia)?.label ?? form.frequencia} às {form.horario}
+                  </p>
                 </div>
 
                 <div className="rounded-2xl border border-white/10 bg-[#151525] p-5 shadow-2xl shadow-black/20">
