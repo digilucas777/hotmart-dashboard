@@ -9,7 +9,12 @@ export type Venda = {
   comprador_email: string
   valor: number
   valor_recebido?: number | null
+  valor_bruto?: number | null
+  taxa_hotmart?: number | null
+  comissao_produtor?: number | null
   comissao_coprodutor?: number | null
+  comissao_afiliado?: number | null
+  valor_operacional_final: number
   moeda: string
   status: Status
   data_venda: string

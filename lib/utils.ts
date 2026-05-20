@@ -82,16 +82,9 @@ export function formatUSD(value: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)
 }
 
-export function getSaleAmount(venda: Venda): number {
-  const storedValue = Number(venda.valor ?? 0)
-  const receivedValue = Number(venda.valor_recebido ?? 0)
-  const coproducerValue = Number(venda.comissao_coprodutor ?? 0)
-
-  if (coproducerValue > 0) {
-    return parseFloat((receivedValue + coproducerValue).toFixed(2))
-  }
-
-  return storedValue
+export function getOfficialSaleAmount(venda: Venda): number {
+  // Financial calculation lives only in the Hotmart webhook. Frontend reads the persisted official value.
+  return Number(venda.valor_operacional_final ?? 0)
 }
 
 export function formatDateTime(iso: string): string {
@@ -167,7 +160,7 @@ export function buildChartData(vendas: Venda[], period: Period, customRange?: { 
       const d = new Date(v.data_venda)
       if (d >= from && d < to) {
         const label = `${d.getHours().toString().padStart(2, '0')}h`
-        buckets[label].valor += getSaleAmount(v)
+        buckets[label].valor += getOfficialSaleAmount(v)
         buckets[label].count += 1
       }
     })
@@ -187,7 +180,7 @@ export function buildChartData(vendas: Venda[], period: Period, customRange?: { 
     if (d >= from && d < to) {
       const label = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`
       const point = days.find(p => p.label === label)
-      if (point) { point.valor += getSaleAmount(v); point.count += 1 }
+      if (point) { point.valor += getOfficialSaleAmount(v); point.count += 1 }
     }
   })
 
@@ -258,15 +251,15 @@ export function computeWidgetData(
   const pending = vendas.filter(v => v.status === 'pending')
   const cancelled = vendas.filter(v => v.status === 'cancelled')
 
-  const totalBRL = approved.filter(v => v.moeda === 'BRL').reduce((s, v) => s + getSaleAmount(v), 0)
-  const totalUSD = approved.filter(v => v.moeda === 'USD').reduce((s, v) => s + getSaleAmount(v), 0)
+  const totalBRL = approved.filter(v => v.moeda === 'BRL').reduce((s, v) => s + getOfficialSaleAmount(v), 0)
+  const totalUSD = approved.filter(v => v.moeda === 'USD').reduce((s, v) => s + getOfficialSaleAmount(v), 0)
   const totalConverted = totalBRL + totalUSD * exchangeRate
   const approvalRate = vendas.length > 0 ? (approved.length / vendas.length) * 100 : 0
   const avgTicket = approved.length > 0 ? totalConverted / approved.length : 0
 
   const sumConverted = (arr: Venda[]) =>
-    arr.filter(v => v.moeda === 'BRL').reduce((s, v) => s + getSaleAmount(v), 0) +
-    arr.filter(v => v.moeda === 'USD').reduce((s, v) => s + getSaleAmount(v), 0) * exchangeRate
+    arr.filter(v => v.moeda === 'BRL').reduce((s, v) => s + getOfficialSaleAmount(v), 0) +
+    arr.filter(v => v.moeda === 'USD').reduce((s, v) => s + getOfficialSaleAmount(v), 0) * exchangeRate
 
   switch (dataSource) {
     case 'total_converted':
@@ -362,8 +355,8 @@ export function computeWidgetData(
           const d = new Date(v.data_venda)
           if (d >= from && d < to) {
             const label = `${d.getHours().toString().padStart(2, '0')}h`
-            if (v.moeda === 'BRL') buckets[label].brl += getSaleAmount(v)
-            else buckets[label].usd += getSaleAmount(v)
+            if (v.moeda === 'BRL') buckets[label].brl += getOfficialSaleAmount(v)
+            else buckets[label].usd += getOfficialSaleAmount(v)
           }
         })
       } else {
@@ -378,8 +371,8 @@ export function computeWidgetData(
           if (d >= from && d < to) {
             const label = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`
             if (buckets[label]) {
-              if (v.moeda === 'BRL') buckets[label].brl += getSaleAmount(v)
-              else buckets[label].usd += getSaleAmount(v)
+              if (v.moeda === 'BRL') buckets[label].brl += getOfficialSaleAmount(v)
+              else buckets[label].usd += getOfficialSaleAmount(v)
             }
           }
         })
@@ -407,7 +400,7 @@ export function computeWidgetData(
         const currency = v.moeda === 'USD' ? 'USD' : 'BRL'
         const key = `${v.produto || 'Produto'}__${currency}`
         const current = groups[key] ?? { label: v.produto || 'Produto', value: 0, valueBRL: 0, currency }
-        const amount = getSaleAmount(v)
+        const amount = getOfficialSaleAmount(v)
         current.value += amount
         current.valueBRL += currency === 'USD' ? amount * exchangeRate : amount
         groups[key] = current
@@ -498,8 +491,8 @@ export function computeWidgetData(
         if (!buckets[label]) return
         if (v.status === 'approved') {
           buckets[label].approved += 1
-          if (v.moeda === 'BRL') buckets[label].valueBRL += getSaleAmount(v)
-          else buckets[label].valueUSD += getSaleAmount(v)
+          if (v.moeda === 'BRL') buckets[label].valueBRL += getOfficialSaleAmount(v)
+          else buckets[label].valueUSD += getOfficialSaleAmount(v)
         } else if (v.status === 'refunded') {
           buckets[label].reembolsos += 1
         }
@@ -520,10 +513,10 @@ export function computeComparableMetric(
 ): number | null {
   const approved = vendas.filter(v => v.status === 'approved')
   const sumConverted = (arr: Venda[]) =>
-    arr.reduce((sum, v) => sum + (v.moeda === 'USD' ? getSaleAmount(v) * exchangeRate : getSaleAmount(v)), 0)
+    arr.reduce((sum, v) => sum + (v.moeda === 'USD' ? getOfficialSaleAmount(v) * exchangeRate : getOfficialSaleAmount(v)), 0)
   const totalConverted = sumConverted(approved)
-  const totalBRL = approved.filter(v => v.moeda === 'BRL').reduce((s, v) => s + getSaleAmount(v), 0)
-  const totalUSD = approved.filter(v => v.moeda === 'USD').reduce((s, v) => s + getSaleAmount(v), 0)
+  const totalBRL = approved.filter(v => v.moeda === 'BRL').reduce((s, v) => s + getOfficialSaleAmount(v), 0)
+  const totalUSD = approved.filter(v => v.moeda === 'USD').reduce((s, v) => s + getOfficialSaleAmount(v), 0)
   switch (dataSource) {
     case 'total_converted':
       return totalConverted
@@ -606,6 +599,12 @@ export function generateDemoVendas(period: Period, customRange?: { from: Date; t
       comprador_nome: demoPick(DEMO_NOMES, i * 3),
       comprador_email: `demo${i}@example.com`,
       valor,
+      valor_bruto: valor,
+      taxa_hotmart: 0,
+      comissao_produtor: valor,
+      comissao_coprodutor: 0,
+      comissao_afiliado: 0,
+      valor_operacional_final: valor,
       moeda,
       status: demoStatus(seed),
       data_venda,

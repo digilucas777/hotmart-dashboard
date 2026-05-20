@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Projeto, Venda, WidgetDataSource } from '@/lib/types'
-import { formatBRL, formatUSD, getSaleAmount } from '@/lib/utils'
+import { formatBRL, formatUSD, getOfficialSaleAmount } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 
@@ -107,8 +107,8 @@ function buildMetricValue(vendas: Venda[], metric: WidgetDataSource) {
   const refunded = vendas.filter(v => v.status === 'refunded')
   const pending = vendas.filter(v => v.status === 'pending')
   const cancelled = vendas.filter(v => v.status === 'cancelled')
-  const totalBRL = approved.filter(v => v.moeda === 'BRL').reduce((sum, v) => sum + getSaleAmount(v), 0)
-  const totalUSD = approved.filter(v => v.moeda === 'USD').reduce((sum, v) => sum + getSaleAmount(v), 0)
+  const totalBRL = approved.filter(v => v.moeda === 'BRL').reduce((sum, v) => sum + getOfficialSaleAmount(v), 0)
+  const totalUSD = approved.filter(v => v.moeda === 'USD').reduce((sum, v) => sum + getOfficialSaleAmount(v), 0)
   const totalConverted = totalBRL + totalUSD * 5.85
 
   if (metric === 'total_converted' || metric === 'lucro') return formatBRL(totalConverted)

@@ -32,7 +32,7 @@ import {
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { supabase } from '@/lib/supabase'
-import { formatRelativeTime, getPeriodRange, getPreviousPeriodRange, getSaleAmount } from '@/lib/utils'
+import { formatRelativeTime, getPeriodRange, getPreviousPeriodRange, getOfficialSaleAmount } from '@/lib/utils'
 import type { Venda, Projeto, Produto, Period, WidgetConfig, WidgetType, WidgetDataSource } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
 import { AddWidgetModal } from '@/components/dashboard/AddWidgetModal'
@@ -970,7 +970,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     return labels[code] ?? (code || 'Unknown')
   }
   const formatSaleAmount = (venda: Venda) => {
-    const value = getSaleAmount(venda)
+    const value = getOfficialSaleAmount(venda)
     return venda.moeda === 'USD'
       ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)
       : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
@@ -982,7 +982,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       const label = code ? code : 'Unknown'
       const current = groups.get(label) ?? { label, count: 0, revenue: 0 }
       current.count += 1
-      current.revenue += getSaleAmount(venda)
+      current.revenue += getOfficialSaleAmount(venda)
       groups.set(label, current)
     }
     return Array.from(groups.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 5)
@@ -992,7 +992,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     const topCountry = countryRanking[0]?.label
     const topProduct = Object.entries(approved.reduce<Record<string, number>>((acc, venda) => {
       const key = venda.produto || 'Produto'
-      acc[key] = (acc[key] ?? 0) + getSaleAmount(venda)
+      acc[key] = (acc[key] ?? 0) + getOfficialSaleAmount(venda)
       return acc
     }, {})).sort((a, b) => b[1] - a[1])[0]?.[0]
     return [

@@ -7,7 +7,7 @@ import {
   formatBRL,
   formatUSD,
   formatDateTime,
-  getSaleAmount,
+  getOfficialSaleAmount,
   statusLabel,
   normalizePagamento,
   parseOrigem,
@@ -146,7 +146,7 @@ export function SalesTable({
               </tr>
             ) : (
               filtered.map(v => {
-                const amount = getSaleAmount(v)
+                const amount = getOfficialSaleAmount(v)
                 return (
                 <tr
                   key={v.id}

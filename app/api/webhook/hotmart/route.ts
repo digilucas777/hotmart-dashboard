@@ -18,6 +18,10 @@ function sameCurrencyValue(commissions: HotmartCommission[], currency: string, m
     .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
 }
 
+function roundMoney(value: number) {
+  return parseFloat(value.toFixed(2))
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -39,22 +43,23 @@ export async function POST(req: NextRequest) {
     }
 
     const priceObj = dados.purchase?.original_offer_price ?? dados.purchase?.price
-    const priceValue: number = Number(priceObj?.value ?? 0)
+    const valorBruto: number = Number(priceObj?.value ?? 0)
     const moeda: string = priceObj?.currency_value ?? 'BRL'
     const commissions = (dados.commissions ?? []) as HotmartCommission[]
-    const marketplaceCommission = sameCurrencyValue(commissions, moeda, source => source === 'MARKETPLACE')
-    const receivedCommission = sameCurrencyValue(commissions, moeda, source =>
+    const taxaHotmart = sameCurrencyValue(commissions, moeda, source => source === 'MARKETPLACE')
+    const comissaoProdutor = sameCurrencyValue(commissions, moeda, source =>
       source === 'PRODUCER' || source === 'SELLER' || source === 'VENDOR' || source.includes('OWNER'),
     )
     const coproducerCommission = sameCurrencyValue(commissions, moeda, source =>
       source.includes('COPRODUCER') || source.includes('CO_PRODUCER') || source.includes('CO-PRODUCER') || source.includes('COPRODUTOR'),
     )
+    const comissaoAfiliado = sameCurrencyValue(commissions, moeda, source =>
+      source.includes('AFFILIATE') || source.includes('AFILIADO'),
+    )
     const status = mapStatus(evento)
-    const fallbackReceived = parseFloat((priceValue - marketplaceCommission).toFixed(2))
-    const valorRecebido = receivedCommission > 0 ? receivedCommission : fallbackReceived
-    const valor = status === 'abandoned'
+    const valorOperacionalFinal = status === 'abandoned'
       ? 0
-      : parseFloat((valorRecebido + coproducerCommission).toFixed(2))
+      : roundMoney(comissaoProdutor + coproducerCommission + comissaoAfiliado - taxaHotmart)
 
     const paymentType: string | null = dados.purchase?.payment?.type ?? null
     const cardBrand: string | null = dados.purchase?.payment?.card_type ?? dados.purchase?.payment?.brand ?? null
@@ -72,23 +77,43 @@ export async function POST(req: NextRequest) {
       produto: nome_produto,
       comprador_nome: dados.buyer?.name,
       comprador_email: dados.buyer?.email,
-      valor,
+      valor: valorOperacionalFinal,
       moeda,
       status,
       pais: dados.buyer?.address?.country ?? null,
       forma_pagamento,
       origem,
-      valor_recebido: valorRecebido,
+      valor_recebido: comissaoProdutor,
+      valor_bruto: valorBruto,
+      taxa_hotmart: taxaHotmart,
+      comissao_produtor: comissaoProdutor,
       comissao_coprodutor: coproducerCommission,
+      comissao_afiliado: comissaoAfiliado,
+      valor_operacional_final: valorOperacionalFinal,
       hotmart_payload: body,
       data_venda: dados.purchase?.order_date
         ? new Date(dados.purchase.order_date).toISOString()
         : new Date().toISOString(),
     }
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from('vendas')
       .upsert(venda, { onConflict: 'hotmart_id' })
+
+    if (error && (error.message.includes('schema cache') || error.message.includes('valor_operacional_final'))) {
+      const {
+        valor_bruto,
+        taxa_hotmart,
+        comissao_produtor,
+        comissao_afiliado,
+        valor_operacional_final,
+        ...legacyVenda
+      } = venda
+      const retry = await supabase
+        .from('vendas')
+        .upsert(legacyVenda, { onConflict: 'hotmart_id' })
+      error = retry.error
+    }
 
     if (error) {
       console.error('Erro ao salvar venda:', error)
