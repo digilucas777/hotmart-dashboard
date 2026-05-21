@@ -184,14 +184,14 @@ function buildTopProdutos(vendas: Venda[]): string {
   return lines.join('\n')
 }
 
-function buildMetricValue(vendas: Venda[], metric: WidgetDataSource, insights?: MetaInsights | null, isMetaConnected?: boolean) {
+function buildMetricValue(vendas: Venda[], metric: WidgetDataSource, insights?: MetaInsights | null, isMetaConnected?: boolean, exchangeRate = 5.85) {
   const approved = vendas.filter(v => v.status === 'approved')
   const refunded = vendas.filter(v => v.status === 'refunded')
   const pending = vendas.filter(v => v.status === 'pending')
   const cancelled = vendas.filter(v => v.status === 'cancelled')
   const totalBRL = approved.filter(v => v.moeda === 'BRL').reduce((sum, v) => sum + getOfficialSaleAmount(v), 0)
   const totalUSD = approved.filter(v => v.moeda === 'USD').reduce((sum, v) => sum + getOfficialSaleAmount(v), 0)
-  const totalConverted = totalBRL + totalUSD * 5.85
+  const totalConverted = totalBRL + totalUSD * exchangeRate
 
   if (metric === 'total_converted') return formatBRL(totalConverted)
   if (metric === 'lucro') return formatBRL(totalConverted - (isMetaConnected && insights ? insights.spend_brl : 0))
@@ -271,6 +271,7 @@ export default function RelatoriosPage() {
   const [metaAccountId, setMetaAccountId] = useState<string | null>(null)
   const [metaInsights, setMetaInsights] = useState<MetaInsights | null>(null)
   const [isMetaConnected, setIsMetaConnected] = useState(false)
+  const [exchangeRate, setExchangeRate] = useState(5.85)
 
   const previewRef = useRef<HTMLDivElement>(null)
   const selectedProject = projetos.find(p => p.id === form.projeto_id)
@@ -301,6 +302,13 @@ export default function RelatoriosPage() {
   useEffect(() => {
     loadBase()
   }, [loadBase])
+
+  useEffect(() => {
+    fetch('/api/exchange-rate')
+      .then(r => r.json())
+      .then((d: { rate: number }) => setExchangeRate(d.rate ?? 5.85))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     async function loadProjectSales() {
@@ -416,13 +424,13 @@ export default function RelatoriosPage() {
         lines.push('', buildTopProdutos(vendas))
       } else {
         const option = ALL_METRICS.find(o => o.value === metric)
-        lines.push(`• ${option?.label ?? metric}: ${buildMetricValue(vendas, metric, metaInsights, isMetaConnected)}`)
+        lines.push(`• ${option?.label ?? metric}: ${buildMetricValue(vendas, metric, metaInsights, isMetaConnected, exchangeRate)}`)
       }
     })
 
     lines.push('', `Período: ${PERIOD_OPTIONS.find(p => p.value === form.periodo)?.label ?? form.periodo}`)
     return lines.join('\n')
-  }, [form.mensagem, form.periodo, metricas, selectedProject?.nome, vendas, metaInsights, isMetaConnected])
+  }, [form.mensagem, form.periodo, metricas, selectedProject?.nome, vendas, metaInsights, isMetaConnected, exchangeRate])
 
   useEffect(() => {
     setMessageText(generatedMessage)
