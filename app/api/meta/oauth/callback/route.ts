@@ -25,12 +25,14 @@ export async function GET(request: Request) {
   if (!code || !state || state !== csrfToken || !userId) {
     return NextResponse.redirect(`${origin}/integracoes?meta=error`)
   }
+  console.log('[META CB] state ok, code:', code?.slice(0, 10))
 
   const appId = process.env.META_APP_ID
   const appSecret = process.env.META_APP_SECRET
   if (!appId || !appSecret) {
     return NextResponse.redirect(`${origin}/integracoes?meta=error`)
   }
+  console.log('[META CB] env ok, appId:', appId)
 
   try {
     const tokenUrl = new URL(`https://graph.facebook.com/${META_API_VERSION}/oauth/access_token`)
@@ -42,13 +44,16 @@ export async function GET(request: Request) {
     const tokenResponse = await fetch(tokenUrl, { cache: 'no-store' })
     if (!tokenResponse.ok) throw new Error(await tokenResponse.text())
     const token = await tokenResponse.json() as TokenResponse
+    console.log('[META CB] token ok:', !!token.access_token)
 
     const meRes = await fetch(
       `https://graph.facebook.com/${META_API_VERSION}/me?fields=id,name&access_token=${encodeURIComponent(token.access_token)}`,
       { cache: 'no-store' },
     )
     const me: MeResponse = meRes.ok ? await meRes.json() as MeResponse : { id: '' }
+    console.log('[META CB] me:', me)
 
+    console.log('[META CB] userId from state:', userId)
     const supabase = await createRouteSupabase()
 
     const { error: upsertError } = await supabase.from('meta_connections').upsert({
@@ -58,6 +63,7 @@ export async function GET(request: Request) {
       meta_user_name: me.name ?? null,
       status: 'connected',
     }, { onConflict: 'user_id' })
+    console.log('[META CB] upsert error:', upsertError)
 
     if (upsertError) {
       console.error('Erro ao salvar meta_connections:', upsertError)
@@ -65,7 +71,8 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.redirect(`${origin}/integracoes?meta=success`)
-  } catch {
+  } catch (err) {
+    console.error('[META CB] catch:', err)
     return NextResponse.redirect(`${origin}/integracoes?meta=error`)
   }
 }

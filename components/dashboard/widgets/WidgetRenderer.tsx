@@ -8,6 +8,7 @@ import { computeComparableMetric, computeWidgetData, formatPeriodComparisonLabel
 import type { Period, Venda, WidgetConfig } from '@/lib/types'
 import { SalesTable } from '@/components/dashboard/SalesTable'
 import { computeMetaWidgetData } from '@/lib/meta-ads-mock'
+import type { MetaCreativeResult } from '@/lib/meta-ads-mock'
 import { BarChartWidget } from './BarChartWidget'
 import { CombinedChartWidget } from './CombinedChartWidget'
 import { LineChartWidget } from './LineChartWidget'
@@ -77,6 +78,7 @@ function WidgetRendererBase({
   isGroupDragging = false,
   linkedMetaAccountId,
   metaInsights,
+  metaAds,
   onSelect,
   onDelete,
   onDuplicate,
@@ -97,6 +99,7 @@ function WidgetRendererBase({
   selected: boolean
   linkedMetaAccountId?: string | null
   metaInsights?: MetaInsightsRaw | null
+  metaAds?: MetaCreativeResult | null
   onSelect: (id: string, multi?: boolean) => void
   onDelete: (id: string) => void
   onDuplicate?: (id: string) => void
@@ -424,7 +427,11 @@ function WidgetRendererBase({
           <MetaCampaignWidget title={config.title} data={data} isDemo={!isMetaLinked} />
         )}
         {config.type === 'meta-creative' && data.kind === 'meta-creative' && (
-          <MetaCreativeWidget title={config.title} data={data} isDemo={!isMetaLinked} />
+          <MetaCreativeWidget
+            title={config.title}
+            data={isMetaLinked && metaAds ? { ...metaAds, sortBy: data.sortBy } : data}
+            isDemo={!isMetaLinked}
+          />
         )}
       </div>
     </div>
@@ -445,5 +452,6 @@ export const WidgetRenderer = memo(WidgetRendererBase, (prev, next) =>
   prev.selected === next.selected &&
   prev.isGroupDragging === next.isGroupDragging &&
   prev.linkedMetaAccountId === next.linkedMetaAccountId &&
-  prev.metaInsights === next.metaInsights
+  prev.metaInsights === next.metaInsights &&
+  prev.metaAds === next.metaAds
 )

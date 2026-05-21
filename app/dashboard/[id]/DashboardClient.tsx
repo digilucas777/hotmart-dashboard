@@ -15,6 +15,7 @@ import {
   Rocket,
   Save,
   Search,
+  Trash2,
   Undo2,
   Redo2,
   X,
@@ -42,6 +43,7 @@ import type { ResizeDirection } from '@/components/dashboard/widgets/WidgetRende
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import type { MetaCreativeResult } from '@/lib/meta-ads-mock'
 
 const GRID_COLUMNS = 12
 const GRID_ROW_HEIGHT = 20
@@ -392,6 +394,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
   const [linkedMetaAccountId, setLinkedMetaAccountId] = useState<string | null>(null)
   const [metaInsights, setMetaInsights] = useState<Record<string, unknown> | null>(null)
+  const [metaAds, setMetaAds] = useState<MetaCreativeResult | null>(null)
+  const [showClearModal, setShowClearModal] = useState(false)
 
   const customDateRange = useMemo((): { from: Date; to: Date } | undefined => {
     if (period !== 'custom') return undefined
@@ -482,6 +486,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       today: 'today', yesterday: 'yesterday',
       thisWeek: 'this_week_sun_today', lastWeek: 'last_week_sun_sat',
       thisMonth: 'this_month', lastMonth: 'last_month',
+      last7d: 'last_7d', last30d: 'last_30d',
     }
     const preset = presetMap[period]
     if (!preset) { setMetaInsights(null); return }
@@ -490,6 +495,22 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       .then(data => setMetaInsights(data))
       .catch(() => setMetaInsights(null))
   }, [linkedMetaAccountId, period])
+
+  useEffect(() => {
+    if (!linkedMetaAccountId) { setMetaAds(null); return }
+    const presetMap: Partial<Record<string, string>> = {
+      today: 'today', yesterday: 'yesterday',
+      thisWeek: 'this_week_sun_today', lastWeek: 'last_week_sun_sat',
+      thisMonth: 'this_month', lastMonth: 'last_month',
+      last7d: 'last_7d', last30d: 'last_30d',
+    }
+    const preset = presetMap[period]
+    if (!preset) { setMetaAds(null); return }
+    fetch(`/api/meta/ads?account_id=${encodeURIComponent(linkedMetaAccountId)}&date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() as Promise<MetaCreativeResult> : null)
+      .then(data => setMetaAds(data))
+      .catch(() => setMetaAds(null))
+  }, [linkedMetaAccountId, period, projectId])
 
   const fetchVendas = useCallback(async () => {
     setLoading(true)
@@ -773,6 +794,17 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setSavedWidgets(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w))
     setEditingWidgetId(null)
   }, [])
+
+  const clearAllWidgets = useCallback(async () => {
+    await supabase.from('dashboard_widgets').delete().eq('projeto_id', projectId)
+    setWidgets([])
+    setSavedWidgets([])
+    setSelectedWidgetIds(new Set())
+    setUndoStack([])
+    setRedoStack([])
+    setShowClearModal(false)
+    setEditMode(false)
+  }, [projectId])
 
   const getResizePlacement = useCallback((
     id: string,
@@ -1260,6 +1292,16 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 <Button
                   variant="outline"
                   size="sm"
+                  onClick={() => setShowClearModal(true)}
+                  title="Remover todos os widgets"
+                  className="shrink-0 border-red-400/30 bg-red-500/10 text-red-300"
+                >
+                  <Trash2 size={13} />
+                  Limpar tudo
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={cancelLayout}
                   title="Cancelar edições e voltar ao layout salvo"
                   className="shrink-0 border-red-400/30 bg-red-500/10 text-red-300"
@@ -1385,6 +1427,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                     onCommitResize={commitWidgetResize}
                     linkedMetaAccountId={linkedMetaAccountId}
                     metaInsights={metaInsights}
+                    metaAds={metaAds}
                   />
                 ))}
               </div>
@@ -1485,6 +1528,32 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         onClose={() => setEditingWidgetId(null)}
         onSave={updateWidget}
       />
+
+      <Modal
+        open={showClearModal}
+        onClose={() => setShowClearModal(false)}
+        title="Remover todos os widgets"
+        maxWidth="max-w-sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--dash-muted)]">
+            Isso irá remover permanentemente todos os {widgets.length} widgets do dashboard. Esta ação não pode ser desfeita.
+          </p>
+          <div className="flex gap-2 pt-1">
+            <Button variant="ghost" className="flex-1" onClick={() => setShowClearModal(false)}>
+              Cancelar
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={clearAllWidgets}
+              style={{ background: 'rgba(239,68,68,0.2)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.3)' }}
+            >
+              <Trash2 size={14} />
+              Remover tudo
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         open={showProducts}

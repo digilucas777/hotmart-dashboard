@@ -9,36 +9,46 @@ import {
   Clock,
   AlertTriangle,
   Percent,
+  Landmark,
+  BarChart2,
 } from 'lucide-react'
 import type { WidgetDataSource } from '@/lib/types'
 
 const ICON_MAP: Partial<Record<WidgetDataSource, React.ElementType>> = {
   total_converted: DollarSign,
-  total_brl: DollarSign,
-  total_usd: DollarSign,
-  sales_count: CheckCircle,
-  approval_rate: TrendingUp,
-  avg_ticket: CreditCard,
-  refunds_count: BadgeX,
-  pending_count: Clock,
+  total_brl:       DollarSign,
+  total_usd:       DollarSign,
+  sales_count:     CheckCircle,
+  approval_rate:   TrendingUp,
+  avg_ticket:      CreditCard,
+  refunds_count:   BadgeX,
+  pending_count:   Clock,
   cancelled_count: AlertTriangle,
-  commission: Percent,
+  commission:      Percent,
+  lucro:           Landmark,
+  margem_lucro:    Percent,
+  roas:            BarChart2,
+  cpa:             DollarSign,
 }
 
-const COLOR_MAP: Partial<Record<WidgetDataSource, { icon: string; bg: string }>> = {
-  total_converted: { icon: 'text-cyan-300', bg: 'bg-cyan-400/15' },
-  total_brl: { icon: 'text-green-400', bg: 'bg-green-500/12' },
-  total_usd: { icon: 'text-sky-300', bg: 'bg-sky-400/15' },
-  sales_count: { icon: 'text-green-400', bg: 'bg-green-500/12' },
-  approval_rate: { icon: 'text-cyan-300', bg: 'bg-cyan-400/15' },
-  avg_ticket: { icon: 'text-violet-300', bg: 'bg-violet-400/15' },
-  refunds_count: { icon: 'text-red-400', bg: 'bg-red-500/12' },
-  pending_count: { icon: 'text-yellow-400', bg: 'bg-yellow-500/12' },
-  cancelled_count: { icon: 'text-orange-400', bg: 'bg-orange-500/12' },
-  commission: { icon: 'text-emerald-300', bg: 'bg-emerald-400/15' },
+const ACCENT_MAP: Partial<Record<WidgetDataSource, string>> = {
+  total_converted: '#67e8f9',
+  total_brl:       '#4ade80',
+  total_usd:       '#7dd3fc',
+  sales_count:     '#4ade80',
+  approval_rate:   '#67e8f9',
+  avg_ticket:      '#c4b5fd',
+  refunds_count:   '#f87171',
+  pending_count:   '#facc15',
+  cancelled_count: '#fb923c',
+  commission:      '#6ee7b7',
+  lucro:           '#4ade80',
+  margem_lucro:    '#4ade80',
+  roas:            '#6366f1',
+  cpa:             '#f87171',
 }
 
-const DEFAULT_COLORS = { icon: 'text-cyan-300', bg: 'bg-cyan-400/15' }
+const DEFAULT_ACCENT = '#67e8f9'
 
 export function MetricWidget({
   title,
@@ -54,26 +64,65 @@ export function MetricWidget({
   comparison?: string | null
 }) {
   const Icon = ICON_MAP[dataSource] ?? DollarSign
-  const colors = COLOR_MAP[dataSource] ?? DEFAULT_COLORS
+  const accent = ACCENT_MAP[dataSource] ?? DEFAULT_ACCENT
+
+  const isPositive = comparison?.startsWith('↑')
+  const isNegative = comparison?.startsWith('↓')
+  const changeColor = isPositive ? '#10b981' : isNegative ? '#ef4444' : '#64748b'
+
+  const [changePart, periodPart] = comparison?.includes(' vs ')
+    ? [comparison.split(' vs ')[0]!, comparison.split(' vs ').slice(1).join(' vs ')]
+    : [comparison ?? null, null]
 
   return (
-    <div className="relative z-[1] flex h-full flex-col gap-3 p-4">
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/35 to-transparent" />
-      <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl shadow-md shadow-cyan-500/10 ${colors.bg}`}>
-        <Icon size={16} className={colors.icon} />
+    <div className="relative flex h-full flex-col justify-between overflow-hidden p-5">
+      {/* Accent glow */}
+      <div
+        className="pointer-events-none absolute right-0 top-0 h-32 w-32 opacity-[0.06]"
+        style={{ background: `radial-gradient(circle, ${accent}, transparent 70%)` }}
+      />
+
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">Hotmart</p>
+          <p className="mt-0.5 truncate text-xs font-semibold text-[var(--dash-muted)]">{title}</p>
+        </div>
+        <div
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+          style={{ background: `${accent}22`, border: `1px solid ${accent}33` }}
+        >
+          <Icon size={16} style={{ color: accent }} />
+        </div>
       </div>
-      <div className="min-w-0">
-        <p className="truncate text-xs font-semibold leading-4 text-[var(--dash-faint)]">{title}</p>
-        <p className="mt-1.5 truncate text-2xl font-extrabold leading-tight text-[var(--dash-text)] drop-shadow">
+
+      {/* Value */}
+      <div className="mt-3 flex-1">
+        <p
+          className="text-2xl font-black leading-none tracking-tight sm:text-3xl"
+          style={{ color: accent }}
+        >
           {value}
         </p>
-        {subValue && <p className="mt-1 truncate text-xs leading-4 text-[var(--dash-faint)]">{subValue}</p>}
-        {comparison && (
-          <p className={`mt-0.5 truncate text-xs font-bold ${comparison.startsWith('↑') ? 'text-emerald-300' : comparison.startsWith('↓') ? 'text-red-300' : 'text-[var(--dash-faint)]'}`}>
-            {comparison}
-          </p>
+        {subValue && (
+          <p className="mt-1 text-sm font-semibold text-[var(--dash-muted)]">{subValue}</p>
         )}
       </div>
+
+      {/* Footer */}
+      {changePart && (
+        <div className="mt-3 flex items-center gap-2">
+          <span
+            className="inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold"
+            style={{ background: `${changeColor}18`, color: changeColor, border: `1px solid ${changeColor}30` }}
+          >
+            {changePart}
+          </span>
+          {periodPart && (
+            <span className="text-xs text-[var(--dash-faint)]">vs {periodPart}</span>
+          )}
+        </div>
+      )}
     </div>
   )
 }

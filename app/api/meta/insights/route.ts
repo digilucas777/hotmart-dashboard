@@ -44,6 +44,12 @@ function getDateRange(preset: string): { from: Date; to: Date } {
       sun.setDate(sun.getDate() - sun.getDay() - 7)
       return { from: sun, to: new Date(sun.getTime() + 7 * DAY) }
     }
+    case 'last_7d': {
+      return { from: new Date(today.getTime() - 6 * DAY), to: new Date(today.getTime() + DAY) }
+    }
+    case 'last_30d': {
+      return { from: new Date(today.getTime() - 29 * DAY), to: new Date(today.getTime() + DAY) }
+    }
     case 'this_month': {
       const d = new Date(today.getFullYear(), today.getMonth(), 1)
       return { from: d, to: new Date(today.getTime() + DAY) }

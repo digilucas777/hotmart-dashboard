@@ -39,13 +39,16 @@ export function MetaCreativeWidget({ title, data, isDemo = true }: { title: stri
 
             {/* Thumbnail */}
             <div
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+              className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg"
               style={{
                 background: `${PALETTE[i % PALETTE.length]}18`,
                 border: `1px solid ${PALETTE[i % PALETTE.length]}28`,
               }}
             >
-              {cr.adType === 'video' ? (
+              {cr.thumbnailUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={cr.thumbnailUrl} alt={cr.name} className="h-full w-full object-cover" />
+              ) : cr.adType === 'video' ? (
                 <Play size={14} className="text-white/40" />
               ) : (
                 <ImageIcon size={14} className="text-white/40" />

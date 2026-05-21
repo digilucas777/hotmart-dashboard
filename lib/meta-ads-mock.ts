@@ -95,6 +95,7 @@ export type MetaCreativeResult = {
     id: string
     name: string
     adType: 'image' | 'video'
+    thumbnailUrl?: string
     ctr: number
     roas: number
     spend: number
