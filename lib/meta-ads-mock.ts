@@ -90,7 +90,7 @@ export type MetaCampaignResult = {
 
 export type MetaCreativeResult = {
   kind: 'meta-creative'
-  sortBy: 'ctr' | 'roas'
+  sortBy: 'ctr' | 'roas'  // 'roas' kept for real API data compatibility
   creatives: {
     id: string
     name: string
@@ -292,8 +292,8 @@ export function computeMetaWidgetData(dataSource: WidgetDataSource, period: Peri
   }
 
   // ── Creatives ranking ──
-  if (src === 'meta_creatives_ctr' || src === 'meta_creatives_roas') {
-    const sortBy = src === 'meta_creatives_ctr' ? 'ctr' : 'roas'
+  if (src === 'meta_creatives_ctr') {
+    const sortBy = 'ctr' as const
     const days = periodDays(period)
     const rng = seededRandom(hashStr('creatives' + period + src))
     const names = [
@@ -326,7 +326,7 @@ export function computeMetaWidgetData(dataSource: WidgetDataSource, period: Peri
       }
     })
 
-    creatives.sort((a, b) => (sortBy === 'ctr' ? b.ctr - a.ctr : b.roas - a.roas))
+    creatives.sort((a, b) => b.ctr - a.ctr)
 
     return { kind: 'meta-creative', sortBy, creatives }
   }

@@ -127,8 +127,7 @@ const META_CHART_SOURCES: { value: WidgetDataSource; label: string }[] = [
 const META_FUNNEL_SOURCES:   { value: WidgetDataSource; label: string }[] = [{ value: 'meta_funnel',          label: 'Funil de Conversão' }]
 const META_CAMPAIGN_SOURCES: { value: WidgetDataSource; label: string }[] = [{ value: 'meta_campaigns',       label: 'Performance de Campanhas' }]
 const META_CREATIVE_SOURCES: { value: WidgetDataSource; label: string }[] = [
-  { value: 'meta_creatives_ctr',  label: 'Ranking por CTR' },
-  { value: 'meta_creatives_roas', label: 'Ranking por ROAS' },
+  { value: 'meta_creatives_ctr', label: 'Ranking de Vendas' },
 ]
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

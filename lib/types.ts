@@ -80,7 +80,6 @@ export type MetaDataSource =
   | 'meta_funnel'
   | 'meta_campaigns'
   | 'meta_creatives_ctr'
-  | 'meta_creatives_roas'
 
 export type WidgetDataSource =
   | 'total_converted'

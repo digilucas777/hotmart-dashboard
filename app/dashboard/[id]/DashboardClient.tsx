@@ -43,7 +43,7 @@ import type { ResizeDirection } from '@/components/dashboard/widgets/WidgetRende
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
-import type { MetaCreativeResult } from '@/lib/meta-ads-mock'
+import type { MetaCreativeResult, MetaCampaignResult } from '@/lib/meta-ads-mock'
 
 const GRID_COLUMNS = 12
 const GRID_ROW_HEIGHT = 20
@@ -395,6 +395,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [linkedMetaAccountId, setLinkedMetaAccountId] = useState<string | null>(null)
   const [metaInsights, setMetaInsights] = useState<Record<string, unknown> | null>(null)
   const [metaAds, setMetaAds] = useState<MetaCreativeResult | null>(null)
+  const [metaCampaigns, setMetaCampaigns] = useState<MetaCampaignResult | null>(null)
   const [showClearModal, setShowClearModal] = useState(false)
 
   const customDateRange = useMemo((): { from: Date; to: Date } | undefined => {
@@ -510,6 +511,22 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       .then(r => r.ok ? r.json() as Promise<MetaCreativeResult> : null)
       .then(data => setMetaAds(data))
       .catch(() => setMetaAds(null))
+  }, [linkedMetaAccountId, period, projectId])
+
+  useEffect(() => {
+    if (!linkedMetaAccountId) { setMetaCampaigns(null); return }
+    const presetMap: Partial<Record<string, string>> = {
+      today: 'today', yesterday: 'yesterday',
+      thisWeek: 'this_week_sun_today', lastWeek: 'last_week_sun_sat',
+      thisMonth: 'this_month', lastMonth: 'last_month',
+      last7d: 'last_7d', last30d: 'last_30d',
+    }
+    const preset = presetMap[period]
+    if (!preset) { setMetaCampaigns(null); return }
+    fetch(`/api/meta/campaigns?account_id=${encodeURIComponent(linkedMetaAccountId)}&date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() as Promise<MetaCampaignResult> : null)
+      .then(data => setMetaCampaigns(data))
+      .catch(() => setMetaCampaigns(null))
   }, [linkedMetaAccountId, period, projectId])
 
   const fetchVendas = useCallback(async () => {
@@ -1428,6 +1445,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                     linkedMetaAccountId={linkedMetaAccountId}
                     metaInsights={metaInsights}
                     metaAds={metaAds}
+                    metaCampaigns={metaCampaigns}
                   />
                 ))}
               </div>

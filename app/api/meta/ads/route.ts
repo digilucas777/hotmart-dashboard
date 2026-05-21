@@ -38,22 +38,28 @@ export async function GET(request: Request) {
   const datePreset = searchParams.get('date_preset') ?? 'today'
   const projetoId = searchParams.get('projeto_id')
 
+  console.log('[ADS] account_id:', accountId, 'date_preset:', datePreset, 'projeto_id:', projetoId)
+
   if (!accountId) {
     return NextResponse.json({ error: 'account_id required' }, { status: 400 })
   }
 
   const { supabase, user } = await getAuthenticatedUser()
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (!user) {
+    console.log('[ADS] unauthorized - no user')
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
 
   let query = supabase
     .from('meta_connections')
-    .select('access_token')
+    .select('access_token, account_id')
     .eq('user_id', user.id)
     .eq('status', 'connected')
 
   if (projetoId) query = query.eq('projeto_id', projetoId)
 
-  const { data: connection } = await query.order('created_at', { ascending: false }).limit(1).maybeSingle()
+  const { data: connection, error: connErr } = await query.order('created_at', { ascending: false }).limit(1).maybeSingle()
+  console.log('[ADS] connection found:', !!connection, 'stored account_id:', connection?.account_id, 'error:', connErr?.message)
   if (!connection) return NextResponse.json({ error: 'no_connection' }, { status: 400 })
 
   try {
@@ -64,8 +70,10 @@ export async function GET(request: Request) {
     ]))
 
     const path = `/${accountId}/ads?fields=id,name,status,creative{${creativeFields}},insights{${insightFields}}&date_preset=${datePreset}&filtering=${filtering}&limit=50`
+    console.log('[ADS] fetching Meta API path:', path)
 
     const adsData = await metaFetch<AdsResponse>(path, connection.access_token)
+    console.log('[ADS] raw ad count:', adsData.data?.length ?? 0)
 
     const creatives = (adsData.data ?? []).map(ad => {
       const ins = ad.insights?.data?.[0] ?? {}
@@ -95,9 +103,10 @@ export async function GET(request: Request) {
       }
     }).sort((a, b) => b.roas - a.roas)
 
+    console.log('[ADS] returning', creatives.length, 'creatives')
     return NextResponse.json({ kind: 'meta-creative', sortBy: 'roas', creatives })
   } catch (err) {
-    console.error('[ADS] erro:', err)
-    return NextResponse.json({ error: 'meta_api_error' }, { status: 502 })
+    console.error('[ADS] erro completo:', err)
+    return NextResponse.json({ error: 'meta_api_error', detail: String(err) }, { status: 502 })
   }
 }

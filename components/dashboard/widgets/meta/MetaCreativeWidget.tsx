@@ -6,15 +6,13 @@ import type { MetaCreativeResult } from '@/lib/meta-ads-mock'
 const PALETTE = ['#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444']
 
 export function MetaCreativeWidget({ title, data, isDemo = true }: { title: string; data: MetaCreativeResult; isDemo?: boolean }) {
-  const sortLabel = data.sortBy === 'ctr' ? 'CTR' : 'ROAS'
-
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-5 py-4">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">
-            Meta Ads · Criativos por {sortLabel}
+            Meta Ads · Ranking de Vendas
           </p>
           <p className="text-sm font-bold text-[var(--dash-text)]">{title}</p>
         </div>
@@ -64,7 +62,7 @@ export function MetaCreativeWidget({ title, data, isDemo = true }: { title: stri
             </div>
 
             {/* Metrics */}
-            <div className="flex shrink-0 items-center gap-4">
+            <div className="flex shrink-0 items-center gap-3">
               <div className="text-right">
                 <p className="text-xs font-bold text-[var(--dash-text)]">{cr.ctr.toFixed(1)}%</p>
                 <p className="text-[9px] text-[var(--dash-faint)]">CTR</p>
@@ -78,6 +76,10 @@ export function MetaCreativeWidget({ title, data, isDemo = true }: { title: stri
                   {cr.roas.toFixed(1)}x
                 </p>
                 <p className="text-[9px] text-[var(--dash-faint)]">ROAS</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-bold text-emerald-400">{cr.conversions}</p>
+                <p className="text-[9px] text-[var(--dash-faint)]">Vendas</p>
               </div>
             </div>
           </div>

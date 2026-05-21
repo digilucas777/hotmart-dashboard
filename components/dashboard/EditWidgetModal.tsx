@@ -75,8 +75,7 @@ const SOURCES_BY_TYPE: Record<string, { value: WidgetDataSource; label: string }
   'meta-funnel':   [{ value: 'meta_funnel',          label: 'Funil de Conversão' }],
   'meta-campaign': [{ value: 'meta_campaigns',       label: 'Performance de Campanhas' }],
   'meta-creative': [
-    { value: 'meta_creatives_ctr',  label: 'Ranking por CTR' },
-    { value: 'meta_creatives_roas', label: 'Ranking por ROAS' },
+    { value: 'meta_creatives_ctr', label: 'Ranking de Vendas' },
   ],
 }
 

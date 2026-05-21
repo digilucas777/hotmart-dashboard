@@ -130,10 +130,12 @@ export async function GET(request: Request) {
     const roas_meta = actionVal(raw.purchase_roas, 'omni_purchase')
       || (raw.purchase_roas?.[0] ? parseFloat(raw.purchase_roas[0].value) || 0 : 0)
 
-    // ROAS (Geral): faturamento Hotmart aprovado no período / spend em BRL
+    // ROAS (Geral): faturamento Hotmart aprovado no período / spend_brl
     let roas_geral = 0
     if (projetoId && spend_usd > 0) {
       const dateRange = getDateRange(datePreset)
+      const spend_brl = spend_usd * RATE
+      console.log('[INSIGHTS] roas_geral: datePreset:', datePreset, 'range:', dateRange.from.toISOString(), '-', dateRange.to.toISOString(), 'spend_brl:', spend_brl)
 
       const { data: pp } = await supabase
         .from('projeto_produtos')
@@ -141,6 +143,7 @@ export async function GET(request: Request) {
         .eq('projeto_id', projetoId)
 
       const produtoIds = (pp ?? []).map((r: { produto_id: string }) => r.produto_id)
+      console.log('[INSIGHTS] roas_geral: produtoIds count:', produtoIds.length)
 
       if (produtoIds.length > 0) {
         const { data: prods } = await supabase
@@ -149,21 +152,28 @@ export async function GET(request: Request) {
           .in('id', produtoIds)
 
         const hotmartIds = (prods ?? []).map((r: { hotmart_id: string }) => r.hotmart_id)
+        console.log('[INSIGHTS] roas_geral: hotmartIds:', hotmartIds)
 
         if (hotmartIds.length > 0) {
           const { data: vendas } = await supabase
             .from('vendas')
-            .select('valor_operacional_final')
+            .select('valor_operacional_final, moeda, status, data_venda')
             .in('hotmart_produto_id', hotmartIds)
             .eq('status', 'approved')
             .gte('data_venda', dateRange.from.toISOString())
             .lt('data_venda', dateRange.to.toISOString())
 
+          console.log('[INSIGHTS] roas_geral: vendas found:', vendas?.length ?? 0, 'sample:', JSON.stringify(vendas?.[0]))
+
           const faturamento = (vendas ?? []).reduce(
-            (sum: number, v: { valor_operacional_final: number }) => sum + (v.valor_operacional_final ?? 0),
+            (sum: number, v: { valor_operacional_final: number; moeda: string }) => {
+              const val = v.valor_operacional_final ?? 0
+              // se a venda for em USD, converte para BRL
+              return sum + (v.moeda === 'USD' ? val * RATE : val)
+            },
             0,
           )
-          const spend_brl = spend_usd * RATE
+          console.log('[INSIGHTS] roas_geral: faturamento_brl:', faturamento, 'spend_brl:', spend_brl)
           roas_geral = spend_brl > 0 ? faturamento / spend_brl : 0
         }
       }
