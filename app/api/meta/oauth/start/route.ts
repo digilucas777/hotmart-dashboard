@@ -12,7 +12,8 @@ export async function GET(request: Request) {
   const appId = process.env.META_APP_ID
   if (!appId) return NextResponse.redirect(`${origin}/integracoes?meta_error=missing_app_id`)
 
-  const state = randomUUID()
+  const csrfToken = randomUUID()
+  const state = `${csrfToken}|${user.id}`
   const cookieStore = await cookies()
   cookieStore.set('dash_speed_meta_state', state, {
     httpOnly: true,
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
   const url = new URL('https://www.facebook.com/dialog/oauth')
   url.searchParams.set('client_id', appId)
   url.searchParams.set('redirect_uri', metaRedirectUri(request))
-  url.searchParams.set('state', state)
+  url.searchParams.set('state', csrfToken)
   url.searchParams.set('response_type', 'code')
   url.searchParams.set('scope', 'ads_read,ads_management,business_management')
   const configId = process.env.META_CONFIG_ID

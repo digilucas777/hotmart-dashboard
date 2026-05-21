@@ -21,7 +21,8 @@ export async function GET(request: Request) {
   const storedState = cookieStore.get('dash_speed_meta_state')?.value
   cookieStore.delete('dash_speed_meta_state')
 
-  if (!code || !state || state !== storedState) {
+  const [csrfToken, userId] = (storedState ?? '').split('|')
+  if (!code || !state || state !== csrfToken || !userId) {
     return NextResponse.redirect(`${origin}/integracoes?meta=error`)
   }
 
@@ -49,10 +50,9 @@ export async function GET(request: Request) {
     const me: MeResponse = meRes.ok ? await meRes.json() as MeResponse : { id: '' }
 
     const supabase = await createRouteSupabase()
-    const { data: { user } } = await supabase.auth.getUser()
 
     await supabase.from('meta_connections').upsert({
-      ...(user ? { user_id: user.id } : {}),
+      user_id: userId,
       access_token: token.access_token,
       meta_user_id: me.id || null,
       meta_user_name: me.name ?? null,
