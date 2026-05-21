@@ -14,6 +14,7 @@ export async function GET(request: Request) {
 
   const csrfToken = randomUUID()
   const state = `${csrfToken}|${user.id}`
+  console.log('[META START] userId:', user.id, 'state:', state)
   const cookieStore = await cookies()
   cookieStore.set('dash_speed_meta_state', state, {
     httpOnly: true,

@@ -116,6 +116,15 @@ function IntegracoesContent() {
 
   useEffect(() => { void loadData() }, [loadData])
 
+  useEffect(() => {
+    if (metaJustConnected || metaError) {
+      const t = setTimeout(() => {
+        window.history.replaceState({}, '', '/integracoes')
+      }, 100)
+      return () => clearTimeout(t)
+    }
+  }, [metaJustConnected, metaError])
+
   async function syncAccounts() {
     setSyncing(true)
     const res = await fetch('/api/meta/accounts', { cache: 'no-store' })
