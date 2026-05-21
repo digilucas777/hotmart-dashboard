@@ -4,8 +4,13 @@ import { NextResponse } from 'next/server'
 import { getAuthenticatedUser, metaRedirectUri, META_API_VERSION } from '../../_utils'
 
 export async function GET(request: Request) {
-  const { user } = await getAuthenticatedUser()
   const { origin } = new URL(request.url)
+  return NextResponse.redirect(`${origin}/integracoes?meta=error&meta_error=Integração temporariamente desativada`)
+}
+
+async function _GET_disabled(request: Request) {
+  const { origin } = new URL(request.url)
+  const { user } = await getAuthenticatedUser()
 
   if (!user) return NextResponse.redirect(`${origin}/login?next=/integracoes`)
 

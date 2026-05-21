@@ -83,8 +83,12 @@ async function fetchAccountAds(
   })
 }
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
+export async function GET(_request: Request) {
+  return NextResponse.json({ error: 'Meta API temporariamente desativada' }, { status: 503 })
+}
+
+async function _GET_disabled(_request: Request) {
+  const { searchParams } = new URL(_request.url)
   const legacyAccountId = searchParams.get('account_id')
   const datePreset      = searchParams.get('date_preset') ?? 'today'
   const projetoId       = searchParams.get('projeto_id')
