@@ -44,6 +44,7 @@ function generateDates(period: Period): string[] {
 export type MetaMetricResult = {
   kind: 'meta-metric'
   value: number
+  valueUsd?: number
   label: string
   format: 'currency_brl' | 'percentage' | 'number' | 'multiplier' | 'decimal'
   change: number

@@ -34,26 +34,30 @@ export type ResizeDirection =
 
 type MetaInsightsRaw = Record<string, unknown>
 
-function getInsightsValue(source: string, ins: MetaInsightsRaw): number | null {
-  const str = (k: string) => parseFloat(String(ins[k] ?? '0'))
-  const int = (k: string) => parseInt(String(ins[k] ?? '0'), 10)
-  const actions = (Array.isArray(ins.actions) ? ins.actions : []) as { action_type: string; value: string }[]
-  const action = (type: string) => parseFloat(actions.find(a => a.action_type === type)?.value ?? '0')
+type InsightsValue = { value: number; valueUsd?: number }
+
+function getInsightsValue(source: string, ins: MetaInsightsRaw): InsightsValue | null {
+  const num = (k: string) => parseFloat(String(ins[k] ?? '0')) || 0
+  const int = (k: string) => parseInt(String(ins[k] ?? '0'), 10) || 0
 
   switch (source) {
-    case 'meta_spend':              return str('spend')
-    case 'meta_impressions':        return int('impressions')
-    case 'meta_reach':              return int('reach')
-    case 'meta_link_clicks':        return int('clicks')
-    case 'meta_ctr':                return str('ctr')
-    case 'meta_cpm':                return str('cpm')
-    case 'meta_leads':              return action('lead')
-    case 'meta_purchases':          return action('purchase')
-    case 'meta_conversions':        return action('offsite_conversion.fb_pixel_purchase')
-    case 'meta_checkout_initiated': return action('initiate_checkout')
-    case 'meta_add_to_cart':        return action('add_to_cart')
-    case 'meta_page_views':         return action('landing_page_view')
-    default:                        return null
+    case 'meta_spend':               return { value: num('spend_brl'),  valueUsd: num('spend_usd') }
+    case 'meta_cpm':                 return { value: num('cpm_brl'),    valueUsd: num('cpm_usd') }
+    case 'meta_cpc':                 return { value: num('cpc_brl'),    valueUsd: num('cpc_usd') }
+    case 'meta_cpl':                 return { value: num('cpl_brl'),    valueUsd: num('cpl_usd') }
+    case 'meta_cpa':                 return { value: num('cpa_brl'),    valueUsd: num('cpa_usd') }
+    case 'meta_impressions':         return { value: int('impressions') }
+    case 'meta_reach':               return { value: int('reach') }
+    case 'meta_link_clicks':         return { value: int('clicks') }
+    case 'meta_ctr':                 return { value: num('ctr') }
+    case 'meta_frequency':           return { value: num('frequency') }
+    case 'meta_leads':               return { value: num('leads') }
+    case 'meta_purchases':           return { value: num('purchases') }
+    case 'meta_conversions':         return { value: num('conversions') }
+    case 'meta_checkout_initiated':  return { value: num('checkouts') }
+    case 'meta_add_to_cart':         return { value: num('add_to_cart') }
+    case 'meta_page_views':          return { value: num('page_views') }
+    default:                         return null
   }
 }
 
@@ -121,7 +125,7 @@ function WidgetRendererBase({
         const mock = computeMetaWidgetData(config.data_source, effectivePeriod)
         if (isMetaLinked && metaInsights && mock.kind === 'meta-metric') {
           const real = getInsightsValue(config.data_source, metaInsights)
-          if (real !== null) return { ...mock, value: real, change: 0 }
+          if (real !== null) return { ...mock, value: real.value, valueUsd: real.valueUsd, change: 0 }
         }
         return mock
       })()

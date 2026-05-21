@@ -2,18 +2,24 @@
 
 import type { MetaMetricResult } from '@/lib/meta-ads-mock'
 
+function fmtBRL(value: number): string {
+  if (value >= 1_000_000) return `R$ ${(value / 1_000_000).toFixed(1)}M`
+  if (value >= 1_000) return `R$ ${(value / 1_000).toFixed(1)}k`
+  return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function fmtUSD(value: number): string {
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}k`
+  return `$${value.toFixed(2)}`
+}
+
 function formatValue(value: number, format: MetaMetricResult['format']): string {
   switch (format) {
-    case 'currency_brl':
-      if (value >= 1_000_000) return `R$ ${(value / 1_000_000).toFixed(1)}M`
-      if (value >= 1_000) return `R$ ${(value / 1_000).toFixed(1)}k`
-      return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    case 'percentage':
-      return `${value.toFixed(1)}%`
-    case 'multiplier':
-      return `${value.toFixed(2)}x`
-    case 'decimal':
-      return value.toFixed(2)
+    case 'currency_brl': return fmtBRL(value)
+    case 'percentage':   return `${value.toFixed(1)}%`
+    case 'multiplier':   return `${value.toFixed(2)}x`
+    case 'decimal':      return value.toFixed(2)
     case 'number':
       if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
       if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`
@@ -26,6 +32,7 @@ export function MetaMetricWidget({ title, data, isDemo = true }: { title: string
   const isGood = data.isGoodWhenUp ? isPositive : !isPositive
   const changeColor = isGood ? '#10b981' : '#ef4444'
   const changeArrow = isPositive ? '↑' : '↓'
+  const isDual = data.format === 'currency_brl' && data.valueUsd !== undefined
 
   return (
     <div className="relative flex h-full flex-col justify-between overflow-hidden p-5">
@@ -51,12 +58,26 @@ export function MetaMetricWidget({ title, data, isDemo = true }: { title: string
 
       {/* Value */}
       <div className="mt-3 flex-1">
-        <p
-          className="text-2xl font-black leading-none tracking-tight sm:text-3xl"
-          style={{ color: data.accentColor }}
-        >
-          {formatValue(data.value, data.format)}
-        </p>
+        {isDual ? (
+          <div>
+            <p
+              className="text-2xl font-black leading-none tracking-tight sm:text-3xl"
+              style={{ color: data.accentColor }}
+            >
+              {fmtUSD(data.valueUsd!)}
+            </p>
+            <p className="mt-1 text-sm font-semibold text-[var(--dash-muted)]">
+              {fmtBRL(data.value)}
+            </p>
+          </div>
+        ) : (
+          <p
+            className="text-2xl font-black leading-none tracking-tight sm:text-3xl"
+            style={{ color: data.accentColor }}
+          >
+            {formatValue(data.value, data.format)}
+          </p>
+        )}
       </div>
 
       {/* Footer */}
