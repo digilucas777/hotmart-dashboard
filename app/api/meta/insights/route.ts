@@ -24,6 +24,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const accountId = searchParams.get('account_id')
   const datePreset = searchParams.get('date_preset') ?? 'today'
+  const projetoId = searchParams.get('projeto_id')
 
   if (!accountId) {
     return NextResponse.json({ error: 'account_id required' }, { status: 400 })
@@ -32,14 +33,17 @@ export async function GET(request: Request) {
   const { supabase, user } = await getAuthenticatedUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  const { data: connection } = await supabase
-    .from('facebook_connections')
+  let query = supabase
+    .from('meta_connections')
     .select('access_token')
     .eq('user_id', user.id)
     .eq('status', 'connected')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+
+  if (projetoId) {
+    query = query.eq('projeto_id', projetoId)
+  }
+
+  const { data: connection } = await query.order('created_at', { ascending: false }).limit(1).maybeSingle()
 
   if (!connection) {
     return NextResponse.json({ error: 'no_connection' }, { status: 400 })
@@ -62,7 +66,8 @@ export async function GET(request: Request) {
       cpm: raw.cpm ?? '0',
       actions: raw.actions ?? [],
     })
-  } catch {
+  } catch (err) {
+    console.error('[INSIGHTS] erro:', err)
     return NextResponse.json({ error: 'meta_api_error' }, { status: 502 })
   }
 }

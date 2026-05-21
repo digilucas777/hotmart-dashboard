@@ -485,7 +485,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
     const preset = presetMap[period]
     if (!preset) { setMetaInsights(null); return }
-    fetch(`/api/meta/insights?account_id=${encodeURIComponent(linkedMetaAccountId)}&date_preset=${preset}`, { cache: 'no-store' })
+    fetch(`/api/meta/insights?account_id=${encodeURIComponent(linkedMetaAccountId)}&date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' })
       .then(r => r.ok ? r.json() as Promise<Record<string, unknown>> : null)
       .then(data => setMetaInsights(data))
       .catch(() => setMetaInsights(null))
