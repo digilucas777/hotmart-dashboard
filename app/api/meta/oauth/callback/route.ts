@@ -84,8 +84,14 @@ export async function GET(request: Request) {
       )
     }
 
-    return NextResponse.redirect(`${origin}/integracoes?meta=connected`)
+    await supabase.from('meta_connections').upsert({
+      user_id: user.id,
+      access_token: token.access_token,
+      status: 'connected',
+    }, { onConflict: 'user_id' })
+
+    return NextResponse.redirect(`${origin}/integracoes?meta=success`)
   } catch {
-    return NextResponse.redirect(`${origin}/integracoes?meta_error=oauth_failed`)
+    return NextResponse.redirect(`${origin}/integracoes?meta=error`)
   }
 }

@@ -22,12 +22,14 @@ export async function GET(request: Request) {
     maxAge: 600,
   })
 
-  const url = new URL(`https://www.facebook.com/${META_API_VERSION}/dialog/oauth`)
+  const url = new URL('https://www.facebook.com/dialog/oauth')
   url.searchParams.set('client_id', appId)
   url.searchParams.set('redirect_uri', metaRedirectUri(request))
   url.searchParams.set('state', state)
   url.searchParams.set('response_type', 'code')
-  url.searchParams.set('scope', 'email,public_profile,ads_read,business_management,read_insights')
+  url.searchParams.set('scope', 'ads_read,ads_management,business_management')
+  const configId = process.env.META_CONFIG_ID
+  if (configId) url.searchParams.set('config_id', configId)
 
   return NextResponse.redirect(url)
 }

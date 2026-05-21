@@ -95,8 +95,9 @@ function IntegracoesContent() {
   const [syncing, setSyncing] = useState(false)
   const [savingLinks, setSavingLinks] = useState(false)
 
-  const metaError = searchParams.get('meta_error')
-  const metaConnected = searchParams.get('meta') === 'connected'
+  const metaParam = searchParams.get('meta')
+  const metaError = metaParam === 'error' ? 'Falha na conexão com Meta Ads.' : searchParams.get('meta_error')
+  const metaConnected = metaParam === 'success' || metaParam === 'connected'
 
   const connected = businesses.length > 0
   const selectedDashboard = dashboards.find(dashboard => dashboard.id === selectedDashboardId)
