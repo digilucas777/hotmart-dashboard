@@ -176,13 +176,6 @@ function IntegracoesContent() {
               <h1 className="text-xl font-black">Meta Ads</h1>
             </div>
           </div>
-          <a
-            href="/api/meta/oauth/start"
-            className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-5 py-3 text-sm font-black text-white shadow-[0_0_30px_rgba(0,212,255,0.2)] transition-transform hover:-translate-y-0.5"
-          >
-            <Plug size={16} />
-            {connected ? 'Reconectar Meta' : 'Conectar Meta'}
-          </a>
         </div>
       </header>
 

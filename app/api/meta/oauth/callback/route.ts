@@ -51,13 +51,18 @@ export async function GET(request: Request) {
 
     const supabase = await createRouteSupabase()
 
-    await supabase.from('meta_connections').upsert({
+    const { error: upsertError } = await supabase.from('meta_connections').upsert({
       user_id: userId,
       access_token: token.access_token,
       meta_user_id: me.id || null,
       meta_user_name: me.name ?? null,
       status: 'connected',
     }, { onConflict: 'user_id' })
+
+    if (upsertError) {
+      console.error('Erro ao salvar meta_connections:', upsertError)
+      return NextResponse.redirect(`${origin}/integracoes?meta=error&meta_error=${encodeURIComponent(upsertError.message)}`)
+    }
 
     return NextResponse.redirect(`${origin}/integracoes?meta=success`)
   } catch {
