@@ -27,7 +27,7 @@ function formatValue(value: number, format: MetaMetricResult['format']): string 
   }
 }
 
-export function MetaMetricWidget({ title, data, isDemo = true }: { title: string; data: MetaMetricResult; isDemo?: boolean }) {
+export function MetaMetricWidget({ title, data, isDemo = true, isPersonalizado = false }: { title: string; data: MetaMetricResult; isDemo?: boolean; isPersonalizado?: boolean }) {
   const isPositive = data.change >= 0
   const isGood = data.isGoodWhenUp ? isPositive : !isPositive
   const changeColor = isGood ? '#10b981' : '#ef4444'
@@ -45,7 +45,7 @@ export function MetaMetricWidget({ title, data, isDemo = true }: { title: string
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">Meta Ads</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">{isPersonalizado ? 'Personalizado' : 'Meta Ads'}</p>
           <p className="mt-0.5 truncate text-xs font-semibold text-[var(--dash-muted)]">{title}</p>
         </div>
         <div

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import {
   BarChart2,
+  Landmark,
   LineChart,
   PieChart,
   Table2,
@@ -12,6 +13,7 @@ import {
   TrendingUp,
   Filter,
   Megaphone,
+  Puzzle,
   Sparkles,
   Check,
 } from 'lucide-react'
@@ -26,7 +28,30 @@ interface NewWidget {
   width: WidgetWidth
 }
 
-type Category = 'hotmart' | 'meta'
+type Category = 'hotmart' | 'meta' | 'personalizado'
+
+const PERSONALIZADO_ITEMS: {
+  label: string
+  description: string
+  type: WidgetType
+  data_source: WidgetDataSource
+  icon: React.ElementType
+}[] = [
+  {
+    label: 'Lucro',
+    description: 'Faturamento Hotmart menos gasto Meta Ads no período',
+    type: 'metric',
+    data_source: 'lucro',
+    icon: Landmark,
+  },
+  {
+    label: 'ROAS (Geral)',
+    description: 'Faturamento Hotmart dividido pelo gasto Meta Ads',
+    type: 'meta-metric',
+    data_source: 'meta_roas_geral',
+    icon: BarChart2,
+  },
+]
 
 // ─── Hotmart widget types ────────────────────────────────────────────────────
 
@@ -61,7 +86,6 @@ const METRIC_SOURCES: { value: WidgetDataSource; label: string }[] = [
   { value: 'refunds_count',   label: 'Reembolsos' },
   { value: 'pending_count',   label: 'Pendentes' },
   { value: 'cancelled_count', label: 'Cancelados' },
-  { value: 'lucro',           label: 'Lucro (Receita − Custo Ads)' },
   { value: 'margem_lucro',    label: 'Margem de Lucro (%)' },
   { value: 'roas',            label: 'ROAS (Retorno sobre Ads)' },
   { value: 'cpa',             label: 'CPA (Custo por Aquisição)' },
@@ -101,7 +125,6 @@ const COMBINED_SOURCES: { value: WidgetDataSource; label: string }[] = [{ value:
 const META_METRIC_SOURCES: { value: WidgetDataSource; label: string }[] = [
   { value: 'meta_spend',              label: 'Gasto Total' },
   { value: 'meta_roas',               label: 'ROAS (Meta Ads)' },
-  { value: 'meta_roas_geral',         label: 'ROAS (Geral)' },
   { value: 'meta_impressions',        label: 'Impressões' },
   { value: 'meta_reach',              label: 'Alcance' },
   { value: 'meta_frequency',          label: 'Frequência' },
@@ -197,6 +220,14 @@ export function AddWidgetModal({
     setStep(2)
   }
 
+  function selectPersonalizado(item: typeof PERSONALIZADO_ITEMS[number]) {
+    setSelectedType(item.type)
+    setSelectedSources(new Set([item.data_source]))
+    setTitle(item.label)
+    setWidth('half')
+    setStep(2)
+  }
+
   function toggleSource(src: { value: WidgetDataSource; label: string }) {
     setSelectedSources(prev => {
       const next = new Set(prev)
@@ -235,11 +266,12 @@ export function AddWidgetModal({
     }
   }
 
-  const widgetTypes  = category === 'meta' ? META_WIDGET_TYPES : HOTMART_WIDGET_TYPES
-  const sources      = selectedType ? getSourcesForType(selectedType) : []
-  const isMeta       = category === 'meta'
-  const selCount     = selectedSources.size
-  const singleSource = sources.length === 1
+  const widgetTypes     = category === 'meta' ? META_WIDGET_TYPES : HOTMART_WIDGET_TYPES
+  const sources         = selectedType ? getSourcesForType(selectedType) : []
+  const isMeta          = category === 'meta'
+  const isPersonalizado = category === 'personalizado'
+  const selCount        = selectedSources.size
+  const singleSource    = sources.length === 1
 
   return (
     <Modal open={open} onClose={handleClose} title="Adicionar Widget" maxWidth="max-w-lg">
@@ -247,29 +279,23 @@ export function AddWidgetModal({
         <div className="space-y-4">
           {/* Category tabs */}
           <div className="flex gap-1 rounded-xl bg-white/[0.04] p-1">
-            {(['hotmart', 'meta'] as Category[]).map(cat => (
+            {(['hotmart', 'meta', 'personalizado'] as Category[]).map(cat => (
               <button
                 key={cat}
                 onClick={() => setCategory(cat)}
-                className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold transition-all ${
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold transition-all ${
                   category === cat
                     ? cat === 'meta'
                       ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25'
-                      : 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/25'
+                      : cat === 'personalizado'
+                        ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/25'
+                        : 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/25'
                     : 'text-slate-500 hover:text-slate-300'
                 }`}
               >
-                {cat === 'hotmart' ? (
-                  <>
-                    <Hash size={12} />
-                    Hotmart
-                  </>
-                ) : (
-                  <>
-                    <Megaphone size={12} />
-                    Meta Ads
-                  </>
-                )}
+                {cat === 'hotmart' ? <><Hash size={12} />Hotmart</> :
+                 cat === 'meta' ? <><Megaphone size={12} />Meta Ads</> :
+                 <><Puzzle size={12} />Personalizado</>}
               </button>
             ))}
           </div>
@@ -284,29 +310,52 @@ export function AddWidgetModal({
             </div>
           )}
 
-          <p className="text-sm text-slate-500">
-            {isMeta ? 'Escolha o tipo de widget Meta Ads:' : 'Escolha o tipo de visualização:'}
-          </p>
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {widgetTypes.map(({ type, icon: Icon, label, description }) => (
-              <button
-                key={type}
-                onClick={() => selectType(type)}
-                className={`flex flex-col items-start gap-2 rounded-xl border bg-white/3 p-4 text-left transition-all hover:bg-white/5 ${
-                  isMeta
-                    ? 'border-white/8 hover:border-blue-500/40'
-                    : 'border-white/8 hover:border-indigo-500/40'
-                }`}
-              >
-                <Icon size={20} className={isMeta ? 'text-blue-400' : 'text-indigo-400'} />
-                <div>
-                  <p className="text-sm font-medium text-slate-200">{label}</p>
-                  <p className="text-xs text-slate-600">{description}</p>
-                </div>
-              </button>
-            ))}
-          </div>
+          {/* Personalizado: predefined widgets */}
+          {isPersonalizado ? (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-500">Escolha a métrica personalizada:</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {PERSONALIZADO_ITEMS.map(item => (
+                  <button
+                    key={item.data_source}
+                    onClick={() => selectPersonalizado(item)}
+                    className="flex flex-col items-start gap-2 rounded-xl border border-white/8 bg-white/3 p-4 text-left transition-all hover:border-violet-500/40 hover:bg-white/5"
+                  >
+                    <item.icon size={20} className="text-violet-400" />
+                    <div>
+                      <p className="text-sm font-medium text-slate-200">{item.label}</p>
+                      <p className="text-xs text-slate-600">{item.description}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-slate-500">
+                {isMeta ? 'Escolha o tipo de widget Meta Ads:' : 'Escolha o tipo de visualização:'}
+              </p>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {widgetTypes.map(({ type, icon: Icon, label, description }) => (
+                  <button
+                    key={type}
+                    onClick={() => selectType(type)}
+                    className={`flex flex-col items-start gap-2 rounded-xl border bg-white/3 p-4 text-left transition-all hover:bg-white/5 ${
+                      isMeta
+                        ? 'border-white/8 hover:border-blue-500/40'
+                        : 'border-white/8 hover:border-indigo-500/40'
+                    }`}
+                  >
+                    <Icon size={20} className={isMeta ? 'text-blue-400' : 'text-indigo-400'} />
+                    <div>
+                      <p className="text-sm font-medium text-slate-200">{label}</p>
+                      <p className="text-xs text-slate-600">{description}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       ) : (
         <div className="space-y-5">
@@ -318,46 +367,48 @@ export function AddWidgetModal({
             Voltar
           </button>
 
-          {/* Data source multi-select */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-medium text-slate-500">Dado a exibir</p>
-              {!singleSource && selCount > 0 && (
-                <p className="text-[10px] font-semibold text-slate-600">{selCount} selecionado{selCount !== 1 ? 's' : ''}</p>
-              )}
-            </div>
-            <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
-              {sources.map(src => {
-                const isSelected = selectedSources.has(src.value)
-                return (
-                  <button
-                    key={src.value}
-                    onClick={() => toggleSource(src)}
-                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-all ${
-                      isSelected
-                        ? isMeta
-                          ? 'bg-blue-500/15 text-blue-300 ring-1 ring-blue-500/30'
-                          : 'bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-500/30'
-                        : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
-                    }`}
-                  >
-                    <span
-                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all ${
+          {/* Data source multi-select — hidden for personalizado (pre-selected) */}
+          {!isPersonalizado && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-slate-500">Dado a exibir</p>
+                {!singleSource && selCount > 0 && (
+                  <p className="text-[10px] font-semibold text-slate-600">{selCount} selecionado{selCount !== 1 ? 's' : ''}</p>
+                )}
+              </div>
+              <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
+                {sources.map(src => {
+                  const isSelected = selectedSources.has(src.value)
+                  return (
+                    <button
+                      key={src.value}
+                      onClick={() => toggleSource(src)}
+                      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-all ${
                         isSelected
                           ? isMeta
-                            ? 'border-blue-500 bg-blue-500'
-                            : 'border-indigo-500 bg-indigo-500'
-                          : 'border-white/15 bg-transparent'
+                            ? 'bg-blue-500/15 text-blue-300 ring-1 ring-blue-500/30'
+                            : 'bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-500/30'
+                          : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
                       }`}
                     >
-                      {isSelected && <Check size={10} strokeWidth={3} className="text-white" />}
-                    </span>
-                    {src.label}
-                  </button>
-                )
-              })}
+                      <span
+                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all ${
+                          isSelected
+                            ? isMeta
+                              ? 'border-blue-500 bg-blue-500'
+                              : 'border-indigo-500 bg-indigo-500'
+                            : 'border-white/15 bg-transparent'
+                        }`}
+                      >
+                        {isSelected && <Check size={10} strokeWidth={3} className="text-white" />}
+                      </span>
+                      {src.label}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Title — shown only when single selection */}
           {selCount <= 1 && (

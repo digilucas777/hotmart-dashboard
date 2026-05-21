@@ -49,7 +49,23 @@ type ReportSchedule = {
   ativo: boolean
 }
 
-const METRIC_OPTIONS: { value: WidgetDataSource; label: string }[] = [
+type MetaInsights = {
+  spend_brl: number
+  cpm_brl: number
+  cpc_brl: number
+  impressions: number
+  alcance: number
+  cliques_no_link: number
+  ctr: number
+  checkouts: number
+  compras: number
+  hook_rate: number
+  connect_rate: number
+  roas_meta: number
+  roas_geral: number
+}
+
+const HOTMART_METRICS: { value: WidgetDataSource; label: string }[] = [
   { value: 'total_converted', label: 'Total convertido' },
   { value: 'total_brl', label: 'Faturamento BRL' },
   { value: 'total_usd', label: 'Faturamento USD' },
@@ -59,17 +75,30 @@ const METRIC_OPTIONS: { value: WidgetDataSource; label: string }[] = [
   { value: 'refunds_count', label: 'Reembolsos' },
   { value: 'pending_count', label: 'Pendentes' },
   { value: 'cancelled_count', label: 'Cancelados' },
-  { value: 'lucro', label: 'Lucro' },
-  { value: 'roas', label: 'ROAS' },
-  { value: 'cpa', label: 'CPA' },
   { value: 'top_produtos', label: 'Top 5 Produtos' },
-  { value: 'meta_spend', label: 'Gasto Meta Ads' },
-  { value: 'meta_roas', label: 'ROAS Real Meta Ads' },
-  { value: 'meta_ctr', label: 'CTR Meta Ads' },
-  { value: 'meta_cpm', label: 'CPM Meta Ads' },
-  { value: 'meta_purchases', label: 'Compras Meta Ads' },
-  { value: 'meta_hook_rate', label: 'Hook Rate Meta Ads' },
 ]
+
+const META_METRICS: { value: WidgetDataSource; label: string }[] = [
+  { value: 'meta_spend', label: 'Gasto Meta Ads' },
+  { value: 'meta_roas', label: 'ROAS Meta Ads' },
+  { value: 'meta_ctr', label: 'CTR' },
+  { value: 'meta_cpm', label: 'CPM' },
+  { value: 'meta_cpc', label: 'CPC' },
+  { value: 'meta_link_clicks', label: 'Cliques no Link' },
+  { value: 'meta_impressions', label: 'Impressões' },
+  { value: 'meta_reach', label: 'Alcance' },
+  { value: 'meta_checkout_initiated', label: 'Checkouts Iniciados' },
+  { value: 'meta_purchases', label: 'Compras' },
+  { value: 'meta_hook_rate', label: 'Hook Rate' },
+  { value: 'meta_connect_rate', label: 'Connect Rate' },
+]
+
+const PERSONALIZADO_METRICS: { value: WidgetDataSource; label: string }[] = [
+  { value: 'lucro', label: 'Lucro' },
+  { value: 'meta_roas_geral', label: 'ROAS (Geral)' },
+]
+
+const ALL_METRICS = [...HOTMART_METRICS, ...META_METRICS, ...PERSONALIZADO_METRICS]
 
 const FREQUENCIES = [
   { value: 'daily', label: 'Diariamente' },
@@ -155,7 +184,7 @@ function buildTopProdutos(vendas: Venda[]): string {
   return lines.join('\n')
 }
 
-function buildMetricValue(vendas: Venda[], metric: WidgetDataSource) {
+function buildMetricValue(vendas: Venda[], metric: WidgetDataSource, insights?: MetaInsights | null, isMetaConnected?: boolean) {
   const approved = vendas.filter(v => v.status === 'approved')
   const refunded = vendas.filter(v => v.status === 'refunded')
   const pending = vendas.filter(v => v.status === 'pending')
@@ -164,7 +193,8 @@ function buildMetricValue(vendas: Venda[], metric: WidgetDataSource) {
   const totalUSD = approved.filter(v => v.moeda === 'USD').reduce((sum, v) => sum + getOfficialSaleAmount(v), 0)
   const totalConverted = totalBRL + totalUSD * 5.85
 
-  if (metric === 'total_converted' || metric === 'lucro') return formatBRL(totalConverted)
+  if (metric === 'total_converted') return formatBRL(totalConverted)
+  if (metric === 'lucro') return formatBRL(totalConverted - (isMetaConnected && insights ? insights.spend_brl : 0))
   if (metric === 'total_brl') return formatBRL(totalBRL)
   if (metric === 'total_usd') return formatUSD(totalUSD)
   if (metric === 'sales_count') return String(approved.length)
@@ -173,11 +203,29 @@ function buildMetricValue(vendas: Venda[], metric: WidgetDataSource) {
   if (metric === 'refunds_count') return String(refunded.length)
   if (metric === 'pending_count') return String(pending.length)
   if (metric === 'cancelled_count') return String(cancelled.length)
-  if (metric === 'roas') return 'Sem custo cadastrado'
-  if (metric === 'cpa') return 'Sem custo cadastrado'
-  if (metric === 'meta_spend' || metric === 'meta_roas' || metric === 'meta_purchases' ||
-      metric === 'meta_ctr' || metric === 'meta_cpm' || metric === 'meta_hook_rate')
-    return 'Aguardando integração'
+
+  const metaKeys: WidgetDataSource[] = [
+    'meta_spend', 'meta_roas', 'meta_ctr', 'meta_cpm', 'meta_cpc',
+    'meta_link_clicks', 'meta_impressions', 'meta_reach', 'meta_checkout_initiated',
+    'meta_purchases', 'meta_hook_rate', 'meta_connect_rate', 'meta_roas_geral',
+  ]
+  if (metaKeys.includes(metric)) {
+    if (!isMetaConnected) return 'Não conectado'
+    if (!insights) return 'Carregando...'
+    if (metric === 'meta_spend') return formatBRL(insights.spend_brl)
+    if (metric === 'meta_roas') return `${insights.roas_meta.toFixed(2)}x`
+    if (metric === 'meta_ctr') return `${insights.ctr.toFixed(2)}%`
+    if (metric === 'meta_cpm') return formatBRL(insights.cpm_brl)
+    if (metric === 'meta_cpc') return formatBRL(insights.cpc_brl)
+    if (metric === 'meta_link_clicks') return String(insights.cliques_no_link)
+    if (metric === 'meta_impressions') return String(insights.impressions)
+    if (metric === 'meta_reach') return String(insights.alcance)
+    if (metric === 'meta_checkout_initiated') return String(insights.checkouts)
+    if (metric === 'meta_purchases') return String(insights.compras)
+    if (metric === 'meta_hook_rate') return `${insights.hook_rate.toFixed(1)}%`
+    if (metric === 'meta_connect_rate') return `${insights.connect_rate.toFixed(1)}%`
+    if (metric === 'meta_roas_geral') return `${insights.roas_geral.toFixed(2)}x`
+  }
   return ''
 }
 
@@ -220,6 +268,9 @@ export default function RelatoriosPage() {
   ])
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
+  const [metaAccountId, setMetaAccountId] = useState<string | null>(null)
+  const [metaInsights, setMetaInsights] = useState<MetaInsights | null>(null)
+  const [isMetaConnected, setIsMetaConnected] = useState(false)
 
   const previewRef = useRef<HTMLDivElement>(null)
   const selectedProject = projetos.find(p => p.id === form.projeto_id)
@@ -291,6 +342,50 @@ export default function RelatoriosPage() {
     loadProjectSales()
   }, [form.periodo, form.projeto_id, customFrom, customTo])
 
+  useEffect(() => {
+    async function loadMetaConnection() {
+      setMetaAccountId(null)
+      setMetaInsights(null)
+      setIsMetaConnected(false)
+      if (!form.projeto_id) return
+      const { data } = await supabase
+        .from('meta_connections')
+        .select('account_id')
+        .eq('projeto_id', form.projeto_id)
+        .eq('status', 'connected')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (data?.account_id) {
+        setMetaAccountId(data.account_id)
+        setIsMetaConnected(true)
+      }
+    }
+    loadMetaConnection()
+  }, [form.projeto_id])
+
+  useEffect(() => {
+    async function loadMetaInsights() {
+      setMetaInsights(null)
+      if (!metaAccountId) return
+      const PRESET_MAP: Record<string, string> = {
+        today: 'today',
+        yesterday: 'yesterday',
+        thisWeek: 'this_week_sun_today',
+        lastWeek: 'last_week_sun_sat',
+        thisMonth: 'this_month',
+        lastMonth: 'last_month',
+      }
+      const preset = PRESET_MAP[form.periodo]
+      if (!preset) return
+      const res = await fetch(`/api/meta/insights?account_id=${metaAccountId}&date_preset=${preset}&projeto_id=${form.projeto_id}`)
+      if (!res.ok) return
+      const data = await res.json()
+      setMetaInsights(data as MetaInsights)
+    }
+    loadMetaInsights()
+  }, [metaAccountId, form.periodo, form.projeto_id])
+
   const generatedMessage = useMemo(() => {
     const projectName = selectedProject?.nome ?? 'Projeto'
     const periodoInformal = PERIOD_INFORMAL[form.periodo] ?? PERIOD_OPTIONS.find(p => p.value === form.periodo)?.label?.toLowerCase() ?? form.periodo
@@ -304,14 +399,14 @@ export default function RelatoriosPage() {
       if (metric === 'top_produtos') {
         lines.push('', buildTopProdutos(vendas))
       } else {
-        const option = METRIC_OPTIONS.find(o => o.value === metric)
-        lines.push(`• ${option?.label ?? metric}: ${buildMetricValue(vendas, metric)}`)
+        const option = ALL_METRICS.find(o => o.value === metric)
+        lines.push(`• ${option?.label ?? metric}: ${buildMetricValue(vendas, metric, metaInsights, isMetaConnected)}`)
       }
     })
 
     lines.push('', `Período: ${PERIOD_OPTIONS.find(p => p.value === form.periodo)?.label ?? form.periodo}`)
     return lines.join('\n')
-  }, [form.mensagem, form.periodo, metricas, selectedProject?.nome, vendas])
+  }, [form.mensagem, form.periodo, metricas, selectedProject?.nome, vendas, metaInsights, isMetaConnected])
 
   useEffect(() => {
     setMessageText(generatedMessage)
@@ -732,20 +827,31 @@ export default function RelatoriosPage() {
                   placeholder="Mensagem do WhatsApp"
                 />
 
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {METRIC_OPTIONS.map(metric => (
-                    <label
-                      key={metric.value}
-                      className="flex cursor-pointer items-center gap-2 rounded-xl border border-white/8 bg-white/4 px-3 py-2.5 text-sm text-slate-300 transition-colors hover:bg-white/7"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={metricas.includes(metric.value)}
-                        onChange={() => toggleMetric(metric.value)}
-                        className="h-4 w-4 rounded accent-indigo-500"
-                      />
-                      {metric.label}
-                    </label>
+                <div className="space-y-4">
+                  {[
+                    { title: 'Hotmart', items: HOTMART_METRICS, accent: 'text-indigo-400' },
+                    { title: 'Meta Ads', items: META_METRICS, accent: 'text-blue-400' },
+                    { title: 'Personalizado', items: PERSONALIZADO_METRICS, accent: 'text-violet-400' },
+                  ].map(({ title, items, accent }) => (
+                    <div key={title}>
+                      <p className={`mb-2 text-[10px] font-black uppercase tracking-widest ${accent}`}>{title}</p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {items.map(metric => (
+                          <label
+                            key={metric.value}
+                            className="flex cursor-pointer items-center gap-2 rounded-xl border border-white/8 bg-white/4 px-3 py-2.5 text-sm text-slate-300 transition-colors hover:bg-white/7"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={metricas.includes(metric.value)}
+                              onChange={() => toggleMetric(metric.value)}
+                              className="h-4 w-4 rounded accent-indigo-500"
+                            />
+                            {metric.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
 

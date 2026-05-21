@@ -126,6 +126,14 @@ function WidgetRendererBase({
 
   const isMetaLinked = !!linkedMetaAccountId
 
+  // For lucro/margem_lucro: use Meta spend when linked, 0 when not linked
+  const effectiveCusto = (() => {
+    if (config.data_source !== 'lucro' && config.data_source !== 'margem_lucro') return custoTotal
+    if (!isMetaLinked) return 0
+    if (metaInsights?.spend_brl !== undefined) return parseFloat(String(metaInsights.spend_brl)) || 0
+    return custoTotal
+  })()
+
   const data = isMetaWidget
     ? (() => {
         const mock = computeMetaWidgetData(config.data_source, effectivePeriod)
@@ -135,7 +143,7 @@ function WidgetRendererBase({
         }
         return mock
       })()
-    : computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, custoTotal, customRange)
+    : computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, effectiveCusto, customRange)
 
   const isBRL = !isMetaWidget && getValueFormat(config.data_source) === 'brl'
   const comparison = !isMetaWidget && data.kind === 'metric' && previousVendas
@@ -410,7 +418,12 @@ function WidgetRendererBase({
           <SalesTable vendas={data.vendas} exchangeRate={exchangeRate} heightMode="fill" />
         )}
         {config.type === 'meta-metric' && data.kind === 'meta-metric' && (
-          <MetaMetricWidget title={config.title} data={data} isDemo={!isMetaLinked} />
+          <MetaMetricWidget
+            title={config.title}
+            data={data}
+            isDemo={!isMetaLinked}
+            isPersonalizado={config.data_source === 'meta_roas_geral'}
+          />
         )}
         {config.type === 'meta-funnel' && data.kind === 'meta-funnel' && (
           <MetaFunnelWidget title={config.title} data={data} isDemo={!isMetaLinked} />

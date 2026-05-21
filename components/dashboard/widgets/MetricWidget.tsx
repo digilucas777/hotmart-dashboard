@@ -85,7 +85,9 @@ export function MetricWidget({
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">Hotmart</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">
+            {dataSource === 'lucro' || dataSource === 'margem_lucro' ? 'Personalizado' : 'Hotmart'}
+          </p>
           <p className="mt-0.5 truncate text-xs font-semibold text-[var(--dash-muted)]">{title}</p>
         </div>
         <div

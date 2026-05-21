@@ -19,7 +19,6 @@ const SOURCES_BY_TYPE: Record<string, { value: WidgetDataSource; label: string }
     { value: 'refunds_count', label: 'Reembolsos' },
     { value: 'pending_count', label: 'Pendentes' },
     { value: 'cancelled_count', label: 'Cancelados' },
-    { value: 'lucro', label: 'Lucro (Receita − Custo Ads)' },
     { value: 'margem_lucro', label: 'Margem de Lucro (%)' },
     { value: 'roas', label: 'ROAS' },
     { value: 'cpa', label: 'CPA' },
@@ -51,7 +50,6 @@ const SOURCES_BY_TYPE: Record<string, { value: WidgetDataSource; label: string }
   'meta-metric': [
     { value: 'meta_spend',              label: 'Gasto Total' },
     { value: 'meta_roas',               label: 'ROAS (Meta Ads)' },
-    { value: 'meta_roas_geral',         label: 'ROAS (Geral)' },
     { value: 'meta_impressions',        label: 'Impressões' },
     { value: 'meta_reach',              label: 'Alcance' },
     { value: 'meta_frequency',          label: 'Frequência' },
@@ -83,7 +81,13 @@ const TYPE_LABELS: Record<string, string> = {
   metric: 'Métrica', line: 'Linha', bar: 'Barras', pie: 'Pizza', table: 'Tabela', combined: 'Combinado',
   'meta-metric': 'Meta · Métrica', 'meta-chart': 'Meta · Gráfico', 'meta-funnel': 'Meta · Funil',
   'meta-campaign': 'Meta · Campanhas', 'meta-creative': 'Meta · Criativos',
+  'personalizado': 'Personalizado',
 }
+
+const PERSONALIZADO_EDIT_ITEMS = [
+  { value: 'lucro' as WidgetDataSource,          label: 'Lucro',        actualType: 'metric' as WidgetType },
+  { value: 'meta_roas_geral' as WidgetDataSource, label: 'ROAS (Geral)', actualType: 'meta-metric' as WidgetType },
+]
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -117,6 +121,8 @@ export function EditWidgetModal({
 
   const sources = SOURCES_BY_TYPE[localType] ?? []
   const isMeta  = localType.startsWith('meta-')
+  const isPersonalizado = localSrc === 'lucro' || localSrc === 'meta_roas_geral'
+  const typeDisplayLabel = isPersonalizado ? 'Personalizado' : (TYPE_LABELS[localType] ?? localType)
 
   async function handleSave() {
     if (!widget) return
@@ -144,7 +150,7 @@ export function EditWidgetModal({
             </button>
           </div>
           <div className="rounded-xl bg-white/5 px-3 py-2 text-sm font-medium text-slate-300">
-            {TYPE_LABELS[localType] ?? localType}
+            {typeDisplayLabel}
           </div>
         </div>
 
@@ -179,7 +185,7 @@ export function EditWidgetModal({
         {step === 'source' && (
           <div className="space-y-2">
             <p className="text-xs font-medium text-slate-500">Dado a exibir</p>
-            <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
+            <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
               {sources.map(src => (
                 <button
                   key={src.value}
@@ -200,6 +206,27 @@ export function EditWidgetModal({
                   {src.label}
                 </button>
               ))}
+              {/* Personalizado section — always visible */}
+              <div className="pt-2">
+                <p className="mb-1 px-1 text-[10px] font-bold uppercase tracking-wider text-slate-600">Personalizado</p>
+                {PERSONALIZADO_EDIT_ITEMS.map(item => (
+                  <button
+                    key={item.value}
+                    onClick={() => {
+                      setLocalType(item.actualType)
+                      setLocalSrc(item.value)
+                      if (!localTitle || localTitle === widget.title) setLocalTitle(item.label)
+                    }}
+                    className={`w-full rounded-xl px-3 py-2.5 text-left text-sm transition-all ${
+                      localSrc === item.value
+                        ? 'bg-violet-500/15 text-violet-300 ring-1 ring-violet-500/30'
+                        : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
