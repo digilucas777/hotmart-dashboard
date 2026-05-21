@@ -63,6 +63,12 @@ const METRIC_OPTIONS: { value: WidgetDataSource; label: string }[] = [
   { value: 'roas', label: 'ROAS' },
   { value: 'cpa', label: 'CPA' },
   { value: 'top_produtos', label: 'Top 5 Produtos' },
+  { value: 'meta_spend', label: 'Gasto Meta Ads' },
+  { value: 'meta_roas', label: 'ROAS Meta Ads' },
+  { value: 'meta_cpa', label: 'CPA Meta Ads' },
+  { value: 'meta_ctr', label: 'CTR Meta Ads' },
+  { value: 'meta_cpm', label: 'CPM Meta Ads' },
+  { value: 'meta_leads', label: 'Leads Meta Ads' },
 ]
 
 const FREQUENCIES = [
@@ -74,34 +80,53 @@ const FREQUENCIES = [
 const PERIOD_OPTIONS = [
   { value: 'today', label: 'Hoje' },
   { value: 'yesterday', label: 'Ontem' },
-  { value: '7d', label: 'Última semana' },
-  { value: '15d', label: '15 dias' },
-  { value: '30d', label: 'Últimos 30 dias' },
+  { value: 'thisWeek', label: 'Esta semana' },
+  { value: 'lastWeek', label: 'Semana passada' },
+  { value: 'thisMonth', label: 'Este mês' },
   { value: 'lastMonth', label: 'Último mês' },
-  { value: '3m', label: '3 meses' },
-  { value: '6m', label: '6 meses' },
-  { value: '1y', label: '1 ano' },
+  { value: 'custom', label: 'Personalizado' },
 ]
+
+const PERIOD_INFORMAL: Record<string, string> = {
+  today: 'hoje',
+  yesterday: 'ontem',
+  thisWeek: 'esta semana',
+  lastWeek: 'semana passada',
+  thisMonth: 'este mês',
+  lastMonth: 'último mês',
+  custom: 'período personalizado',
+}
 
 const fieldClass =
   'h-10 rounded-lg border border-white/10 bg-[#121221] px-3 text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-600 focus:border-indigo-500/60'
 
-function reportRange(period: string) {
+function reportRange(period: string, customFrom?: string, customTo?: string) {
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const day = 86_400_000
   if (period === 'yesterday') return { from: new Date(today.getTime() - day), to: today }
-  if (period === '7d') return { from: new Date(today.getTime() - 6 * day), to: new Date(today.getTime() + day) }
-  if (period === '15d') return { from: new Date(today.getTime() - 14 * day), to: new Date(today.getTime() + day) }
-  if (period === '30d') return { from: new Date(today.getTime() - 29 * day), to: new Date(today.getTime() + day) }
+  if (period === 'thisWeek') {
+    const dow = (today.getDay() + 6) % 7 // Mon=0
+    return { from: new Date(today.getTime() - dow * day), to: new Date(today.getTime() + day) }
+  }
+  if (period === 'lastWeek') {
+    const dow = (today.getDay() + 6) % 7
+    const startThisWeek = new Date(today.getTime() - dow * day)
+    return { from: new Date(startThisWeek.getTime() - 7 * day), to: startThisWeek }
+  }
+  if (period === 'thisMonth') {
+    return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: new Date(today.getTime() + day) }
+  }
   if (period === 'lastMonth') {
     const from = new Date(now.getFullYear(), now.getMonth() - 1, 1)
     const to = new Date(now.getFullYear(), now.getMonth(), 1)
     return { from, to }
   }
-  if (period === '3m') return { from: new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()), to: new Date(today.getTime() + day) }
-  if (period === '6m') return { from: new Date(now.getFullYear(), now.getMonth() - 6, now.getDate()), to: new Date(today.getTime() + day) }
-  if (period === '1y') return { from: new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()), to: new Date(today.getTime() + day) }
+  if (period === 'custom' && customFrom && customTo) {
+    const to = new Date(customTo)
+    to.setDate(to.getDate() + 1)
+    return { from: new Date(customFrom), to }
+  }
   return { from: today, to: new Date(today.getTime() + day) }
 }
 
@@ -150,6 +175,9 @@ function buildMetricValue(vendas: Venda[], metric: WidgetDataSource) {
   if (metric === 'cancelled_count') return String(cancelled.length)
   if (metric === 'roas') return 'Sem custo cadastrado'
   if (metric === 'cpa') return 'Sem custo cadastrado'
+  if (metric === 'meta_spend' || metric === 'meta_roas' || metric === 'meta_cpa' ||
+      metric === 'meta_ctr' || metric === 'meta_cpm' || metric === 'meta_leads')
+    return 'Aguardando integração'
   return ''
 }
 
@@ -180,15 +208,18 @@ export default function RelatoriosPage() {
     frequencia: 'daily',
     periodo: 'today',
     horario: '07:00',
-    mensagem: 'Bom dia! Segue o relatório de {projeto} referente a hoje:',
+    mensagem: 'Bom dia! Segue o relatório de {projeto} referente a {periodo}:',
   })
   const [messageText, setMessageText] = useState('')
   const [metricas, setMetricas] = useState<WidgetDataSource[]>([
     'total_converted',
+    'total_brl',
+    'total_usd',
     'sales_count',
-    'approval_rate',
-    'avg_ticket',
+    'refunds_count',
   ])
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
 
   const previewRef = useRef<HTMLDivElement>(null)
   const selectedProject = projetos.find(p => p.id === form.projeto_id)
@@ -247,7 +278,7 @@ export default function RelatoriosPage() {
         return
       }
 
-      const { from, to } = reportRange(form.periodo)
+      const { from, to } = reportRange(form.periodo, customFrom, customTo)
       const { data } = await supabase
         .from('vendas')
         .select('*')
@@ -258,12 +289,13 @@ export default function RelatoriosPage() {
     }
 
     loadProjectSales()
-  }, [form.periodo, form.projeto_id])
+  }, [form.periodo, form.projeto_id, customFrom, customTo])
 
   const generatedMessage = useMemo(() => {
     const projectName = selectedProject?.nome ?? 'Projeto'
+    const periodoInformal = PERIOD_INFORMAL[form.periodo] ?? PERIOD_OPTIONS.find(p => p.value === form.periodo)?.label?.toLowerCase() ?? form.periodo
     const lines = [
-      form.mensagem.replaceAll('{projeto}', projectName),
+      form.mensagem.replaceAll('{projeto}', projectName).replaceAll('{periodo}', periodoInformal),
       '',
       `*${projectName}*`,
     ]
@@ -619,15 +651,38 @@ export default function RelatoriosPage() {
                     className={`${fieldClass} w-full`}
                     placeholder="Destinatários: um por linha, vírgula ou ;"
                   />
-                  <select
-                    value={form.periodo}
-                    onChange={e => setForm(prev => ({ ...prev, periodo: e.target.value }))}
-                    className={`${fieldClass} w-full`}
-                  >
+                  <div className="flex flex-wrap gap-1.5">
                     {PERIOD_OPTIONS.map(period => (
-                      <option key={period.value} value={period.value}>{period.label}</option>
+                      <button
+                        key={period.value}
+                        type="button"
+                        onClick={() => setForm(prev => ({ ...prev, periodo: period.value }))}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                          form.periodo === period.value
+                            ? 'bg-indigo-500 text-white'
+                            : 'border border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'
+                        }`}
+                      >
+                        {period.label}
+                      </button>
                     ))}
-                  </select>
+                  </div>
+                  {form.periodo === 'custom' && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="date"
+                        value={customFrom}
+                        onChange={e => setCustomFrom(e.target.value)}
+                        className={`${fieldClass} w-full`}
+                      />
+                      <input
+                        type="date"
+                        value={customTo}
+                        onChange={e => setCustomTo(e.target.value)}
+                        className={`${fieldClass} w-full`}
+                      />
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-2">
                     <select
                       value={form.frequencia}
