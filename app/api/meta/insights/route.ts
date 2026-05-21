@@ -15,6 +15,7 @@ type InsightsData = {
   inline_link_click_ctr?: string
   actions?: ActionItem[]
   action_values?: ActionItem[]
+  purchase_roas?: ActionItem[]
   video_play_actions?: ActionItem[]
   video_p25_watched_actions?: ActionItem[]
 }
@@ -84,7 +85,7 @@ export async function GET(request: Request) {
   try {
     const fields = [
       'spend', 'impressions', 'reach', 'frequency', 'cpm',
-      'actions', 'action_values',
+      'actions', 'action_values', 'purchase_roas',
       'inline_link_clicks', 'inline_link_click_ctr',
       'video_play_actions', 'video_p25_watched_actions',
     ].join(',')
@@ -119,8 +120,12 @@ export async function GET(request: Request) {
     const hook_rate   = impressions > 0 ? (video_plays / impressions) * 100 : 0
     const connect_rate = cliques_no_link > 0 ? (checkouts / cliques_no_link) * 100 : 0
 
-    // ROAS real: faturamento Hotmart aprovado no período / spend em BRL
-    let roas_real = 0
+    // ROAS (Meta Ads): usa purchase_roas direto da API do Meta
+    const roas_meta = actionVal(raw.purchase_roas, 'omni_purchase')
+      || (raw.purchase_roas?.[0] ? parseFloat(raw.purchase_roas[0].value) || 0 : 0)
+
+    // ROAS (Geral): faturamento Hotmart aprovado no período / spend em BRL
+    let roas_geral = 0
     if (projetoId && spend_usd > 0) {
       const dateRange = getDateRange(datePreset)
 
@@ -153,7 +158,7 @@ export async function GET(request: Request) {
             0,
           )
           const spend_brl = spend_usd * RATE
-          roas_real = spend_brl > 0 ? faturamento / spend_brl : 0
+          roas_geral = spend_brl > 0 ? faturamento / spend_brl : 0
         }
       }
     }
@@ -176,7 +181,8 @@ export async function GET(request: Request) {
       video_25,
       hook_rate,
       connect_rate,
-      roas_real,
+      roas_meta,
+      roas_geral,
       actions: raw.actions ?? [],
     })
   } catch (err) {

@@ -59,6 +59,7 @@ export type WidgetType =
 export type MetaDataSource =
   | 'meta_spend'
   | 'meta_roas'
+  | 'meta_roas_geral'
   | 'meta_impressions'
   | 'meta_reach'
   | 'meta_frequency'

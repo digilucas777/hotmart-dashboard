@@ -45,7 +45,8 @@ function getInsightsValue(source: string, ins: MetaInsightsRaw): InsightsValue |
     case 'meta_cpm':                return { value: num('cpm_brl'),            valueUsd: num('cpm_usd') }
     case 'meta_cpc':                return { value: num('cpc_brl'),            valueUsd: num('cpc_usd') }
     case 'meta_valor_compras':      return { value: num('valor_compras_brl'),  valueUsd: num('valor_compras_usd') }
-    case 'meta_roas':               return { value: num('roas_real') }
+    case 'meta_roas':               return { value: num('roas_meta') }
+    case 'meta_roas_geral':         return { value: num('roas_geral') }
     case 'meta_impressions':        return { value: int('impressions') }
     case 'meta_reach':              return { value: int('alcance') }
     case 'meta_frequency':          return { value: num('frequencia') }
