@@ -126,12 +126,19 @@ function IntegracoesContent() {
   }, [metaJustConnected, metaError])
 
   async function syncAccounts() {
+    console.log('[SYNC] iniciando...')
     setSyncing(true)
-    const res = await fetch('/api/meta/accounts', { cache: 'no-store' })
-    if (res.ok) {
-      const data = await res.json() as { businesses: BizManager[] }
-      setBusinesses(data.businesses ?? [])
-      if (data.businesses?.[0]) setSelectedBmId(data.businesses[0].id)
+    try {
+      const res = await fetch('/api/meta/accounts', { cache: 'no-store' })
+      console.log('[SYNC] status:', res.status)
+      const data = await res.json()
+      console.log('[SYNC] data:', data)
+      if (res.ok) {
+        setBusinesses(data.businesses ?? [])
+        if (data.businesses?.[0]) setSelectedBmId(data.businesses[0].id)
+      }
+    } catch (err) {
+      console.error('[SYNC] erro:', err)
     }
     setSyncing(false)
   }
