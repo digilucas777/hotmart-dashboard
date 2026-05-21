@@ -159,15 +159,16 @@ function reportRange(period: string, customFrom?: string, customTo?: string) {
   return { from: today, to: new Date(today.getTime() + day) }
 }
 
-function buildTopProdutos(vendas: Venda[]): string {
+function buildTopProdutos(vendas: Venda[], exchangeRate = 5.85): string {
   const approved = vendas.filter(v => v.status === 'approved')
-  const map = new Map<string, { count: number; brl: number; usd: number }>()
+  const map = new Map<string, { count: number; brl: number; foreignUsd: number }>()
   for (const v of approved) {
     const name = v.produto ?? 'Desconhecido'
-    const entry = map.get(name) ?? { count: 0, brl: 0, usd: 0 }
+    const entry = map.get(name) ?? { count: 0, brl: 0, foreignUsd: 0 }
     entry.count++
-    if (v.moeda === 'USD') entry.usd += getOfficialSaleAmount(v)
-    else entry.brl += getOfficialSaleAmount(v)
+    const amount = getOfficialSaleAmount(v)
+    if (v.moeda === 'BRL') entry.brl += amount
+    else entry.foreignUsd += amount / exchangeRate
     map.set(name, entry)
   }
   const sorted = Array.from(map.entries())
@@ -175,9 +176,9 @@ function buildTopProdutos(vendas: Venda[]): string {
     .slice(0, 5)
   if (sorted.length === 0) return '🏆 Top Produtos:\n  Nenhuma venda no período.'
   const lines = ['🏆 Top Produtos:']
-  sorted.forEach(([name, { count, brl, usd }], i) => {
+  sorted.forEach(([name, { count, brl, foreignUsd }], i) => {
     const brlPart = brl > 0 ? formatBRL(brl) + ' BRL' : ''
-    const usdPart = usd > 0 ? formatUSD(usd) + ' USD' : ''
+    const usdPart = foreignUsd > 0 ? formatUSD(foreignUsd) + ' USD' : ''
     const value = [brlPart, usdPart].filter(Boolean).join(' / ')
     lines.push(`  ${i + 1}. ${name} — ${count} venda${count !== 1 ? 's' : ''} | ${value}`)
   })
@@ -421,7 +422,7 @@ export default function RelatoriosPage() {
 
     metricas.forEach(metric => {
       if (metric === 'top_produtos') {
-        lines.push('', buildTopProdutos(vendas))
+        lines.push('', buildTopProdutos(vendas, exchangeRate))
       } else {
         const option = ALL_METRICS.find(o => o.value === metric)
         lines.push(`• ${option?.label ?? metric}: ${buildMetricValue(vendas, metric, metaInsights, isMetaConnected, exchangeRate)}`)
@@ -543,6 +544,16 @@ export default function RelatoriosPage() {
 
   function toggleMetric(metric: WidgetDataSource) {
     setMetricas(prev => prev.includes(metric) ? prev.filter(m => m !== metric) : [...prev, metric])
+  }
+
+  function applyTemplate(template: 'recuperacao' | 'trafego') {
+    const msg = 'Bom dia! Segue o relatório de {projeto} referente a {periodo}:'
+    if (template === 'recuperacao') {
+      setMetricas(['total_converted', 'total_brl', 'total_usd', 'sales_count', 'pending_count', 'refunds_count', 'top_produtos'])
+    } else {
+      setMetricas(['total_converted', 'total_usd', 'meta_spend', 'lucro', 'meta_roas_geral', 'sales_count', 'pending_count', 'top_produtos'])
+    }
+    setForm(prev => ({ ...prev, mensagem: msg }))
   }
 
   async function copyToClipboard() {
@@ -755,6 +766,22 @@ export default function RelatoriosPage() {
                     className={`${fieldClass} w-full`}
                     placeholder="Nome do relatório"
                   />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => applyTemplate('recuperacao')}
+                      className="flex-1 rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-xs font-bold text-indigo-300 transition-colors hover:bg-indigo-500/20"
+                    >
+                      Template Recuperação
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyTemplate('trafego')}
+                      className="flex-1 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-xs font-bold text-violet-300 transition-colors hover:bg-violet-500/20"
+                    >
+                      Template Tráfego
+                    </button>
+                  </div>
                   <select
                     value={form.projeto_id}
                     onChange={e => setForm(prev => ({ ...prev, projeto_id: e.target.value }))}
