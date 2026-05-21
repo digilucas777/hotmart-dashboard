@@ -41,23 +41,23 @@ function getInsightsValue(source: string, ins: MetaInsightsRaw): InsightsValue |
   const int = (k: string) => parseInt(String(ins[k] ?? '0'), 10) || 0
 
   switch (source) {
-    case 'meta_spend':               return { value: num('spend_brl'),  valueUsd: num('spend_usd') }
-    case 'meta_cpm':                 return { value: num('cpm_brl'),    valueUsd: num('cpm_usd') }
-    case 'meta_cpc':                 return { value: num('cpc_brl'),    valueUsd: num('cpc_usd') }
-    case 'meta_cpl':                 return { value: num('cpl_brl'),    valueUsd: num('cpl_usd') }
-    case 'meta_cpa':                 return { value: num('cpa_brl'),    valueUsd: num('cpa_usd') }
-    case 'meta_impressions':         return { value: int('impressions') }
-    case 'meta_reach':               return { value: int('reach') }
-    case 'meta_link_clicks':         return { value: int('clicks') }
-    case 'meta_ctr':                 return { value: num('ctr') }
-    case 'meta_frequency':           return { value: num('frequency') }
-    case 'meta_leads':               return { value: num('leads') }
-    case 'meta_purchases':           return { value: num('purchases') }
-    case 'meta_conversions':         return { value: num('conversions') }
-    case 'meta_checkout_initiated':  return { value: num('checkouts') }
-    case 'meta_add_to_cart':         return { value: num('add_to_cart') }
-    case 'meta_page_views':          return { value: num('page_views') }
-    default:                         return null
+    case 'meta_spend':              return { value: num('spend_brl'),          valueUsd: num('spend_usd') }
+    case 'meta_cpm':                return { value: num('cpm_brl'),            valueUsd: num('cpm_usd') }
+    case 'meta_cpc':                return { value: num('cpc_brl'),            valueUsd: num('cpc_usd') }
+    case 'meta_valor_compras':      return { value: num('valor_compras_brl'),  valueUsd: num('valor_compras_usd') }
+    case 'meta_roas':               return { value: num('roas_real') }
+    case 'meta_impressions':        return { value: int('impressions') }
+    case 'meta_reach':              return { value: int('alcance') }
+    case 'meta_frequency':          return { value: num('frequencia') }
+    case 'meta_link_clicks':        return { value: int('cliques_no_link') }
+    case 'meta_ctr':                return { value: num('ctr') }
+    case 'meta_page_views':         return { value: num('vis_pagina') }
+    case 'meta_checkout_initiated': return { value: num('checkouts') }
+    case 'meta_purchases':          return { value: num('compras') }
+    case 'meta_add_to_cart':        return { value: num('adicoes_carrinho') }
+    case 'meta_hook_rate':          return { value: num('hook_rate') }
+    case 'meta_connect_rate':       return { value: num('connect_rate') }
+    default:                        return null
   }
 }
 

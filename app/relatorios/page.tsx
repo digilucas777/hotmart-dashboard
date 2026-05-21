@@ -64,11 +64,11 @@ const METRIC_OPTIONS: { value: WidgetDataSource; label: string }[] = [
   { value: 'cpa', label: 'CPA' },
   { value: 'top_produtos', label: 'Top 5 Produtos' },
   { value: 'meta_spend', label: 'Gasto Meta Ads' },
-  { value: 'meta_roas', label: 'ROAS Meta Ads' },
-  { value: 'meta_cpa', label: 'CPA Meta Ads' },
+  { value: 'meta_roas', label: 'ROAS Real Meta Ads' },
   { value: 'meta_ctr', label: 'CTR Meta Ads' },
   { value: 'meta_cpm', label: 'CPM Meta Ads' },
-  { value: 'meta_leads', label: 'Leads Meta Ads' },
+  { value: 'meta_purchases', label: 'Compras Meta Ads' },
+  { value: 'meta_hook_rate', label: 'Hook Rate Meta Ads' },
 ]
 
 const FREQUENCIES = [
@@ -175,8 +175,8 @@ function buildMetricValue(vendas: Venda[], metric: WidgetDataSource) {
   if (metric === 'cancelled_count') return String(cancelled.length)
   if (metric === 'roas') return 'Sem custo cadastrado'
   if (metric === 'cpa') return 'Sem custo cadastrado'
-  if (metric === 'meta_spend' || metric === 'meta_roas' || metric === 'meta_cpa' ||
-      metric === 'meta_ctr' || metric === 'meta_cpm' || metric === 'meta_leads')
+  if (metric === 'meta_spend' || metric === 'meta_roas' || metric === 'meta_purchases' ||
+      metric === 'meta_ctr' || metric === 'meta_cpm' || metric === 'meta_hook_rate')
     return 'Aguardando integração'
   return ''
 }
