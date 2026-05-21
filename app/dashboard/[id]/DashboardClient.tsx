@@ -472,13 +472,27 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   }, [projectId])
 
   useEffect(() => {
-    supabase
-      .from('meta_connections')
-      .select('account_id')
-      .eq('projeto_id', projectId)
-      .eq('status', 'connected')
-      .maybeSingle()
-      .then(({ data }) => setLinkedMetaAccountId((data as { account_id: string | null } | null)?.account_id ?? null))
+    async function loadLinkedAccount() {
+      // Prefer new meta_project_accounts table (multi-account)
+      const { data: pa } = await supabase
+        .from('meta_project_accounts')
+        .select('account_id')
+        .eq('projeto_id', projectId)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      if (pa?.account_id) { setLinkedMetaAccountId(pa.account_id); return }
+
+      // Fallback: legacy account_id stored in meta_connections
+      const { data: mc } = await supabase
+        .from('meta_connections')
+        .select('account_id')
+        .eq('projeto_id', projectId)
+        .eq('status', 'connected')
+        .maybeSingle()
+      setLinkedMetaAccountId((mc as { account_id: string | null } | null)?.account_id ?? null)
+    }
+    void loadLinkedAccount()
   }, [projectId])
 
   useEffect(() => {

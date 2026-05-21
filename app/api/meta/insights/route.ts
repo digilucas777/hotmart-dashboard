@@ -10,7 +10,6 @@ type InsightsData = {
   impressions?: string
   reach?: string
   frequency?: string
-  cpm?: string
   inline_link_clicks?: string
   inline_link_click_ctr?: string
   actions?: ActionItem[]
@@ -21,6 +20,20 @@ type InsightsData = {
 }
 
 type InsightsResponse = { data?: InsightsData[] }
+
+type RawTotals = {
+  spend_usd: number
+  impressions: number
+  alcance: number
+  cliques_no_link: number
+  checkouts: number
+  compras: number
+  adicoes_carrinho: number
+  vis_pagina: number
+  valor_compras_usd: number
+  video_plays: number
+  video_25: number
+}
 
 function getDateRange(preset: string): { from: Date; to: Date } {
   const now = new Date()
@@ -44,12 +57,10 @@ function getDateRange(preset: string): { from: Date; to: Date } {
       sun.setDate(sun.getDate() - sun.getDay() - 7)
       return { from: sun, to: new Date(sun.getTime() + 7 * DAY) }
     }
-    case 'last_7d': {
+    case 'last_7d':
       return { from: new Date(today.getTime() - 6 * DAY), to: new Date(today.getTime() + DAY) }
-    }
-    case 'last_30d': {
+    case 'last_30d':
       return { from: new Date(today.getTime() - 29 * DAY), to: new Date(today.getTime() + DAY) }
-    }
     case 'this_month': {
       const d = new Date(today.getFullYear(), today.getMonth(), 1)
       return { from: d, to: new Date(today.getTime() + DAY) }
@@ -64,77 +75,117 @@ function getDateRange(preset: string): { from: Date; to: Date } {
   }
 }
 
+async function fetchAccountInsights(
+  accountId: string,
+  accessToken: string,
+  datePreset: string,
+): Promise<RawTotals> {
+  const fields = [
+    'spend', 'impressions', 'reach',
+    'actions', 'action_values', 'purchase_roas',
+    'inline_link_clicks', 'inline_link_click_ctr',
+    'video_play_actions', 'video_p25_watched_actions',
+  ].join(',')
+
+  const insights = await metaFetch<InsightsResponse>(
+    `/${accountId}/insights?fields=${fields}&date_preset=${datePreset}`,
+    accessToken,
+  )
+
+  const raw = insights.data?.[0] ?? {}
+  const num = (s?: string) => parseFloat(s ?? '0') || 0
+  const int = (s?: string) => parseInt(s ?? '0', 10) || 0
+  const actionVal = (arr: ActionItem[] | undefined, type: string) =>
+    parseFloat(arr?.find(a => a.action_type === type)?.value ?? '0') || 0
+  const actionSum = (arr: ActionItem[] | undefined) =>
+    (arr ?? []).reduce((s, a) => s + (parseFloat(a.value) || 0), 0)
+
+  return {
+    spend_usd:        num(raw.spend),
+    impressions:      int(raw.impressions),
+    alcance:          int(raw.reach),
+    cliques_no_link:  int(raw.inline_link_clicks),
+    checkouts:        actionVal(raw.actions, 'initiate_checkout'),
+    compras:          actionVal(raw.actions, 'purchase'),
+    adicoes_carrinho: actionVal(raw.actions, 'add_to_cart'),
+    vis_pagina:       actionVal(raw.actions, 'landing_page_view'),
+    valor_compras_usd: actionVal(raw.action_values, 'purchase'),
+    video_plays:      actionSum(raw.video_play_actions),
+    video_25:         actionSum(raw.video_p25_watched_actions),
+  }
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const accountId = searchParams.get('account_id')
-  const datePreset = searchParams.get('date_preset') ?? 'today'
-  const projetoId = searchParams.get('projeto_id')
+  const legacyAccountId = searchParams.get('account_id')
+  const datePreset      = searchParams.get('date_preset') ?? 'today'
+  const projetoId       = searchParams.get('projeto_id')
 
-  if (!accountId) {
-    return NextResponse.json({ error: 'account_id required' }, { status: 400 })
+  if (!projetoId && !legacyAccountId) {
+    return NextResponse.json({ error: 'projeto_id required' }, { status: 400 })
   }
 
   const { supabase, user } = await getAuthenticatedUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  let query = supabase
+  const { data: connection } = await supabase
     .from('meta_connections')
     .select('access_token')
     .eq('user_id', user.id)
     .eq('status', 'connected')
-
-  if (projetoId) query = query.eq('projeto_id', projetoId)
-
-  const { data: connection } = await query.order('created_at', { ascending: false }).limit(1).maybeSingle()
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
   if (!connection) return NextResponse.json({ error: 'no_connection' }, { status: 400 })
 
-  try {
-    const fields = [
-      'spend', 'impressions', 'reach', 'frequency', 'cpm',
-      'actions', 'action_values', 'purchase_roas',
-      'inline_link_clicks', 'inline_link_click_ctr',
-      'video_play_actions', 'video_p25_watched_actions',
-    ].join(',')
+  let accountIds: string[] = []
+  if (projetoId) {
+    const { data: pa } = await supabase
+      .from('meta_project_accounts')
+      .select('account_id')
+      .eq('projeto_id', projetoId)
+    accountIds = (pa ?? []).map((r: { account_id: string }) => r.account_id)
+  }
+  if (accountIds.length === 0 && legacyAccountId) accountIds = [legacyAccountId]
+  if (accountIds.length === 0) return NextResponse.json({ error: 'no_accounts' }, { status: 400 })
 
-    const insights = await metaFetch<InsightsResponse>(
-      `/${accountId}/insights?fields=${fields}&date_preset=${datePreset}`,
-      connection.access_token,
+  try {
+    const perAccount = await Promise.all(
+      accountIds.map(aid => fetchAccountInsights(aid, connection.access_token, datePreset)),
     )
 
-    const raw = insights.data?.[0] ?? {}
-    const num = (s?: string) => parseFloat(s ?? '0') || 0
-    const int = (s?: string) => parseInt(s ?? '0', 10) || 0
-    const actionVal = (arr: ActionItem[] | undefined, type: string) =>
-      parseFloat(arr?.find(a => a.action_type === type)?.value ?? '0') || 0
-    const actionSum = (arr: ActionItem[] | undefined) =>
-      (arr ?? []).reduce((s, a) => s + (parseFloat(a.value) || 0), 0)
+    let spend_usd = 0, impressions = 0, alcance = 0, cliques_no_link = 0
+    let checkouts = 0, compras = 0, adicoes_carrinho = 0, vis_pagina = 0
+    let valor_compras_usd = 0, video_plays = 0, video_25 = 0
 
-    const spend_usd      = num(raw.spend)
-    const cpm_usd        = num(raw.cpm)
-    const impressions    = int(raw.impressions)
-    const cliques_no_link = int(raw.inline_link_clicks)
-    const cpc_usd        = cliques_no_link > 0 ? spend_usd / cliques_no_link : 0
+    for (const r of perAccount) {
+      spend_usd         += r.spend_usd
+      impressions       += r.impressions
+      alcance           += r.alcance
+      cliques_no_link   += r.cliques_no_link
+      checkouts         += r.checkouts
+      compras           += r.compras
+      adicoes_carrinho  += r.adicoes_carrinho
+      vis_pagina        += r.vis_pagina
+      valor_compras_usd += r.valor_compras_usd
+      video_plays       += r.video_plays
+      video_25          += r.video_25
+    }
 
-    const checkouts         = actionVal(raw.actions, 'initiate_checkout')
-    const compras           = actionVal(raw.actions, 'purchase')
-    const adicoes_carrinho  = actionVal(raw.actions, 'add_to_cart')
-    const vis_pagina        = actionVal(raw.actions, 'landing_page_view')
-    const valor_compras_usd = actionVal(raw.action_values, 'purchase')
+    // Recalculate derived metrics over aggregated totals
+    const ctr          = impressions     > 0 ? (cliques_no_link / impressions) * 100    : 0
+    const cpc_usd      = cliques_no_link > 0 ? spend_usd / cliques_no_link              : 0
+    const cpm_usd      = impressions     > 0 ? (spend_usd / impressions) * 1000         : 0
+    const roas_meta    = spend_usd       > 0 ? valor_compras_usd / spend_usd            : 0
+    const hook_rate    = impressions     > 0 ? (video_plays / impressions) * 100        : 0
+    const connect_rate = cliques_no_link > 0 ? (checkouts / cliques_no_link) * 100      : 0
+    const frequencia   = alcance         > 0 ? impressions / alcance                    : 0
 
-    const video_plays = actionSum(raw.video_play_actions)
-    const video_25    = actionSum(raw.video_p25_watched_actions)
-    const hook_rate   = impressions > 0 ? (video_plays / impressions) * 100 : 0
-    const connect_rate = cliques_no_link > 0 ? (checkouts / cliques_no_link) * 100 : 0
-
-    // ROAS (Meta Ads): usa purchase_roas direto da API do Meta
-    const roas_meta = actionVal(raw.purchase_roas, 'omni_purchase')
-      || (raw.purchase_roas?.[0] ? parseFloat(raw.purchase_roas[0].value) || 0 : 0)
-
-    // ROAS (Geral): faturamento Hotmart aprovado no período / spend_brl
+    // ROAS (Geral): Hotmart faturamento / spend_brl for this project
     let roas_geral = 0
+    const spend_brl = spend_usd * RATE
     if (projetoId && spend_usd > 0) {
       const dateRange = getDateRange(datePreset)
-      const spend_brl = spend_usd * RATE
       console.log('[INSIGHTS] roas_geral: datePreset:', datePreset, 'range:', dateRange.from.toISOString(), '-', dateRange.to.toISOString(), 'spend_brl:', spend_brl)
 
       const { data: pp } = await supabase
@@ -152,23 +203,19 @@ export async function GET(request: Request) {
           .in('id', produtoIds)
 
         const hotmartIds = (prods ?? []).map((r: { hotmart_id: string }) => r.hotmart_id)
-        console.log('[INSIGHTS] roas_geral: hotmartIds:', hotmartIds)
 
         if (hotmartIds.length > 0) {
           const { data: vendas } = await supabase
             .from('vendas')
-            .select('valor_operacional_final, moeda, status, data_venda')
+            .select('valor_operacional_final, moeda')
             .in('hotmart_produto_id', hotmartIds)
             .eq('status', 'approved')
             .gte('data_venda', dateRange.from.toISOString())
             .lt('data_venda', dateRange.to.toISOString())
 
-          console.log('[INSIGHTS] roas_geral: vendas found:', vendas?.length ?? 0, 'sample:', JSON.stringify(vendas?.[0]))
-
           const faturamento = (vendas ?? []).reduce(
             (sum: number, v: { valor_operacional_final: number; moeda: string }) => {
               const val = v.valor_operacional_final ?? 0
-              // se a venda for em USD, converte para BRL
               return sum + (v.moeda === 'USD' ? val * RATE : val)
             },
             0,
@@ -180,15 +227,15 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      spend_usd,          spend_brl:          spend_usd        * RATE,
-      cpm_usd,            cpm_brl:            cpm_usd          * RATE,
-      cpc_usd,            cpc_brl:            cpc_usd          * RATE,
-      valor_compras_usd,  valor_compras_brl:  valor_compras_usd * RATE,
+      spend_usd,          spend_brl,
+      cpm_usd,            cpm_brl:           cpm_usd          * RATE,
+      cpc_usd,            cpc_brl:           cpc_usd          * RATE,
+      valor_compras_usd,  valor_compras_brl: valor_compras_usd * RATE,
       impressions,
-      alcance:            int(raw.reach),
-      frequencia:         num(raw.frequency),
+      alcance,
+      frequencia,
       cliques_no_link,
-      ctr:                num(raw.inline_link_click_ctr),
+      ctr,
       checkouts,
       compras,
       adicoes_carrinho,
@@ -199,7 +246,6 @@ export async function GET(request: Request) {
       connect_rate,
       roas_meta,
       roas_geral,
-      actions: raw.actions ?? [],
     })
   } catch (err) {
     console.error('[INSIGHTS] erro:', err)

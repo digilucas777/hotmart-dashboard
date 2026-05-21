@@ -348,7 +348,23 @@ export default function RelatoriosPage() {
       setMetaInsights(null)
       setIsMetaConnected(false)
       if (!form.projeto_id) return
-      const { data } = await supabase
+
+      // Prefer new meta_project_accounts table
+      const { data: pa } = await supabase
+        .from('meta_project_accounts')
+        .select('account_id')
+        .eq('projeto_id', form.projeto_id)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      if (pa?.account_id) {
+        setMetaAccountId(pa.account_id)
+        setIsMetaConnected(true)
+        return
+      }
+
+      // Fallback: legacy account_id in meta_connections
+      const { data: mc } = await supabase
         .from('meta_connections')
         .select('account_id')
         .eq('projeto_id', form.projeto_id)
@@ -356,8 +372,8 @@ export default function RelatoriosPage() {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
-      if (data?.account_id) {
-        setMetaAccountId(data.account_id)
+      if ((mc as { account_id: string | null } | null)?.account_id) {
+        setMetaAccountId((mc as { account_id: string }).account_id)
         setIsMetaConnected(true)
       }
     }

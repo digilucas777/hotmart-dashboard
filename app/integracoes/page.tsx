@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import {
   BarChart3,
   Boxes,
+  Check,
   CheckCircle2,
   ChevronRight,
   Clock3,
@@ -26,11 +27,6 @@ type Connection = {
   id: string
   meta_user_id: string | null
   meta_user_name: string | null
-  account_id: string | null
-  account_name: string | null
-  bm_id: string | null
-  bm_name: string | null
-  projeto_id: string | null
   status: string
 }
 
@@ -45,6 +41,13 @@ type BizManager = {
   id: string
   name: string
   ad_accounts: AdAccount[]
+}
+
+type ProjectAccount = {
+  account_id: string
+  account_name: string | null
+  bm_id: string | null
+  bm_name: string | null
 }
 
 const metaMetrics = [
@@ -77,7 +80,8 @@ function IntegracoesContent() {
   const [connection, setConnection] = useState<Connection | null | undefined>(undefined)
   const [businesses, setBusinesses] = useState<BizManager[]>([])
   const [selectedBmId, setSelectedBmId] = useState<string | null>(null)
-  const [selectedAdAccount, setSelectedAdAccount] = useState<AdAccount | null>(null)
+  const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(new Set())
+  const [projectAccounts, setProjectAccounts] = useState<ProjectAccount[]>([])
   const [dashboards, setDashboards] = useState<Projeto[]>([])
   const [selectedDashboardId, setSelectedDashboardId] = useState('')
   const [loading, setLoading] = useState(true)
@@ -85,6 +89,18 @@ function IntegracoesContent() {
   const [saving, setSaving] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
+
+  const loadProjectAccounts = useCallback(async (projetoId: string) => {
+    if (!projetoId) { setProjectAccounts([]); setSelectedAccountIds(new Set()); return }
+    const { data } = await supabase
+      .from('meta_project_accounts')
+      .select('account_id, account_name, bm_id, bm_name')
+      .eq('projeto_id', projetoId)
+      .order('created_at', { ascending: true })
+    const accounts = (data ?? []) as ProjectAccount[]
+    setProjectAccounts(accounts)
+    setSelectedAccountIds(new Set(accounts.map(a => a.account_id)))
+  }, [])
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -100,21 +116,25 @@ function IntegracoesContent() {
     if (user) {
       const { data: conn } = await supabase
         .from('meta_connections')
-        .select('id, meta_user_id, meta_user_name, account_id, account_name, bm_id, bm_name, projeto_id, status')
+        .select('id, meta_user_id, meta_user_name, status')
         .eq('user_id', user.id)
         .eq('status', 'connected')
         .maybeSingle()
       setConnection((conn as Connection | null) ?? null)
-      const linkedProjectId = (conn as Connection | null)?.projeto_id ?? dashboardList[0]?.id ?? ''
-      setSelectedDashboardId(linkedProjectId)
     } else {
       setConnection(null)
-      setSelectedDashboardId(dashboardList[0]?.id ?? '')
     }
+
+    const firstProjectId = dashboardList[0]?.id ?? ''
+    setSelectedDashboardId(firstProjectId)
     setLoading(false)
   }, [])
 
   useEffect(() => { void loadData() }, [loadData])
+
+  useEffect(() => {
+    if (selectedDashboardId) void loadProjectAccounts(selectedDashboardId)
+  }, [selectedDashboardId, loadProjectAccounts])
 
   useEffect(() => {
     if (metaJustConnected || metaError) {
@@ -124,6 +144,15 @@ function IntegracoesContent() {
       return () => clearTimeout(t)
     }
   }, [metaJustConnected, metaError])
+
+  function toggleAccount(accId: string) {
+    setSelectedAccountIds(prev => {
+      const next = new Set(prev)
+      if (next.has(accId)) next.delete(accId)
+      else next.add(accId)
+      return next
+    })
+  }
 
   async function syncAccounts() {
     console.log('[SYNC] iniciando...')
@@ -150,26 +179,39 @@ function IntegracoesContent() {
     setConnection(null)
     setBusinesses([])
     setSelectedBmId(null)
-    setSelectedAdAccount(null)
+    setSelectedAccountIds(new Set())
+    setProjectAccounts([])
     setDisconnecting(false)
   }
 
   async function saveLink() {
-    if (!connection) return
+    if (!connection || !selectedDashboardId) return
     setSaving(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setSaving(false); return }
+
     const bm = businesses.find(b => b.id === selectedBmId)
-    await supabase
-      .from('meta_connections')
-      .update({
-        account_id: selectedAdAccount?.id ?? connection.account_id,
-        account_name: selectedAdAccount?.name ?? connection.account_name,
-        bm_id: selectedBmId ?? connection.bm_id,
-        bm_name: bm?.name ?? connection.bm_name,
-        projeto_id: selectedDashboardId || null,
-      })
-      .eq('id', connection.id)
+
+    const toInsert = Array.from(selectedAccountIds).map(accId => {
+      const acc = businesses.flatMap(b => b.ad_accounts).find(a => a.id === accId)
+      const existing = projectAccounts.find(pa => pa.account_id === accId)
+      return {
+        user_id: user.id,
+        projeto_id: selectedDashboardId,
+        account_id: accId,
+        account_name: acc?.name ?? existing?.account_name ?? null,
+        bm_id: bm?.id ?? existing?.bm_id ?? null,
+        bm_name: bm?.name ?? existing?.bm_name ?? null,
+      }
+    })
+
+    await supabase.from('meta_project_accounts').delete().eq('projeto_id', selectedDashboardId)
+    if (toInsert.length > 0) {
+      await supabase.from('meta_project_accounts').insert(toInsert)
+    }
+
     setSaveSuccess(true)
-    await loadData()
+    await loadProjectAccounts(selectedDashboardId)
     setSaving(false)
     setTimeout(() => setSaveSuccess(false), 3000)
   }
@@ -221,10 +263,10 @@ function IntegracoesContent() {
             </div>
             <h2 className="text-3xl font-black">Conecte Facebook, BMs e contas por dashboard.</h2>
             <p className="mt-4 text-sm leading-7 text-[var(--dash-muted)]">
-              Conecte o Facebook, escolha o Business Manager, selecione a conta de anúncio e vincule ao dashboard do cliente.
+              Conecte o Facebook, escolha o Business Manager, selecione as contas de anúncio (múltiplas) e vincule ao dashboard do cliente.
             </p>
             <div className="mt-7 grid gap-3 sm:grid-cols-2">
-              {['Facebook OAuth', 'Business Managers', 'Conta de anúncio', 'Vínculo por dashboard', 'Métricas Meta Ads', 'Criativos destaque'].map((item, i) => (
+              {['Facebook OAuth', 'Business Managers', 'Múltiplas contas', 'Vínculo por dashboard', 'Métricas Meta Ads', 'Criativos destaque'].map((item, i) => (
                 <div key={item} className="flex items-center gap-2 rounded-2xl border border-[var(--dash-border)] bg-white/5 px-4 py-3 text-sm font-bold">
                   <CheckCircle2 size={15} className={i < 4 ? 'text-cyan-300' : 'text-violet-300'} />
                   {item}
@@ -267,12 +309,6 @@ function IntegracoesContent() {
                     <p className="mt-0.5 text-sm font-semibold text-[var(--dash-text)]">
                       {connection.meta_user_name ?? connection.meta_user_id ?? 'Usuário Meta'}
                     </p>
-                    {connection.account_name && (
-                      <p className="text-xs text-[var(--dash-faint)]">
-                        Conta vinculada: {connection.account_name}
-                        {connection.bm_name ? ` · BM: ${connection.bm_name}` : ''}
-                      </p>
-                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -330,7 +366,7 @@ function IntegracoesContent() {
               ) : businesses.map(bm => (
                 <button
                   key={bm.id}
-                  onClick={() => { setSelectedBmId(bm.id); setSelectedAdAccount(null) }}
+                  onClick={() => setSelectedBmId(bm.id)}
                   className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-colors ${
                     selectedBmId === bm.id
                       ? 'border-cyan-300/40 bg-cyan-300/10'
@@ -347,10 +383,15 @@ function IntegracoesContent() {
             </div>
           </div>
 
-          {/* Step 2 — Ad Accounts */}
+          {/* Step 2 — Ad Accounts (multi-select) */}
           <div className="rounded-[2rem] border border-[var(--dash-border)] bg-[var(--dash-panel)] p-6 shadow-[var(--dash-shadow)]">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-[var(--dash-faint)]">Etapa 2</p>
-            <h2 className="mt-2 text-xl font-black">Conta de anúncio</h2>
+            <h2 className="mt-2 text-xl font-black">Contas de anúncio</h2>
+            {selectedAccountIds.size > 0 && (
+              <p className="mt-1 text-xs text-violet-400">
+                {selectedAccountIds.size} conta{selectedAccountIds.size !== 1 ? 's' : ''} selecionada{selectedAccountIds.size !== 1 ? 's' : ''}
+              </p>
+            )}
             <div className="mt-5 max-h-80 space-y-2 overflow-y-auto pr-1">
               {!selectedBm ? (
                 <p className="rounded-2xl border border-dashed border-[var(--dash-border)] p-4 text-sm text-[var(--dash-muted)]">
@@ -360,27 +401,34 @@ function IntegracoesContent() {
                 <p className="rounded-2xl border border-dashed border-[var(--dash-border)] p-4 text-sm text-[var(--dash-muted)]">
                   Nenhuma conta encontrada neste BM.
                 </p>
-              ) : selectedBm.ad_accounts.map(acc => (
-                <button
-                  key={acc.id}
-                  onClick={() => setSelectedAdAccount(acc)}
-                  className={`flex w-full items-start gap-3 rounded-2xl border px-4 py-3 text-left transition-colors ${
-                    selectedAdAccount?.id === acc.id
-                      ? 'border-violet-400/40 bg-violet-400/10'
-                      : 'border-[var(--dash-border)] bg-white/5 hover:border-violet-300/20'
-                  }`}
-                >
-                  <div className={`mt-1 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${
-                    selectedAdAccount?.id === acc.id ? 'border-violet-400 bg-violet-400' : 'border-[var(--dash-faint)]'
-                  }`} />
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-black">{acc.name}</p>
-                    <p className="text-xs text-[var(--dash-faint)]">
-                      {acc.id} · {acc.currency ?? '—'} · {accountStatusLabel(acc.account_status)}
-                    </p>
-                  </div>
-                </button>
-              ))}
+              ) : selectedBm.ad_accounts.map(acc => {
+                const isSelected = selectedAccountIds.has(acc.id)
+                const isLinked = projectAccounts.some(pa => pa.account_id === acc.id)
+                return (
+                  <button
+                    key={acc.id}
+                    onClick={() => toggleAccount(acc.id)}
+                    className={`flex w-full items-start gap-3 rounded-2xl border px-4 py-3 text-left transition-colors ${
+                      isSelected
+                        ? 'border-violet-400/40 bg-violet-400/10'
+                        : 'border-[var(--dash-border)] bg-white/5 hover:border-violet-300/20'
+                    }`}
+                  >
+                    <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 ${
+                      isSelected ? 'border-violet-400 bg-violet-400' : 'border-[var(--dash-faint)]'
+                    }`}>
+                      {isSelected && <Check size={10} className="text-white" />}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black">{acc.name}</p>
+                      <p className="text-xs text-[var(--dash-faint)]">
+                        {acc.id} · {acc.currency ?? '—'} · {accountStatusLabel(acc.account_status)}
+                        {isLinked && <span className="ml-2 text-emerald-400">● vinculada</span>}
+                      </p>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           </div>
 
@@ -398,28 +446,24 @@ function IntegracoesContent() {
               ))}
             </select>
 
-            <div className="mt-4 rounded-2xl border border-[var(--dash-border)] bg-white/5 p-4 space-y-1">
-              <p className="text-xs font-black uppercase tracking-wider text-[var(--dash-faint)]">Vínculo atual</p>
-              {connection?.account_name ? (
-                <>
-                  <p className="text-sm font-bold">{connection.account_name}</p>
-                  <p className="text-xs text-[var(--dash-muted)]">
-                    {connection.bm_name ? `BM: ${connection.bm_name} · ` : ''}
-                    {connection.account_id}
-                  </p>
-                  {connection.projeto_id && (
-                    <p className="text-xs text-[var(--dash-faint)]">
-                      Dashboard: {dashboards.find(d => d.id === connection.projeto_id)?.nome ?? connection.projeto_id}
-                    </p>
-                  )}
-                </>
+            <div className="mt-4 rounded-2xl border border-[var(--dash-border)] bg-white/5 p-4">
+              <p className="text-xs font-black uppercase tracking-wider text-[var(--dash-faint)]">Contas vinculadas a este projeto</p>
+              {projectAccounts.length === 0 ? (
+                <p className="mt-2 text-sm text-[var(--dash-muted)]">Nenhuma conta vinculada.</p>
               ) : (
-                <p className="text-sm text-[var(--dash-muted)]">Nenhuma conta vinculada.</p>
-              )}
-              {selectedAdAccount && (
-                <p className="mt-2 text-xs font-bold text-cyan-300">
-                  Nova seleção: {selectedAdAccount.name}
-                </p>
+                <div className="mt-2 space-y-2">
+                  {projectAccounts.map(pa => (
+                    <div key={pa.account_id} className="flex items-start gap-2">
+                      <CheckCircle2 size={13} className="mt-0.5 shrink-0 text-emerald-400" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold">{pa.account_name ?? pa.account_id}</p>
+                        {pa.bm_name && (
+                          <p className="text-xs text-[var(--dash-faint)]">BM: {pa.bm_name}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 
@@ -429,7 +473,7 @@ function IntegracoesContent() {
               className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 text-sm font-black text-white disabled:opacity-40"
             >
               {saving && <Loader2 size={16} className="animate-spin" />}
-              Salvar vínculo
+              Salvar vínculo ({selectedAccountIds.size} conta{selectedAccountIds.size !== 1 ? 's' : ''})
             </button>
           </div>
         </section>
@@ -453,7 +497,7 @@ function IntegracoesContent() {
             <div>
               <h2 className="text-2xl font-black">Insights rápidos sem rolar colunas no gerenciador.</h2>
               <p className="mt-2 text-sm text-[var(--dash-muted)]">
-                Conecte Meta OAuth, vincule uma conta de anúncio ao dashboard e os widgets Meta passam a exibir dados reais automaticamente.
+                Conecte Meta OAuth, selecione múltiplas contas de anúncio e os widgets Meta exibem dados consolidados automaticamente.
               </p>
             </div>
             <div className="grid min-w-80 grid-cols-3 gap-3">
