@@ -8,6 +8,11 @@ type TokenResponse = {
   expires_in?: number
 }
 
+type MeResponse = {
+  id: string
+  name?: string
+}
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
@@ -37,12 +42,20 @@ export async function GET(request: Request) {
     if (!tokenResponse.ok) throw new Error(await tokenResponse.text())
     const token = await tokenResponse.json() as TokenResponse
 
+    const meRes = await fetch(
+      `https://graph.facebook.com/${META_API_VERSION}/me?fields=id,name&access_token=${encodeURIComponent(token.access_token)}`,
+      { cache: 'no-store' },
+    )
+    const me: MeResponse = meRes.ok ? await meRes.json() as MeResponse : { id: '' }
+
     const supabase = await createRouteSupabase()
     const { data: { user } } = await supabase.auth.getUser()
 
     await supabase.from('meta_connections').upsert({
       ...(user ? { user_id: user.id } : {}),
       access_token: token.access_token,
+      meta_user_id: me.id || null,
+      meta_user_name: me.name ?? null,
       status: 'connected',
     }, { onConflict: 'user_id' })
 

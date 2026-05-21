@@ -390,6 +390,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [productSearch, setProductSearch] = useState('')
   const [savingProducts, setSavingProducts] = useState(false)
 
+  const [linkedMetaAccountId, setLinkedMetaAccountId] = useState<string | null>(null)
+  const [metaInsights, setMetaInsights] = useState<Record<string, unknown> | null>(null)
+
   const customDateRange = useMemo((): { from: Date; to: Date } | undefined => {
     if (period !== 'custom') return undefined
     const parseLocal = (s: string) => {
@@ -462,6 +465,31 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         setLoadingWidgets(false)
       })
   }, [projectId])
+
+  useEffect(() => {
+    supabase
+      .from('meta_connections')
+      .select('account_id')
+      .eq('projeto_id', projectId)
+      .eq('status', 'connected')
+      .maybeSingle()
+      .then(({ data }) => setLinkedMetaAccountId((data as { account_id: string | null } | null)?.account_id ?? null))
+  }, [projectId])
+
+  useEffect(() => {
+    if (!linkedMetaAccountId) { setMetaInsights(null); return }
+    const presetMap: Partial<Record<string, string>> = {
+      today: 'today', yesterday: 'yesterday',
+      thisWeek: 'this_week_sun_today', lastWeek: 'last_week_sun_sat',
+      thisMonth: 'this_month', lastMonth: 'last_month',
+    }
+    const preset = presetMap[period]
+    if (!preset) { setMetaInsights(null); return }
+    fetch(`/api/meta/insights?account_id=${encodeURIComponent(linkedMetaAccountId)}&date_preset=${preset}`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() as Promise<Record<string, unknown>> : null)
+      .then(data => setMetaInsights(data))
+      .catch(() => setMetaInsights(null))
+  }, [linkedMetaAccountId, period])
 
   const fetchVendas = useCallback(async () => {
     setLoading(true)
@@ -1355,6 +1383,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                     onEdit={editMode ? setEditingWidgetId : undefined}
                     onPreviewResize={previewWidgetResize}
                     onCommitResize={commitWidgetResize}
+                    linkedMetaAccountId={linkedMetaAccountId}
+                    metaInsights={metaInsights}
                   />
                 ))}
               </div>

@@ -21,7 +21,7 @@ function formatValue(value: number, format: MetaMetricResult['format']): string 
   }
 }
 
-export function MetaMetricWidget({ title, data }: { title: string; data: MetaMetricResult }) {
+export function MetaMetricWidget({ title, data, isDemo = true }: { title: string; data: MetaMetricResult; isDemo?: boolean }) {
   const isPositive = data.change >= 0
   const isGood = data.isGoodWhenUp ? isPositive : !isPositive
   const changeColor = isGood ? '#10b981' : '#ef4444'
@@ -70,10 +70,11 @@ export function MetaMetricWidget({ title, data }: { title: string; data: MetaMet
         <span className="text-xs text-[var(--dash-faint)]">vs período anterior</span>
       </div>
 
-      {/* Demo label */}
-      <span className="absolute bottom-3 right-4 rounded-full bg-amber-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-400/60">
-        Demo
-      </span>
+      {isDemo && (
+        <span className="absolute bottom-3 right-4 rounded-full bg-amber-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-400/60">
+          Demo
+        </span>
+      )}
     </div>
   )
 }

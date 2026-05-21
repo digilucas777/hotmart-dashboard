@@ -5,7 +5,7 @@ import type { MetaCreativeResult } from '@/lib/meta-ads-mock'
 
 const PALETTE = ['#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444']
 
-export function MetaCreativeWidget({ title, data }: { title: string; data: MetaCreativeResult }) {
+export function MetaCreativeWidget({ title, data, isDemo = true }: { title: string; data: MetaCreativeResult; isDemo?: boolean }) {
   const sortLabel = data.sortBy === 'ctr' ? 'CTR' : 'ROAS'
 
   return (
@@ -18,9 +18,11 @@ export function MetaCreativeWidget({ title, data }: { title: string; data: MetaC
           </p>
           <p className="text-sm font-bold text-[var(--dash-text)]">{title}</p>
         </div>
-        <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-400/60">
-          Demo
-        </span>
+        {isDemo && (
+          <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-400/60">
+            Demo
+          </span>
+        )}
       </div>
 
       {/* Creative rows */}

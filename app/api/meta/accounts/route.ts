@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { metaFetch } from '../_utils'
+import { getAuthenticatedUser, metaFetch } from '../_utils'
 
 type BusinessResponse = {
   data?: { id: string; name: string }[]
@@ -14,29 +14,34 @@ type AdAccountsResponse = {
   }[]
 }
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const accessToken = searchParams.get('access_token')
+export async function GET() {
+  const { supabase, user } = await getAuthenticatedUser()
+  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  if (!accessToken) {
-    return NextResponse.json({ error: 'access_token required' }, { status: 400 })
-  }
+  const { data: conn } = await supabase
+    .from('meta_connections')
+    .select('access_token')
+    .eq('user_id', user.id)
+    .eq('status', 'connected')
+    .maybeSingle()
+
+  if (!conn) return NextResponse.json({ error: 'no_connection' }, { status: 401 })
 
   try {
     const businesses = await metaFetch<BusinessResponse>(
       '/me/businesses?fields=id,name&limit=100',
-      accessToken,
+      conn.access_token,
     )
 
     const result = await Promise.all(
       (businesses.data ?? []).map(async bm => {
         const accounts = await metaFetch<AdAccountsResponse>(
           `/${bm.id}/owned_ad_accounts?fields=id,name,currency,account_status&limit=100`,
-          accessToken,
+          conn.access_token,
         )
         return {
-          bm_id: bm.id,
-          bm_name: bm.name,
+          id: bm.id,
+          name: bm.name,
           ad_accounts: accounts.data ?? [],
         }
       }),

@@ -10,7 +10,7 @@ function fmtNum(n: number): string {
 
 const STEP_COLORS = ['#00d4ff', '#38bdf8', '#6366f1', '#8b5cf6', '#10b981']
 
-export function MetaFunnelWidget({ title, data }: { title: string; data: MetaFunnelResult }) {
+export function MetaFunnelWidget({ title, data, isDemo = true }: { title: string; data: MetaFunnelResult; isDemo?: boolean }) {
   const maxCount = data.steps[0]?.count ?? 1
 
   return (
@@ -21,9 +21,11 @@ export function MetaFunnelWidget({ title, data }: { title: string; data: MetaFun
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">Meta Ads · Funil</p>
           <p className="text-sm font-bold text-[var(--dash-text)]">{title}</p>
         </div>
-        <span className="rounded-full bg-cyan-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-cyan-300/70">
-          Demo
-        </span>
+        {isDemo && (
+          <span className="rounded-full bg-cyan-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-cyan-300/70">
+            Demo
+          </span>
+        )}
       </div>
 
       {/* Steps */}

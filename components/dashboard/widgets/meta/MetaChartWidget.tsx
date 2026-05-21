@@ -53,12 +53,14 @@ export function MetaChartWidget({
   chartHeight,
   localPeriod,
   onChangePeriod,
+  isDemo = true,
 }: {
   title: string
   data: MetaChartResult
   chartHeight: number
   localPeriod?: Period
   onChangePeriod?: (p: Period) => void
+  isDemo?: boolean
 }) {
   const hasSecond = data.points.some(p => p.value2 !== undefined)
 
@@ -88,9 +90,11 @@ export function MetaChartWidget({
               ))}
             </div>
           )}
-          <span className="rounded-full bg-slate-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-400/50">
-            Demo
-          </span>
+          {isDemo && (
+            <span className="rounded-full bg-slate-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-400/50">
+              Demo
+            </span>
+          )}
         </div>
       </div>
 

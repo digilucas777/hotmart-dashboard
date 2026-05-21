@@ -32,6 +32,31 @@ export type ResizeDirection =
   | 'bottom-left'
   | 'bottom-right'
 
+type MetaInsightsRaw = Record<string, unknown>
+
+function getInsightsValue(source: string, ins: MetaInsightsRaw): number | null {
+  const str = (k: string) => parseFloat(String(ins[k] ?? '0'))
+  const int = (k: string) => parseInt(String(ins[k] ?? '0'), 10)
+  const actions = (Array.isArray(ins.actions) ? ins.actions : []) as { action_type: string; value: string }[]
+  const action = (type: string) => parseFloat(actions.find(a => a.action_type === type)?.value ?? '0')
+
+  switch (source) {
+    case 'meta_spend':              return str('spend')
+    case 'meta_impressions':        return int('impressions')
+    case 'meta_reach':              return int('reach')
+    case 'meta_link_clicks':        return int('clicks')
+    case 'meta_ctr':                return str('ctr')
+    case 'meta_cpm':                return str('cpm')
+    case 'meta_leads':              return action('lead')
+    case 'meta_purchases':          return action('purchase')
+    case 'meta_conversions':        return action('offsite_conversion.fb_pixel_purchase')
+    case 'meta_checkout_initiated': return action('initiate_checkout')
+    case 'meta_add_to_cart':        return action('add_to_cart')
+    case 'meta_page_views':         return action('landing_page_view')
+    default:                        return null
+  }
+}
+
 function WidgetRendererBase({
   config,
   vendas,
@@ -45,6 +70,8 @@ function WidgetRendererBase({
   loading,
   selected,
   isGroupDragging = false,
+  linkedMetaAccountId,
+  metaInsights,
   onSelect,
   onDelete,
   onDuplicate,
@@ -63,6 +90,8 @@ function WidgetRendererBase({
   editMode: boolean
   loading?: boolean
   selected: boolean
+  linkedMetaAccountId?: string | null
+  metaInsights?: MetaInsightsRaw | null
   onSelect: (id: string, multi?: boolean) => void
   onDelete: (id: string) => void
   onDuplicate?: (id: string) => void
@@ -85,8 +114,17 @@ function WidgetRendererBase({
   const isProductChart = config.data_source === 'revenue_by_product' || config.data_source === 'count_by_product'
   const effectivePeriod = isChartWidget && isTimeSeries && period !== 'custom' ? chartPeriod : period
 
+  const isMetaLinked = !!linkedMetaAccountId
+
   const data = isMetaWidget
-    ? computeMetaWidgetData(config.data_source, effectivePeriod)
+    ? (() => {
+        const mock = computeMetaWidgetData(config.data_source, effectivePeriod)
+        if (isMetaLinked && metaInsights && mock.kind === 'meta-metric') {
+          const real = getInsightsValue(config.data_source, metaInsights)
+          if (real !== null) return { ...mock, value: real, change: 0 }
+        }
+        return mock
+      })()
     : computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, custoTotal, customRange)
 
   const isBRL = !isMetaWidget && getValueFormat(config.data_source) === 'brl'
@@ -362,10 +400,10 @@ function WidgetRendererBase({
           <SalesTable vendas={data.vendas} exchangeRate={exchangeRate} heightMode="fill" />
         )}
         {config.type === 'meta-metric' && data.kind === 'meta-metric' && (
-          <MetaMetricWidget title={config.title} data={data} />
+          <MetaMetricWidget title={config.title} data={data} isDemo={!isMetaLinked} />
         )}
         {config.type === 'meta-funnel' && data.kind === 'meta-funnel' && (
-          <MetaFunnelWidget title={config.title} data={data} />
+          <MetaFunnelWidget title={config.title} data={data} isDemo={!isMetaLinked} />
         )}
         {config.type === 'meta-chart' && data.kind === 'meta-chart' && (
           <MetaChartWidget
@@ -374,13 +412,14 @@ function WidgetRendererBase({
             chartHeight={chartHeight}
             localPeriod={chartPeriod}
             onChangePeriod={setChartPeriod}
+            isDemo={!isMetaLinked}
           />
         )}
         {config.type === 'meta-campaign' && data.kind === 'meta-campaign' && (
-          <MetaCampaignWidget title={config.title} data={data} />
+          <MetaCampaignWidget title={config.title} data={data} isDemo={!isMetaLinked} />
         )}
         {config.type === 'meta-creative' && data.kind === 'meta-creative' && (
-          <MetaCreativeWidget title={config.title} data={data} />
+          <MetaCreativeWidget title={config.title} data={data} isDemo={!isMetaLinked} />
         )}
       </div>
     </div>
@@ -399,5 +438,7 @@ export const WidgetRenderer = memo(WidgetRendererBase, (prev, next) =>
   prev.editMode === next.editMode &&
   prev.loading === next.loading &&
   prev.selected === next.selected &&
-  prev.isGroupDragging === next.isGroupDragging
+  prev.isGroupDragging === next.isGroupDragging &&
+  prev.linkedMetaAccountId === next.linkedMetaAccountId &&
+  prev.metaInsights === next.metaInsights
 )
