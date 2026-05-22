@@ -804,16 +804,55 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const duplicateWidget = useCallback(async (id: string) => {
     const source = widgets.find(w => w.id === id)
     if (!source) return
-    await addWidget({
+
+    const col_span = source.col_span ?? widthToSpan(source.width)
+    const row_span = normalizeRowSpan(source)
+    const srcCol = source.col_start ?? 1
+    const srcRow = source.row_start ?? 1
+
+    // Place immediately to the right; wrap to next row if out of bounds
+    let col_start = srcCol + col_span
+    let row_start = srcRow
+    if (col_start + col_span - 1 > GRID_COLUMNS) {
+      col_start = 1
+      row_start = srcRow + row_span
+    }
+
+    const position = widgets.length
+    const payload = {
       type: source.type,
       data_source: source.data_source,
       title: `${source.title} (cópia)`,
       width: source.width,
       height: source.height,
-      col_span: source.col_span,
-      row_span: source.row_span,
+      projeto_id: projectId,
+      position,
+      col_start,
+      row_start,
+      col_span,
+      row_span,
+    }
+
+    setWidgetError(null)
+    let { data, error } = await supabase.from('dashboard_widgets').insert(payload).select().single()
+
+    if (error?.message.includes('schema cache')) {
+      const legacy = { type: source.type, data_source: source.data_source, title: `${source.title} (cópia)`, width: source.width, height: source.height, projeto_id: projectId, position }
+      const retry = await supabase.from('dashboard_widgets').insert(legacy).select().single()
+      data = retry.data
+      error = retry.error
+    }
+
+    if (error) { setWidgetError(error.message); return }
+    if (!data) return
+
+    setWidgets(prev => {
+      const newWidget: WidgetConfig = { ...(data as WidgetConfig), col_start, row_start, col_span, row_span }
+      const resolved = resolveOverlaps([...prev, newWidget], newWidget.id)
+      setSavedWidgets(resolved)
+      return resolved
     })
-  }, [widgets]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [widgets, projectId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateWidget = useCallback(async (
     id: string,
@@ -1029,6 +1068,36 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     document.addEventListener('click', handleDocClick)
     return () => document.removeEventListener('click', handleDocClick)
   }, [editMode])
+
+  useEffect(() => {
+    if (!activeWidgetId) return
+
+    document.body.style.overflow = 'hidden'
+
+    let pointerY = 0
+    const onPointerMove = (e: PointerEvent) => { pointerY = e.clientY }
+    window.addEventListener('pointermove', onPointerMove)
+
+    const EDGE = 80
+    const BASE_SPEED = 12
+    let rafId: number
+    function tick() {
+      const vh = window.innerHeight
+      if (pointerY > 0 && pointerY < EDGE) {
+        window.scrollBy(0, -Math.round(BASE_SPEED * (1 - pointerY / EDGE)))
+      } else if (pointerY > vh - EDGE) {
+        window.scrollBy(0, Math.round(BASE_SPEED * (1 - (vh - pointerY) / EDGE)))
+      }
+      rafId = requestAnimationFrame(tick)
+    }
+    rafId = requestAnimationFrame(tick)
+
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('pointermove', onPointerMove)
+      cancelAnimationFrame(rafId)
+    }
+  }, [activeWidgetId])
 
   const isReady = !loadingWidgets
   const hasUnsavedLayout = !sameLayout(widgets, savedWidgets)

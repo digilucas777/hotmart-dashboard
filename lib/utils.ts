@@ -228,7 +228,7 @@ export type CombinedPoint = {
 }
 
 export type WidgetComputedData =
-  | { kind: 'metric'; value: string; subValue: string }
+  | { kind: 'metric'; value: string; subValue: string; numericValue?: number }
   | { kind: 'series'; points: SeriesPoint[]; dualCurrency?: boolean }
   | { kind: 'table'; vendas: Venda[] }
   | { kind: 'combined'; points: CombinedPoint[] }
@@ -283,13 +283,14 @@ export function computeWidgetData(
 
     case 'lucro': {
       if (custoTotal <= 0) {
-        return { kind: 'metric', value: formatBRL(totalConverted), subValue: 'Sem custo cadastrado' }
+        return { kind: 'metric', value: formatBRL(totalConverted), subValue: 'Sem custo cadastrado', numericValue: totalConverted }
       }
       const lucro = totalConverted - custoTotal
       return {
         kind: 'metric',
         value: formatBRL(lucro),
         subValue: `Receita ${formatBRL(totalConverted)} — Custo ${formatBRL(custoTotal)}`,
+        numericValue: lucro,
       }
     }
     case 'margem_lucro': {

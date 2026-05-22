@@ -379,6 +379,7 @@ function WidgetRendererBase({
             subValue={data.subValue}
             dataSource={config.data_source}
             comparison={comparison}
+            numericValue={data.numericValue}
           />
         )}
         {config.type === 'line' && data.kind === 'series' && (

@@ -89,6 +89,8 @@ function IntegracoesContent() {
   const [saving, setSaving] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [unlinkConfirm, setUnlinkConfirm] = useState(false)
+  const [unlinking, setUnlinking] = useState(false)
 
   const loadProjectAccounts = useCallback(async (projetoId: string) => {
     if (!projetoId) { setProjectAccounts([]); setSelectedAccountIds(new Set()); return }
@@ -216,6 +218,15 @@ function IntegracoesContent() {
     setTimeout(() => setSaveSuccess(false), 3000)
   }
 
+  async function unlinkAllAccounts() {
+    if (!selectedDashboardId) return
+    setUnlinking(true)
+    await supabase.from('meta_project_accounts').delete().eq('projeto_id', selectedDashboardId)
+    await loadProjectAccounts(selectedDashboardId)
+    setUnlinkConfirm(false)
+    setUnlinking(false)
+  }
+
   const connected = connection?.status === 'connected'
   const selectedBm = businesses.find(b => b.id === selectedBmId)
   const pageLoading = connection === undefined || loading
@@ -250,7 +261,7 @@ function IntegracoesContent() {
         )}
         {saveSuccess && (
           <div className="mb-6 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm font-bold text-emerald-200">
-            Vínculo salvo com sucesso.
+            Vínculo salvo com sucesso!
           </div>
         )}
 
@@ -475,6 +486,36 @@ function IntegracoesContent() {
               {saving && <Loader2 size={16} className="animate-spin" />}
               Salvar vínculo ({selectedAccountIds.size} conta{selectedAccountIds.size !== 1 ? 's' : ''})
             </button>
+
+            {projectAccounts.length > 0 && (
+              <div className="mt-3">
+                {!unlinkConfirm ? (
+                  <button
+                    onClick={() => setUnlinkConfirm(true)}
+                    className="w-full text-xs font-semibold text-red-400 transition-colors hover:text-red-300"
+                  >
+                    Desvincular todas as contas
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2">
+                    <p className="min-w-0 flex-1 text-xs text-red-300">Remover todos os vínculos deste projeto?</p>
+                    <button
+                      onClick={unlinkAllAccounts}
+                      disabled={unlinking}
+                      className="shrink-0 text-xs font-bold text-red-300 transition-colors hover:text-red-200 disabled:opacity-50"
+                    >
+                      {unlinking ? <Loader2 size={12} className="animate-spin" /> : 'Confirmar'}
+                    </button>
+                    <button
+                      onClick={() => setUnlinkConfirm(false)}
+                      className="shrink-0 text-xs text-[var(--dash-muted)] transition-colors hover:text-[var(--dash-text)]"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </section>
 

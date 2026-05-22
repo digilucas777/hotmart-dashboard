@@ -56,15 +56,24 @@ export function MetricWidget({
   subValue,
   dataSource,
   comparison,
+  numericValue,
 }: {
   title: string
   value: string
   subValue: string
   dataSource: WidgetDataSource
   comparison?: string | null
+  numericValue?: number
 }) {
   const Icon = ICON_MAP[dataSource] ?? DollarSign
-  const accent = ACCENT_MAP[dataSource] ?? DEFAULT_ACCENT
+  const accent = (() => {
+    if (dataSource === 'lucro' && numericValue !== undefined) {
+      if (numericValue < 0) return '#f87171'
+      if (numericValue === 0) return '#94a3b8'
+      return ACCENT_MAP.lucro ?? '#4ade80'
+    }
+    return ACCENT_MAP[dataSource] ?? DEFAULT_ACCENT
+  })()
 
   const isPositive = comparison?.startsWith('↑')
   const isNegative = comparison?.startsWith('↓')
