@@ -26,7 +26,10 @@ export async function POST(request: Request) {
     auth: { autoRefreshToken: false, persistSession: false },
   })
 
-  const { error } = await admin.auth.admin.inviteUserByEmail(email.trim())
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://hotmart-dashboard-woad.vercel.app'
+  const { error } = await admin.auth.admin.inviteUserByEmail(email.trim(), {
+    redirectTo: `${siteUrl}/auth/callback`,
+  })
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
   return NextResponse.json({ ok: true })
