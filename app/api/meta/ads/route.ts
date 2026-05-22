@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getAuthenticatedUser, metaFetch } from '../_utils'
 
+const CACHE_TTL = 30 * 60 * 1000
+
 type ActionItem = { action_type: string; value: string }
 
 type AdCreative = {
@@ -97,6 +99,24 @@ export async function GET(_request: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
+  // Cache check
+  if (projetoId) {
+    const { data: cached } = await supabase
+      .from('meta_ads_cache')
+      .select('data, updated_at')
+      .eq('projeto_id', projetoId)
+      .eq('date_preset', datePreset)
+      .maybeSingle()
+
+    if (cached) {
+      const age = Date.now() - new Date(cached.updated_at as string).getTime()
+      if (age < CACHE_TTL) {
+        console.log('[ADS] cache HIT for projeto_id:', projetoId, 'date_preset:', datePreset)
+        return NextResponse.json(cached.data, { headers: { 'X-Cache': 'HIT' } })
+      }
+    }
+  }
+
   const { data: connection } = await supabase
     .from('meta_connections')
     .select('access_token')
@@ -132,7 +152,19 @@ export async function GET(_request: Request) {
       .sort((a, b) => b.roas - a.roas)
 
     console.log('[ADS] returning', creatives.length, 'creatives from', accountIds.length, 'account(s)')
-    return NextResponse.json({ kind: 'meta-creative', sortBy: 'roas', creatives })
+
+    const responseData = { kind: 'meta-creative', sortBy: 'roas', creatives }
+
+    if (projetoId) {
+      await supabase
+        .from('meta_ads_cache')
+        .upsert(
+          { projeto_id: projetoId, date_preset: datePreset, data: responseData, updated_at: new Date().toISOString() },
+          { onConflict: 'projeto_id,date_preset' },
+        )
+    }
+
+    return NextResponse.json(responseData, { headers: { 'X-Cache': 'MISS' } })
   } catch (err) {
     console.error('[ADS] erro completo:', err)
     return NextResponse.json({ error: 'meta_api_error', detail: String(err) }, { status: 502 })

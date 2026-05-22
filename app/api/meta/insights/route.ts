@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getAuthenticatedUser, metaFetch } from '../_utils'
 
 const RATE = 5.03
+const CACHE_TTL = 30 * 60 * 1000
 
 type ActionItem = { action_type: string; value: string }
 
@@ -128,6 +129,23 @@ export async function GET(_request: Request) {
   const { supabase, user } = await getAuthenticatedUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
+  // Cache check
+  if (projetoId) {
+    const { data: cached } = await supabase
+      .from('meta_insights_cache')
+      .select('data, updated_at')
+      .eq('projeto_id', projetoId)
+      .eq('date_preset', datePreset)
+      .maybeSingle()
+
+    if (cached) {
+      const age = Date.now() - new Date(cached.updated_at as string).getTime()
+      if (age < CACHE_TTL) {
+        return NextResponse.json(cached.data, { headers: { 'X-Cache': 'HIT' } })
+      }
+    }
+  }
+
   const { data: connection } = await supabase
     .from('meta_connections')
     .select('access_token')
@@ -226,7 +244,7 @@ export async function GET(_request: Request) {
       }
     }
 
-    return NextResponse.json({
+    const responseData = {
       spend_usd,          spend_brl,
       cpm_usd,            cpm_brl:           cpm_usd          * RATE,
       cpc_usd,            cpc_brl:           cpc_usd          * RATE,
@@ -246,7 +264,18 @@ export async function GET(_request: Request) {
       connect_rate,
       roas_meta,
       roas_geral,
-    })
+    }
+
+    if (projetoId) {
+      await supabase
+        .from('meta_insights_cache')
+        .upsert(
+          { projeto_id: projetoId, date_preset: datePreset, data: responseData, updated_at: new Date().toISOString() },
+          { onConflict: 'projeto_id,date_preset' },
+        )
+    }
+
+    return NextResponse.json(responseData, { headers: { 'X-Cache': 'MISS' } })
   } catch (err) {
     console.error('[INSIGHTS] erro:', err)
     return NextResponse.json({ error: 'meta_api_error' }, { status: 502 })
