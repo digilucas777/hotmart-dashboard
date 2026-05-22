@@ -67,6 +67,7 @@ export function UserAppShell() {
   const router = useRouter()
   const [name, setName] = useState('Usuário')
   const [email, setEmail] = useState('')
+  const [userId, setUserId] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [dashboards, setDashboards] = useState<Projeto[]>([])
   const [widgetsCount, setWidgetsCount] = useState(0)
@@ -122,6 +123,7 @@ export function UserAppShell() {
       if (!active) return
       setName(user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Usuário')
       setEmail(user?.email ?? '')
+      setUserId(user?.id ?? null)
       if (user) {
         const { data: profile } = await supabase
           .from('user_profiles')
@@ -153,6 +155,7 @@ export function UserAppShell() {
       .insert({
         nome: dashboardName.trim(),
         descricao: dashboardDescription.trim() || null,
+        user_id: userId,
       })
       .select()
       .single()
@@ -271,6 +274,7 @@ export function UserAppShell() {
       categoria: dashboard.categoria ?? null,
       imagem_url: dashboard.imagem_url ?? null,
       status: dashboard.status ?? 'active',
+      user_id: userId,
     }
 
     let { data: duplicated, error: duplicateError } = await supabase
@@ -282,7 +286,7 @@ export function UserAppShell() {
     if (duplicateError && (duplicateError.message.includes('schema cache') || duplicateError.message.includes('capa_url'))) {
       const retry = await supabase
         .from('projetos')
-        .insert({ nome: payload.nome, descricao: payload.descricao })
+        .insert({ nome: payload.nome, descricao: payload.descricao, user_id: userId })
         .select()
         .single()
       duplicated = retry.data

@@ -25,13 +25,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
-  const userId = new URL(request.url).searchParams.get('user_id')
-  if (!userId) return NextResponse.json({ error: 'user_id required' }, { status: 400 })
-
   const { data, error } = await serviceClient
     .from('projetos')
     .select('id, nome, descricao, data_criacao')
-    .eq('user_id', userId)
     .order('data_criacao', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
