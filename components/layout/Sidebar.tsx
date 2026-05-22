@@ -23,7 +23,7 @@ const NAV_ITEMS = [
 ]
 
 function isNavActive(href: string, pathname: string): boolean {
-  if (href === '/dashboard') return pathname.startsWith('/dashboard/')
+  if (href === '/dashboard') return pathname === '/dashboard' || pathname.startsWith('/dashboard/')
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 

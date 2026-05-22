@@ -1446,6 +1446,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             )}
           </div>
         </div>
+        {linkedMetaAccountId && (
+          <p className="mb-3 text-right text-xs text-slate-500">
+            ⏱ Dados Meta Ads atualizados a cada 30 minutos
+          </p>
+        )}
         {editMode && (
           <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--dash-border)] bg-[var(--dash-panel)] px-4 py-3 text-xs text-[var(--dash-muted)] shadow-xl shadow-black/20">
             <span>

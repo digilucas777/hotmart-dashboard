@@ -55,9 +55,16 @@ export function PeriodFilter({
     return { prefix, rest }
   }, [customRange, value])
 
-  const updatedLabel = updatedAt
-    ? `Atualizado há ${Math.max(0, Math.floor((Date.now() - updatedAt.getTime()) / 1000))}s`
-    : 'Sincronizando'
+  const updatedLabel = (() => {
+    if (!updatedAt) return 'Sincronizando'
+    const secs = Math.max(0, Math.floor((Date.now() - updatedAt.getTime()) / 1000))
+    if (secs < 60) return `Atualizado há ${secs}s`
+    const mins = Math.floor(secs / 60)
+    if (mins < 60) return `Atualizado há ${mins}min`
+    const hours = Math.floor(mins / 60)
+    if (hours < 24) return `Atualizado há ${hours}h`
+    return `Atualizado há ${Math.floor(hours / 24)}d`
+  })()
 
   function openCustom() {
     setDraftFrom(customFrom)
