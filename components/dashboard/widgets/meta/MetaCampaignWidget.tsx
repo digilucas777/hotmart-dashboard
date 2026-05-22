@@ -28,11 +28,11 @@ export function MetaCampaignWidget({ title, data, isDemo = true }: { title: stri
         <table className="w-full text-xs">
           <thead className="sticky top-0 z-10 bg-[var(--dash-panel)]">
             <tr className="border-b border-white/5">
-              {['Campanha', 'Gasto', 'ROAS', 'CPA', 'Conv.', 'CTR'].map((h, i) => (
+              {['Campanha', 'Conta', 'Gasto', 'ROAS', 'CPA', 'Conv.', 'CTR'].map((h, i) => (
                 <th
                   key={h}
                   className={`py-2.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--dash-faint)] ${
-                    i === 0 ? 'pl-5 pr-3 text-left' : i === 5 ? 'pl-3 pr-5 text-right' : 'px-3 text-right'
+                    i === 0 ? 'pl-5 pr-3 text-left' : i === 1 ? 'px-3 text-left' : i === 6 ? 'pl-3 pr-5 text-right' : 'px-3 text-right'
                   }`}
                 >
                   {h}
@@ -55,6 +55,11 @@ export function MetaCampaignWidget({ title, data, isDemo = true }: { title: stri
                     <span className="line-clamp-1 font-medium text-[var(--dash-text)]">{camp.name}</span>
                   </div>
                 </td>
+                <td className="max-w-[8rem] px-3 py-3">
+                  <span className="block truncate text-[11px] text-[var(--dash-faint)]" title={camp.account_name ?? ''}>
+                    {camp.account_name ?? '—'}
+                  </span>
+                </td>
                 <td className="px-3 py-3 text-right font-mono text-[var(--dash-muted)]">
                   {fmtCurrency(camp.spend)}
                 </td>
@@ -76,7 +81,7 @@ export function MetaCampaignWidget({ title, data, isDemo = true }: { title: stri
                   {camp.conversions}
                 </td>
                 <td className="py-3 pl-3 pr-5 text-right font-mono text-[var(--dash-muted)]">
-                  {camp.ctr}%
+                  {camp.ctr.toFixed(1)}%
                 </td>
               </tr>
             ))}

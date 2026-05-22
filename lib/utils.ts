@@ -436,14 +436,19 @@ export function computeWidgetData(
       }
     }
     case 'by_country': {
-      const groups: Record<string, number> = {}
+      const groups: Record<string, { count: number; revenue: number }> = {}
       approved.forEach(v => {
         const key = v.pais ?? 'Desconhecido'
-        groups[key] = (groups[key] ?? 0) + 1
+        if (!groups[key]) groups[key] = { count: 0, revenue: 0 }
+        groups[key].count += 1
+        groups[key].revenue += getOfficialSaleAmount(v) * (v.moeda === 'USD' ? exchangeRate : 1)
       })
       return {
         kind: 'series',
-        points: Object.entries(groups).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 10),
+        points: Object.entries(groups)
+          .map(([label, g]) => ({ label, value: g.count, valueBRL: g.revenue }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 10),
       }
     }
     case 'by_status': {

@@ -384,6 +384,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [savingLayout, setSavingLayout] = useState(false)
   const [layoutError, setLayoutError] = useState<string | null>(null)
   const [widgetError, setWidgetError] = useState<string | null>(null)
+  const [undoToast, setUndoToast] = useState(false)
+  const undoToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const gridRef = useRef<HTMLDivElement>(null)
 
   const [showProducts, setShowProducts] = useState(false)
@@ -1099,6 +1101,27 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
   }, [activeWidgetId])
 
+  useEffect(() => {
+    if (!editMode) return
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        setUndoStack(prev => {
+          const previous = prev.at(-1)
+          if (!previous) return prev
+          setRedoStack(stack => [...stack, widgets])
+          setWidgets(previous)
+          setUndoToast(true)
+          if (undoToastTimer.current) clearTimeout(undoToastTimer.current)
+          undoToastTimer.current = setTimeout(() => setUndoToast(false), 2000)
+          return prev.slice(0, -1)
+        })
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [editMode, widgets])
+
   const isReady = !loadingWidgets
   const hasUnsavedLayout = !sameLayout(widgets, savedWidgets)
   const previewPlacement = dragPreview ?? resizePreview
@@ -1629,6 +1652,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         onClose={() => setEditingWidgetId(null)}
         onSave={updateWidget}
       />
+
+      {undoToast && (
+        <div className="pointer-events-none fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-2xl border border-white/10 bg-[#1a1a2e]/95 px-5 py-3 text-sm font-semibold text-white shadow-2xl backdrop-blur-sm">
+          Ação desfeita
+        </div>
+      )}
 
       <Modal
         open={showClearModal}

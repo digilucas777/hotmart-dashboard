@@ -36,6 +36,35 @@ const navItems = [
 
 const FOUNDER_EMAILS = ['gestor.digitalcomlucas@gmail.com']
 
+const META_TRAFFIC_TEMPLATE = [
+  // Row 1-8: 4 metric cards
+  { type: 'metric',       data_source: 'total_converted',        title: 'Total Convertido BRL',        width: '1/4', height: 'medium', col_start: 1,  row_start: 1,  col_span: 3, row_span: 8 },
+  { type: 'meta-metric',  data_source: 'meta_spend',             title: 'Gasto Total',                 width: '1/4', height: 'medium', col_start: 4,  row_start: 1,  col_span: 3, row_span: 8 },
+  { type: 'meta-metric',  data_source: 'meta_roas_geral',        title: 'ROAS (Geral)',                width: '1/4', height: 'medium', col_start: 7,  row_start: 1,  col_span: 3, row_span: 8 },
+  { type: 'metric',       data_source: 'lucro',                  title: 'Lucro',                       width: '1/4', height: 'medium', col_start: 10, row_start: 1,  col_span: 3, row_span: 8 },
+  // Row 9-16: 4 metric cards
+  { type: 'metric',       data_source: 'total_usd',              title: 'Faturamento USD',             width: '1/4', height: 'medium', col_start: 1,  row_start: 9,  col_span: 3, row_span: 8 },
+  { type: 'metric',       data_source: 'sales_count',            title: 'Vendas Aprovadas',            width: '1/4', height: 'medium', col_start: 4,  row_start: 9,  col_span: 3, row_span: 8 },
+  { type: 'metric',       data_source: 'pending_count',          title: 'Pendentes',                   width: '1/4', height: 'medium', col_start: 7,  row_start: 9,  col_span: 3, row_span: 8 },
+  { type: 'meta-metric',  data_source: 'meta_page_views',        title: 'Visualizações de Página',     width: '1/4', height: 'medium', col_start: 10, row_start: 9,  col_span: 3, row_span: 8 },
+  // Row 17-24: 4 metric cards
+  { type: 'meta-metric',  data_source: 'meta_checkout_initiated',title: 'Checkouts Iniciados',         width: '1/4', height: 'medium', col_start: 1,  row_start: 17, col_span: 3, row_span: 8 },
+  { type: 'meta-metric',  data_source: 'meta_cpm',               title: 'CPM',                         width: '1/4', height: 'medium', col_start: 4,  row_start: 17, col_span: 3, row_span: 8 },
+  { type: 'meta-metric',  data_source: 'meta_ctr',               title: 'CTR',                         width: '1/4', height: 'medium', col_start: 7,  row_start: 17, col_span: 3, row_span: 8 },
+  { type: 'meta-metric',  data_source: 'meta_link_clicks',       title: 'Cliques no Link',             width: '1/4', height: 'medium', col_start: 10, row_start: 17, col_span: 3, row_span: 8 },
+  // Row 25-32: 3 metric cards
+  { type: 'meta-metric',  data_source: 'meta_frequency',         title: 'Frequência',                  width: '1/4', height: 'medium', col_start: 1,  row_start: 25, col_span: 3, row_span: 8 },
+  { type: 'meta-metric',  data_source: 'meta_hook_rate',         title: 'Hook Rate',                   width: '1/4', height: 'medium', col_start: 4,  row_start: 25, col_span: 3, row_span: 8 },
+  { type: 'meta-metric',  data_source: 'meta_connect_rate',      title: 'Connect Rate',                width: '1/4', height: 'medium', col_start: 7,  row_start: 25, col_span: 3, row_span: 8 },
+  // Row 33-50: full-width ranking table
+  { type: 'meta-creative',data_source: 'meta_creatives_ctr',     title: 'Ranking de Criativos',        width: 'full', height: 'large', col_start: 1,  row_start: 33, col_span: 12, row_span: 18 },
+  // Row 51-70: full-width campaigns table
+  { type: 'meta-campaign', data_source: 'meta_campaigns',        title: 'Performance de Campanhas',    width: 'full', height: 'large', col_start: 1,  row_start: 51, col_span: 12, row_span: 20 },
+  // Row 71-88: pie + line
+  { type: 'pie',           data_source: 'by_country',            title: 'Por País',                    width: '1/3', height: 'large', col_start: 1,  row_start: 71, col_span: 4,  row_span: 18 },
+  { type: 'line',          data_source: 'revenue_by_day',        title: 'Faturamento por Dia',         width: '2/3', height: 'large', col_start: 5,  row_start: 71, col_span: 8,  row_span: 18 },
+] as const
+
 export function UserAppShell() {
   const router = useRouter()
   const [name, setName] = useState('Usuário')
@@ -57,6 +86,7 @@ export function UserAppShell() {
   const [dashboardCategory, setDashboardCategory] = useState('')
   const [dashboardImage, setDashboardImage] = useState('')
   const [dashboardStatus, setDashboardStatus] = useState('active')
+  const [dashboardTemplate, setDashboardTemplate] = useState<'blank' | 'meta-traffic'>('blank')
   const [error, setError] = useState('')
 
   async function loadDashboards() {
@@ -120,18 +150,27 @@ export function UserAppShell() {
       .select()
       .single()
 
-    setCreating(false)
-
     if (createError || !data) {
+      setCreating(false)
       setError('Não foi possível criar o dashboard agora.')
       return
     }
 
+    const newProject = data as Projeto
+
+    if (dashboardTemplate === 'meta-traffic') {
+      await supabase.from('dashboard_widgets').insert(
+        META_TRAFFIC_TEMPLATE.map((w, i) => ({ ...w, projeto_id: newProject.id, position: i })),
+      )
+    }
+
+    setCreating(false)
     setShowCreate(false)
     setDashboardName('')
     setDashboardDescription('')
-    setDashboards(prev => [data as Projeto, ...prev])
-    router.push(`/dashboard/${(data as Projeto).id}`)
+    setDashboardTemplate('blank')
+    setDashboards(prev => [newProject, ...prev])
+    router.push(`/dashboard/${newProject.id}`)
   }
 
   function openEditDashboard(dashboard: Projeto) {
@@ -598,6 +637,36 @@ export function UserAppShell() {
               <button type="button" onClick={() => setShowCreate(false)} className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 text-slate-400 hover:text-white">
                 <X size={17} />
               </button>
+            </div>
+
+            <div className="mb-4">
+              <span className="mb-1.5 block text-xs font-semibold text-slate-500">Template</span>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDashboardTemplate('blank')}
+                  className={`rounded-2xl border px-3 py-2.5 text-left text-sm font-semibold transition-all ${
+                    dashboardTemplate === 'blank'
+                      ? 'border-cyan-400/60 bg-cyan-400/10 text-cyan-200'
+                      : 'border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-200'
+                  }`}
+                >
+                  <p>Em branco</p>
+                  <p className="mt-0.5 text-[11px] font-normal opacity-60">Dashboard vazio</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDashboardTemplate('meta-traffic')}
+                  className={`rounded-2xl border px-3 py-2.5 text-left text-sm font-semibold transition-all ${
+                    dashboardTemplate === 'meta-traffic'
+                      ? 'border-violet-400/60 bg-violet-400/10 text-violet-200'
+                      : 'border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-200'
+                  }`}
+                >
+                  <p>Tráfego Meta Ads</p>
+                  <p className="mt-0.5 text-[11px] font-normal opacity-60">19 widgets pré-configurados</p>
+                </button>
+              </div>
             </div>
 
             <label className="block">

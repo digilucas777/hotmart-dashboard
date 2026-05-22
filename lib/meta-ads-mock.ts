@@ -77,6 +77,7 @@ export type MetaCampaignResult = {
   campaigns: {
     id: string
     name: string
+    account_name?: string
     status: 'ACTIVE' | 'PAUSED'
     spend: number
     revenue: number

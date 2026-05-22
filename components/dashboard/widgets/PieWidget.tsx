@@ -11,23 +11,32 @@ import type { SeriesPoint } from '@/lib/utils'
 
 const PIE_COLORS = ['#00d4ff', '#a78bfa', '#22c55e', '#38bdf8', '#7c3aed', '#ef4444', '#64748b']
 const DEMO_DATA = [
-  { name: 'Aguardando', value: 42 },
-  { name: 'Dados', value: 28 },
-  { name: 'Reais', value: 18 },
+  { name: 'Aguardando', value: 42, revenue: 0 },
+  { name: 'Dados', value: 28, revenue: 0 },
+  { name: 'Reais', value: 18, revenue: 0 },
 ]
+
+const fmtBRL = (n: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n)
 
 function CustomTooltip({
   active,
   payload,
 }: {
   active?: boolean
-  payload?: { name: string; value: number }[]
+  payload?: { name: string; value: number; payload?: { revenue?: number } }[]
 }) {
   if (!active || !payload?.length) return null
+  const item = payload[0]!
+  const revenue = item.payload?.revenue ?? 0
+  const count = item.value
   return (
     <div className="rounded-xl border border-white/10 bg-[#0f0f1e] px-3 py-2 shadow-xl">
-      <p className="text-sm font-semibold text-slate-100">{payload[0].name}</p>
-      <p className="text-xs text-slate-500">{payload[0].value.toLocaleString('pt-BR')}</p>
+      <p className="text-sm font-semibold text-slate-100">{item.name}</p>
+      <p className="text-xs text-slate-400">
+        {count.toLocaleString('pt-BR')} {count === 1 ? 'venda' : 'vendas'}
+        {revenue > 0 && ` | ${fmtBRL(revenue)}`}
+      </p>
     </div>
   )
 }
@@ -42,9 +51,11 @@ export function PieWidget({
   chartHeight?: number
 }) {
   const empty = points.length === 0 || points.every(point => (point.value ?? 0) === 0)
-  const data = empty ? DEMO_DATA : points.map(p => ({ name: p.label, value: p.value }))
+  const data = empty
+    ? DEMO_DATA
+    : points.map(p => ({ name: p.label, value: p.value, revenue: p.valueBRL ?? 0 }))
   const total = data.reduce((sum, item) => sum + item.value, 0)
-  const top = data.reduce((best, item) => item.value > best.value ? item : best, data[0])
+  const top = data.reduce((best, item) => item.value > best.value ? item : best, data[0]!)
   const topPercent = total > 0 ? Math.round((top.value / total) * 100) : 0
   const legendRows = Math.ceil(data.length / 2)
   const chartAreaHeight = Math.max(100, Math.min(chartHeight - legendRows * 24 - 20, 300))
@@ -90,6 +101,7 @@ export function PieWidget({
             <div key={item.name} className="flex min-w-0 items-center gap-2 text-xs font-medium text-[var(--dash-text)]">
               <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
               <span className="truncate leading-4">{item.name}</span>
+              <span className="ml-auto shrink-0 text-[10px] text-[var(--dash-faint)]">{item.value}</span>
             </div>
           ))}
         </div>

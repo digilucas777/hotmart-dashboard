@@ -26,6 +26,7 @@ type CampaignsResponse = { data?: MetaCampaign[] }
 type Campaign = {
   id: string
   name: string
+  account_name: string
   status: 'ACTIVE' | 'PAUSED'
   spend: number
   revenue: number
@@ -38,6 +39,7 @@ type Campaign = {
 
 async function fetchAccountCampaigns(
   accountId: string,
+  accountName: string,
   accessToken: string,
   datePreset: string,
 ): Promise<Campaign[]> {
@@ -66,6 +68,7 @@ async function fetchAccountCampaigns(
     return {
       id: camp.id,
       name: camp.name,
+      account_name: accountName,
       status: camp.status as 'ACTIVE' | 'PAUSED',
       spend,
       revenue: Math.round(spend * roas),
@@ -102,31 +105,34 @@ export async function GET(request: Request) {
     .maybeSingle()
   if (!connection) return NextResponse.json({ error: 'no_connection' }, { status: 400 })
 
-  let accountIds: string[] = []
+  let accountEntries: { id: string; name: string }[] = []
   if (projetoId) {
     const { data: pa } = await supabase
       .from('meta_project_accounts')
-      .select('account_id')
+      .select('account_id, account_name')
       .eq('projeto_id', projetoId)
-    accountIds = (pa ?? []).map((r: { account_id: string }) => r.account_id)
-    console.log('[CAMPAIGNS] meta_project_accounts found:', accountIds.length, 'accounts')
+    accountEntries = (pa ?? []).map((r: { account_id: string; account_name: string | null }) => ({
+      id: r.account_id,
+      name: r.account_name ?? r.account_id,
+    }))
+    console.log('[CAMPAIGNS] meta_project_accounts found:', accountEntries.length, 'accounts')
   }
-  if (accountIds.length === 0 && legacyAccountId) {
-    accountIds = [legacyAccountId]
+  if (accountEntries.length === 0 && legacyAccountId) {
+    accountEntries = [{ id: legacyAccountId, name: legacyAccountId }]
     console.log('[CAMPAIGNS] fallback to legacy account_id')
   }
-  if (accountIds.length === 0) return NextResponse.json({ error: 'no_accounts' }, { status: 400 })
+  if (accountEntries.length === 0) return NextResponse.json({ error: 'no_accounts' }, { status: 400 })
 
   try {
     const perAccount = await Promise.all(
-      accountIds.map(aid => fetchAccountCampaigns(aid, connection.access_token, datePreset)),
+      accountEntries.map(entry => fetchAccountCampaigns(entry.id, entry.name, connection.access_token, datePreset)),
     )
 
     const campaigns = perAccount
       .flat()
       .sort((a, b) => b.roas - a.roas)
 
-    console.log('[CAMPAIGNS] returning', campaigns.length, 'campaigns from', accountIds.length, 'account(s)')
+    console.log('[CAMPAIGNS] returning', campaigns.length, 'campaigns from', accountEntries.length, 'account(s)')
     return NextResponse.json({ kind: 'meta-campaign', campaigns })
   } catch (err) {
     console.error('[CAMPAIGNS] erro completo:', err)
