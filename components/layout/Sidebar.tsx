@@ -28,7 +28,6 @@ function isNavActive(href: string, pathname: string): boolean {
 }
 
 export function Sidebar() {
-  const [expanded, setExpanded] = useState(false)
   const [companyName, setCompanyName] = useState('')
   const pathname = usePathname()
   const router = useRouter()
@@ -64,13 +63,9 @@ export function Sidebar() {
         left: 0,
         height: '100vh',
         zIndex: 50,
-        width: expanded ? '220px' : '60px',
-        transition: 'width 0.2s ease',
         background: '#07080d',
         borderRight: '1px solid rgba(255,255,255,0.07)',
       }}
-      onMouseEnter={() => setExpanded(true)}
-      onMouseLeave={() => setExpanded(false)}
     >
       {/* Logo */}
       <div
@@ -80,10 +75,7 @@ export function Sidebar() {
         <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-violet-500 shadow-lg shadow-cyan-500/20">
           <LayoutDashboard size={15} className="text-white" />
         </div>
-        <span
-          className="whitespace-nowrap text-sm font-bold text-slate-100"
-          style={{ opacity: expanded ? 1 : 0, transition: 'opacity 0.15s ease' }}
-        >
+        <span className="app-sidebar-label text-sm font-bold text-slate-100">
           {companyName || 'Dash Speed'}
         </span>
       </div>
@@ -97,7 +89,7 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              title={!expanded ? item.label : undefined}
+              title={item.label}
               className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors ${
                 active
                   ? 'text-cyan-100'
@@ -106,10 +98,7 @@ export function Sidebar() {
               style={active ? { background: 'linear-gradient(135deg, rgba(0,212,255,0.12), rgba(139,92,246,0.12))' } : undefined}
             >
               <Icon size={17} className="flex-shrink-0" />
-              <span
-                className="whitespace-nowrap text-sm font-medium"
-                style={{ opacity: expanded ? 1 : 0, transition: 'opacity 0.15s ease' }}
-              >
+              <span className="app-sidebar-label text-sm font-medium">
                 {item.label}
               </span>
             </Link>
@@ -121,14 +110,11 @@ export function Sidebar() {
       <div className="app-sidebar-logout p-2" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
         <button
           onClick={handleLogout}
-          title={!expanded ? 'Sair' : undefined}
+          title="Sair"
           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-slate-500 transition-colors hover:bg-red-500/10 hover:text-red-400"
         >
           <LogOut size={17} className="flex-shrink-0" />
-          <span
-            className="whitespace-nowrap text-sm font-medium"
-            style={{ opacity: expanded ? 1 : 0, transition: 'opacity 0.15s ease' }}
-          >
+          <span className="app-sidebar-label text-sm font-medium">
             Sair
           </span>
         </button>

@@ -1074,8 +1074,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   useEffect(() => {
     if (!activeWidgetId) return
 
-    document.body.style.overflow = 'hidden'
-
     let pointerY = 0
     const onPointerMove = (e: PointerEvent) => { pointerY = e.clientY }
     window.addEventListener('pointermove', onPointerMove)
@@ -1095,7 +1093,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     rafId = requestAnimationFrame(tick)
 
     return () => {
-      document.body.style.overflow = ''
       window.removeEventListener('pointermove', onPointerMove)
       cancelAnimationFrame(rafId)
     }
@@ -1317,6 +1314,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               customTo={customTo}
               updatedAt={lastUpdatedAt}
               onCustomChange={(from, to) => { setCustomFrom(from); setCustomTo(to) }}
+              hasMetaAds={!!linkedMetaAccountId}
             />
           </div>
           <div className="dashboard-action-bar dashboard-panel ml-auto flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-1.5 overflow-x-auto rounded-xl p-1">
@@ -1446,11 +1444,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             )}
           </div>
         </div>
-        {linkedMetaAccountId && (
-          <p className="mb-3 text-right text-xs text-slate-500">
-            ⏱ Dados Meta Ads atualizados a cada 30 minutos
-          </p>
-        )}
         {editMode && (
           <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--dash-border)] bg-[var(--dash-panel)] px-4 py-3 text-xs text-[var(--dash-muted)] shadow-xl shadow-black/20">
             <span>

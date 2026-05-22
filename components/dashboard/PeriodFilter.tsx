@@ -21,6 +21,7 @@ interface PeriodFilterProps {
   customTo?: string
   onCustomChange?: (from: string, to: string) => void
   updatedAt?: Date | null
+  hasMetaAds?: boolean
 }
 
 function isoDate(d: Date) {
@@ -39,6 +40,7 @@ export function PeriodFilter({
   customTo = '',
   onCustomChange,
   updatedAt,
+  hasMetaAds,
 }: PeriodFilterProps) {
   const [showCustom, setShowCustom] = useState(false)
   const [draftFrom, setDraftFrom] = useState(customFrom)
@@ -135,6 +137,9 @@ export function PeriodFilter({
           <Clock3 size={12} className="text-[var(--dash-faint)]" />
           {updatedLabel}
         </span>
+        {hasMetaAds && (
+          <span className="ml-auto text-xs text-slate-500">⏱ Dados Meta Ads atualizados a cada 30 min</span>
+        )}
       </div>
 
       {showCustom && (

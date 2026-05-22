@@ -159,9 +159,20 @@ export function UserAppShell() {
     const newProject = data as Projeto
 
     if (dashboardTemplate === 'meta-traffic') {
-      await supabase.from('dashboard_widgets').insert(
-        META_TRAFFIC_TEMPLATE.map((w, i) => ({ ...w, projeto_id: newProject.id, position: i })),
-      )
+      const rows = META_TRAFFIC_TEMPLATE.map((w, i) => ({ ...w, projeto_id: newProject.id, position: i }))
+      const { error: tplErr } = await supabase.from('dashboard_widgets').insert(rows)
+      if (tplErr) {
+        const fallback = META_TRAFFIC_TEMPLATE.map((w, i) => ({
+          type: w.type,
+          data_source: w.data_source,
+          title: w.title,
+          width: w.width,
+          height: w.height,
+          projeto_id: newProject.id,
+          position: i,
+        }))
+        await supabase.from('dashboard_widgets').insert(fallback)
+      }
     }
 
     setCreating(false)

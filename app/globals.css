@@ -259,6 +259,24 @@ body {
   }
 }
 
+@media (min-width: 761px) {
+  .app-sidebar {
+    width: 60px;
+    transition: width 0.2s ease;
+  }
+  .app-sidebar:hover {
+    width: 220px;
+  }
+  .app-sidebar-label {
+    opacity: 0;
+    white-space: nowrap;
+    transition: opacity 0.15s ease;
+  }
+  .app-sidebar:hover .app-sidebar-label {
+    opacity: 1;
+  }
+}
+
 @media (max-width: 760px) {
   .app-sidebar {
     position: fixed !important;
