@@ -11,6 +11,7 @@ import {
   Settings,
   LayoutDashboard,
   LogOut,
+  ShieldCheck,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -29,11 +30,12 @@ function isNavActive(href: string, pathname: string): boolean {
 
 export function Sidebar() {
   const [companyName, setCompanyName] = useState('')
+  const [isAdmin, setIsAdmin] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return
       supabase
         .from('configuracoes')
@@ -43,6 +45,12 @@ export function Sidebar() {
         .then(({ data }) => {
           if (data?.nome_empresa) setCompanyName(data.nome_empresa as string)
         })
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle()
+      if (profile?.role === 'admin') setIsAdmin(true)
     })
   }, [])
 
@@ -104,6 +112,21 @@ export function Sidebar() {
             </Link>
           )
         })}
+        {isAdmin && (
+          <Link
+            href="/admin"
+            title="Admin"
+            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors ${
+              pathname === '/admin'
+                ? 'text-cyan-100'
+                : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
+            }`}
+            style={pathname === '/admin' ? { background: 'linear-gradient(135deg, rgba(0,212,255,0.12), rgba(139,92,246,0.12))' } : undefined}
+          >
+            <ShieldCheck size={17} className="flex-shrink-0" />
+            <span className="app-sidebar-label text-sm font-medium">Admin</span>
+          </Link>
+        )}
       </nav>
 
       {/* Logout */}

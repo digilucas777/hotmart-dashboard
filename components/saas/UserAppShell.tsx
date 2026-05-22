@@ -34,8 +34,6 @@ const navItems = [
   { label: 'Configurações', icon: Settings, href: '/configuracoes' },
 ]
 
-const FOUNDER_EMAILS = ['gestor.digitalcomlucas@gmail.com']
-
 const META_TRAFFIC_TEMPLATE = [
   // Row 1-8: 4 metric cards
   { type: 'metric',       data_source: 'total_converted',        title: 'Total Convertido BRL',        width: '1/4', height: 'medium', col_start: 1,  row_start: 1,  col_span: 3, row_span: 8 },
@@ -69,6 +67,7 @@ export function UserAppShell() {
   const router = useRouter()
   const [name, setName] = useState('Usuário')
   const [email, setEmail] = useState('')
+  const [isAdmin, setIsAdmin] = useState(false)
   const [dashboards, setDashboards] = useState<Projeto[]>([])
   const [widgetsCount, setWidgetsCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -119,10 +118,18 @@ export function UserAppShell() {
   useEffect(() => {
     let active = true
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!active) return
       setName(user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Usuário')
       setEmail(user?.email ?? '')
+      if (user) {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle()
+        if (active && profile?.role === 'admin') setIsAdmin(true)
+      }
     })
 
     Promise.resolve().then(loadDashboards).finally(() => {
@@ -361,10 +368,6 @@ export function UserAppShell() {
     [dashboards.length, widgetsCount],
   )
 
-  const isFounder = FOUNDER_EMAILS.includes(email.toLowerCase()) || email.toLowerCase().startsWith('gestor.digitalcomlucas@')
-  const dashboardsLimit = isFounder ? Infinity : 3
-  const dashboardsAvailable = isFounder ? 'Ilimitados' : String(Math.max(0, dashboardsLimit - dashboards.length))
-  const planProgress = isFounder ? 100 : Math.min(100, (dashboards.length / dashboardsLimit) * 100)
   const recentDashboards = dashboards.slice(0, 3)
   const lastEdited = dashboards[0]
 
@@ -373,7 +376,7 @@ export function UserAppShell() {
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-white/10 bg-[#0b0d14]/90 p-5 backdrop-blur-2xl lg:block">
         <DashSpeedLogo />
         <nav className="mt-10 space-y-2">
-          {navItems.map(({ label, icon: Icon, href }, index) => (
+          {navItems.filter(item => item.label !== 'Billing').map(({ label, icon: Icon, href }, index) => (
             <Link
               key={label}
               href={href}
@@ -385,27 +388,17 @@ export function UserAppShell() {
               {label}
             </Link>
           ))}
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-500 transition-colors hover:bg-white/[0.05] hover:text-white"
+            >
+              <ShieldCheck size={18} />
+              Admin
+            </Link>
+          )}
         </nav>
-        <div className="absolute inset-x-5 bottom-5 overflow-hidden rounded-3xl border border-cyan-300/15 bg-[linear-gradient(135deg,rgba(0,212,255,0.08),rgba(139,92,246,0.1))] p-4 shadow-[0_0_34px_rgba(0,212,255,0.08)]">
-          <p className="text-xs text-slate-500">Plano atual</p>
-          <p className="mt-1 font-black">{isFounder ? 'Founder ilimitado' : 'Pro'}</p>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-2xl bg-black/20 p-2">
-              <p className="text-slate-500">Usados</p>
-              <p className="font-black text-white">{dashboards.length}</p>
-            </div>
-            <div className="rounded-2xl bg-black/20 p-2">
-              <p className="text-slate-500">Disponíveis</p>
-              <p className="font-black text-white">{dashboardsAvailable}</p>
-            </div>
-          </div>
-          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full rounded-full bg-gradient-to-r from-cyan-300 to-violet-400" style={{ width: `${planProgress}%` }} />
-          </div>
-          <Link href="/pricing" className="mt-3 inline-flex text-sm font-bold text-cyan-200 hover:text-white">
-            Gerenciar assinatura
-          </Link>
-        </div>
+        {/* billing card hidden */}
       </aside>
 
       <div className="lg:pl-72">
@@ -620,16 +613,13 @@ export function UserAppShell() {
               <h2 className="text-lg font-black">Conectar integrações</h2>
               <p className="mt-2 text-sm text-slate-400">Abra a área de integrações para conectar WhatsApp e preparar as próximas fontes de dados.</p>
             </Link>
-            <Link href="/pricing" className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 transition-colors hover:border-cyan-300/30">
-              <h2 className="text-lg font-black">Billing preparado</h2>
-              <p className="mt-2 text-sm text-slate-400">Veja planos e estrutura futura para assinatura mensal, upgrade e downgrade.</p>
-            </Link>
+            {/* billing preparado card hidden */}
           </section>
         </main>
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-white/10 bg-[#0b0d14]/95 p-2 backdrop-blur-2xl lg:hidden">
-        {navItems.map(({ label, icon: Icon, href }, index) => (
+        {navItems.filter(item => item.label !== 'Billing').map(({ label, icon: Icon, href }, index) => (
           <Link key={label} href={href} className={`flex flex-1 flex-col items-center justify-center rounded-2xl px-2 py-2 text-[10px] font-bold ${index === 0 ? 'bg-cyan-400/10 text-cyan-100' : 'text-slate-500'}`}>
             <Icon size={17} />
             <span className="mt-1">{label.split(' ')[0]}</span>
