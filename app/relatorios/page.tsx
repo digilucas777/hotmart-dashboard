@@ -284,6 +284,7 @@ export default function RelatoriosPage() {
   const [metaInsights, setMetaInsights] = useState<MetaInsights | null>(null)
   const [isMetaConnected, setIsMetaConnected] = useState(false)
   const [exchangeRate, setExchangeRate] = useState(5.85)
+  const [selectedTemplate, setSelectedTemplate] = useState<'recuperacao' | 'trafego' | null>(null)
 
   const previewRef = useRef<HTMLDivElement>(null)
   const selectedProject = projetos.find(p => p.id === form.projeto_id)
@@ -565,6 +566,7 @@ export default function RelatoriosPage() {
       setMetricas(['total_converted', 'total_usd', 'meta_spend', 'lucro', 'meta_roas_geral', 'sales_count', 'pending_count', 'top_produtos'])
     }
     setForm(prev => ({ ...prev, mensagem: msg }))
+    setSelectedTemplate(template)
   }
 
   async function copyToClipboard() {
@@ -781,14 +783,24 @@ export default function RelatoriosPage() {
                     <button
                       type="button"
                       onClick={() => applyTemplate('recuperacao')}
-                      className="flex-1 rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-xs font-bold text-indigo-300 transition-colors hover:bg-indigo-500/20"
+                      className={`flex-1 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
+                        selectedTemplate === 'recuperacao'
+                          ? 'border-cyan-400/60 text-white'
+                          : 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20'
+                      }`}
+                      style={selectedTemplate === 'recuperacao' ? { background: 'linear-gradient(135deg, #06b6d4 0%, #8b5cf6 100%)' } : undefined}
                     >
                       Template Recuperação
                     </button>
                     <button
                       type="button"
                       onClick={() => applyTemplate('trafego')}
-                      className="flex-1 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-xs font-bold text-violet-300 transition-colors hover:bg-violet-500/20"
+                      className={`flex-1 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
+                        selectedTemplate === 'trafego'
+                          ? 'border-violet-400/60 text-white'
+                          : 'border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20'
+                      }`}
+                      style={selectedTemplate === 'trafego' ? { background: 'linear-gradient(135deg, #06b6d4 0%, #8b5cf6 100%)' } : undefined}
                     >
                       Template Tráfego
                     </button>
