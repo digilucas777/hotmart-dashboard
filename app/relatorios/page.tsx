@@ -159,7 +159,7 @@ function reportRange(period: string, customFrom?: string, customTo?: string) {
   return { from: today, to: new Date(today.getTime() + day) }
 }
 
-function buildTopProdutos(vendas: Venda[], exchangeRate = 5.85): string {
+function buildTopProdutos(vendas: Venda[]): string {
   const approved = vendas.filter(v => v.status === 'approved')
   const map = new Map<string, { count: number; brl: number; foreignUsd: number }>()
   for (const v of approved) {
@@ -168,7 +168,7 @@ function buildTopProdutos(vendas: Venda[], exchangeRate = 5.85): string {
     entry.count++
     const amount = getOfficialSaleAmount(v)
     if (v.moeda === 'BRL') entry.brl += amount
-    else entry.foreignUsd += amount / exchangeRate
+    else entry.foreignUsd += amount
     map.set(name, entry)
   }
   const sorted = Array.from(map.entries())
@@ -183,6 +183,17 @@ function buildTopProdutos(vendas: Venda[], exchangeRate = 5.85): string {
     lines.push(`  ${i + 1}. ${name} — ${count} venda${count !== 1 ? 's' : ''} | ${value}`)
   })
   return lines.join('\n')
+}
+
+function buildPeriodoLabel(period: string, customFrom?: string, customTo?: string): string {
+  const fmt = (d: Date) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const day = 86_400_000
+  if (period === 'today') return `Hoje ${fmt(today)}`
+  if (period === 'yesterday') return `Ontem ${fmt(new Date(today.getTime() - day))}`
+  const { from, to } = reportRange(period, customFrom, customTo)
+  return `de ${fmt(from)} a ${fmt(new Date(to.getTime() - day))}`
 }
 
 function buildMetricValue(vendas: Venda[], metric: WidgetDataSource, insights?: MetaInsights | null, isMetaConnected?: boolean, exchangeRate = 5.85) {
@@ -422,16 +433,16 @@ export default function RelatoriosPage() {
 
     metricas.forEach(metric => {
       if (metric === 'top_produtos') {
-        lines.push('', buildTopProdutos(vendas, exchangeRate))
+        lines.push('', buildTopProdutos(vendas))
       } else {
         const option = ALL_METRICS.find(o => o.value === metric)
         lines.push(`• ${option?.label ?? metric}: ${buildMetricValue(vendas, metric, metaInsights, isMetaConnected, exchangeRate)}`)
       }
     })
 
-    lines.push('', `Período: ${PERIOD_OPTIONS.find(p => p.value === form.periodo)?.label ?? form.periodo}`)
+    lines.push('', `Período: ${buildPeriodoLabel(form.periodo, customFrom, customTo)}`)
     return lines.join('\n')
-  }, [form.mensagem, form.periodo, metricas, selectedProject?.nome, vendas, metaInsights, isMetaConnected, exchangeRate])
+  }, [form.mensagem, form.periodo, metricas, selectedProject?.nome, vendas, metaInsights, isMetaConnected, exchangeRate, customFrom, customTo])
 
   useEffect(() => {
     setMessageText(generatedMessage)
