@@ -563,7 +563,7 @@ export default function RelatoriosPage() {
     if (template === 'recuperacao') {
       setMetricas(['total_converted', 'total_brl', 'total_usd', 'sales_count', 'pending_count', 'refunds_count', 'top_produtos'])
     } else {
-      setMetricas(['total_converted', 'total_usd', 'meta_spend', 'lucro', 'meta_roas_geral', 'sales_count', 'pending_count', 'top_produtos'])
+      setMetricas(['total_converted', 'total_usd', 'meta_spend', 'sales_count', 'pending_count', 'refunds_count', 'cancelled_count', 'lucro', 'meta_roas_geral', 'top_produtos'])
     }
     setForm(prev => ({ ...prev, mensagem: msg }))
     setSelectedTemplate(template)
