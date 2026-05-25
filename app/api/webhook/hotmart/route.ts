@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const priceObj = dados.purchase?.original_offer_price ?? dados.purchase?.price
+    const priceObj = dados.purchase?.price ?? dados.purchase?.original_offer_price
     const valorBruto: number = Number(priceObj?.value ?? 0)
     const moeda: string = priceObj?.currency_value ?? 'BRL'
     const commissions = (dados.commissions ?? []) as HotmartCommission[]
