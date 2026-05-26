@@ -23,19 +23,32 @@ interface HotmartCommission {
 async function fixMoedasEstrangeiras() {
   const MOEDAS_ESTRANGEIRAS = ['GBP','EUR','MXN','COP','PEN','ARS','NGN','CAD','AUD','HNL','JPY','CHF']
 
-  const { data: vendas, error } = await supabase
-    .from('vendas')
-    .select('id, hotmart_id, moeda, valor_bruto, taxa_hotmart, valor_operacional_final, hotmart_payload')
-    .eq('taxa_hotmart', 0)
-    .in('moeda', MOEDAS_ESTRANGEIRAS)
+  const [res1, res2] = await Promise.all([
+    supabase
+      .from('vendas')
+      .select('id, hotmart_id, moeda, valor_bruto, taxa_hotmart, valor_operacional_final, hotmart_payload')
+      .eq('taxa_hotmart', 0)
+      .in('moeda', MOEDAS_ESTRANGEIRAS),
+    supabase
+      .from('vendas')
+      .select('id, hotmart_id, moeda, valor_bruto, taxa_hotmart, valor_operacional_final, hotmart_payload')
+      .eq('moeda', 'USD')
+      .lt('valor_operacional_final', 1)
+      .not('hotmart_payload', 'is', null),
+  ])
 
-  if (error) {
-    console.error('Erro ao buscar vendas:', error.message)
-    process.exit(1)
-  }
+  if (res1.error) { console.error('Erro query 1:', res1.error.message); process.exit(1) }
+  if (res2.error) { console.error('Erro query 2:', res2.error.message); process.exit(1) }
 
-  if (!vendas || vendas.length === 0) {
-    console.log('Nenhuma venda com moeda estrangeira e taxa_hotmart = 0 encontrada.')
+  const seen = new Set<string>()
+  const vendas = [...(res1.data ?? []), ...(res2.data ?? [])].filter(v => {
+    if (seen.has(v.id)) return false
+    seen.add(v.id)
+    return true
+  })
+
+  if (vendas.length === 0) {
+    console.log('Nenhuma venda para corrigir encontrada.')
     return
   }
 
