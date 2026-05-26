@@ -21,12 +21,13 @@ interface HotmartCommission {
 }
 
 async function fixMoedasEstrangeiras() {
+  const MOEDAS_ESTRANGEIRAS = ['GBP','EUR','MXN','COP','PEN','ARS','NGN','CAD','AUD','HNL','JPY','CHF']
+
   const { data: vendas, error } = await supabase
     .from('vendas')
     .select('id, hotmart_id, moeda, valor_bruto, taxa_hotmart, valor_operacional_final, hotmart_payload')
     .eq('taxa_hotmart', 0)
-    .neq('moeda', 'USD')
-    .neq('moeda', 'BRL')
+    .in('moeda', MOEDAS_ESTRANGEIRAS)
 
   if (error) {
     console.error('Erro ao buscar vendas:', error.message)
@@ -34,7 +35,7 @@ async function fixMoedasEstrangeiras() {
   }
 
   if (!vendas || vendas.length === 0) {
-    console.log('Nenhuma venda com moeda estrangeira (não-USD, não-BRL) e taxa_hotmart = 0 encontrada.')
+    console.log('Nenhuma venda com moeda estrangeira e taxa_hotmart = 0 encontrada.')
     return
   }
 
@@ -48,9 +49,10 @@ async function fixMoedasEstrangeiras() {
     }
 
     const dados = payload?.data
-    const priceObj = dados?.purchase?.price ?? dados?.purchase?.original_offer_price
+    // purchase.price já vem em USD para vendas internacionais
+    const priceObj = dados?.purchase?.price
     const valorBruto: number = Number(priceObj?.value ?? 0)
-    const moeda: string = priceObj?.currency_value ?? venda.moeda
+    const moeda: string = priceObj?.currency_value ?? 'USD'
     const commissions = (dados?.commissions ?? []) as HotmartCommission[]
 
     const taxaHotmart = commissions
