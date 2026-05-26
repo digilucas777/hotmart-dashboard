@@ -49,16 +49,18 @@ async function fixMoedasEstrangeiras() {
     }
 
     const dados = payload?.data
-    // purchase.price já vem em USD para vendas internacionais
-    const priceObj = dados?.purchase?.price
-    const valorBruto: number = Number(priceObj?.value ?? 0)
-    const moeda: string = priceObj?.currency_value ?? 'USD'
     const commissions = (dados?.commissions ?? []) as HotmartCommission[]
 
-    const taxaHotmart = commissions
-      .filter(c => c.currency_value === moeda && String(c.source ?? '').toUpperCase() === 'MARKETPLACE')
+    // Vendas internacionais: valor_bruto = commission PRODUCER em USD
+    const valorBruto: number = commissions
+      .filter(c => c.currency_value === 'USD' && String(c.source ?? '').toUpperCase() === 'PRODUCER')
       .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
 
+    const taxaHotmart: number = commissions
+      .filter(c => c.currency_value === 'USD' && String(c.source ?? '').toUpperCase() === 'MARKETPLACE')
+      .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
+
+    const moeda = 'USD'
     const valorOperacionalFinal = roundMoney(valorBruto - taxaHotmart)
 
     console.log(`[${venda.hotmart_id}] ${venda.moeda} ${venda.valor_bruto} → ${moeda} ${valorBruto}`)

@@ -43,19 +43,42 @@ export async function POST(req: NextRequest) {
     }
 
     const priceObj = dados.purchase?.price ?? dados.purchase?.original_offer_price
-    const valorBruto: number = Number(priceObj?.value ?? 0)
-    const moeda: string = priceObj?.currency_value ?? 'BRL'
+    const priceCurrency: string = priceObj?.currency_value ?? 'BRL'
     const commissions = (dados.commissions ?? []) as HotmartCommission[]
-    const taxaHotmart = sameCurrencyValue(commissions, moeda, source => source === 'MARKETPLACE')
-    const comissaoProdutor = sameCurrencyValue(commissions, moeda, source =>
-      source === 'PRODUCER' || source === 'SELLER' || source === 'VENDOR' || source.includes('OWNER'),
-    )
-    const coproducerCommission = sameCurrencyValue(commissions, moeda, source =>
-      source.includes('COPRODUCER') || source.includes('CO_PRODUCER') || source.includes('CO-PRODUCER') || source.includes('COPRODUTOR'),
-    )
-    const comissaoAfiliado = sameCurrencyValue(commissions, moeda, source =>
-      source.includes('AFFILIATE') || source.includes('AFILIADO'),
-    )
+
+    let moeda: string
+    let valorBruto: number
+    let taxaHotmart: number
+    let comissaoProdutor: number
+    let coproducerCommission: number
+    let comissaoAfiliado: number
+
+    if (priceCurrency !== 'BRL') {
+      // Venda internacional: usar commissions em USD
+      moeda = 'USD'
+      valorBruto = sameCurrencyValue(commissions, 'USD', source => source === 'PRODUCER')
+      taxaHotmart = sameCurrencyValue(commissions, 'USD', source => source === 'MARKETPLACE')
+      comissaoProdutor = valorBruto
+      coproducerCommission = sameCurrencyValue(commissions, 'USD', source =>
+        source.includes('COPRODUCER') || source.includes('CO_PRODUCER') || source.includes('CO-PRODUCER') || source.includes('COPRODUTOR'),
+      )
+      comissaoAfiliado = sameCurrencyValue(commissions, 'USD', source =>
+        source.includes('AFFILIATE') || source.includes('AFILIADO'),
+      )
+    } else {
+      moeda = 'BRL'
+      valorBruto = Number(priceObj?.value ?? 0)
+      taxaHotmart = sameCurrencyValue(commissions, 'BRL', source => source === 'MARKETPLACE')
+      comissaoProdutor = sameCurrencyValue(commissions, 'BRL', source =>
+        source === 'PRODUCER' || source === 'SELLER' || source === 'VENDOR' || source.includes('OWNER'),
+      )
+      coproducerCommission = sameCurrencyValue(commissions, 'BRL', source =>
+        source.includes('COPRODUCER') || source.includes('CO_PRODUCER') || source.includes('CO-PRODUCER') || source.includes('COPRODUTOR'),
+      )
+      comissaoAfiliado = sameCurrencyValue(commissions, 'BRL', source =>
+        source.includes('AFFILIATE') || source.includes('AFILIADO'),
+      )
+    }
     const status = mapStatus(evento)
     const valorOperacionalFinal = status === 'abandoned'
       ? 0
