@@ -10,6 +10,7 @@ interface HotmartCommission {
   source: string
   currency_value: string
   value: number
+  currency_conversion?: { conversion_rate?: number }
 }
 
 function sameCurrencyValue(commissions: HotmartCommission[], currency: string, matcher: (source: string) => boolean) {
@@ -54,10 +55,24 @@ export async function POST(req: NextRequest) {
     let comissaoAfiliado: number
 
     if (priceCurrency !== 'BRL') {
-      // Venda internacional: usar commissions em USD
+      // Venda internacional: usar commissions em USD, com fallback por conversion_rate
       moeda = 'USD'
-      valorBruto = sameCurrencyValue(commissions, 'USD', () => true)
       taxaHotmart = sameCurrencyValue(commissions, 'USD', source => source === 'MARKETPLACE')
+      const somaUSD = sameCurrencyValue(commissions, 'USD', () => true)
+      if (somaUSD >= taxaHotmart * 3) {
+        valorBruto = somaUSD
+      } else {
+        const convRate = commissions
+          .map(c => c.currency_conversion?.conversion_rate)
+          .find(r => r != null && Number(r) > 0)
+        const rate = Number(convRate ?? 0)
+        const priceValue = Number(
+          dados.purchase?.original_offer_price?.value ??
+          dados.purchase?.price?.value ??
+          0,
+        )
+        valorBruto = rate > 0 ? roundMoney(priceValue / rate) : somaUSD
+      }
       comissaoProdutor = valorBruto
       coproducerCommission = sameCurrencyValue(commissions, 'USD', source =>
         source.includes('COPRODUCER') || source.includes('CO_PRODUCER') || source.includes('CO-PRODUCER') || source.includes('COPRODUTOR'),

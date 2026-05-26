@@ -18,6 +18,7 @@ interface HotmartCommission {
   source: string
   currency_value: string
   value: number
+  currency_conversion?: { conversion_rate?: number }
 }
 
 async function fixMoedasEstrangeiras() {
@@ -64,14 +65,30 @@ async function fixMoedasEstrangeiras() {
     const dados = payload?.data
     const commissions = (dados?.commissions ?? []) as HotmartCommission[]
 
-    // Vendas internacionais: valor_bruto = soma de todas as commissions em USD
-    const valorBruto: number = commissions
-      .filter(c => c.currency_value === 'USD')
-      .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
-
     const taxaHotmart: number = commissions
       .filter(c => c.currency_value === 'USD' && String(c.source ?? '').toUpperCase() === 'MARKETPLACE')
       .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
+
+    const somaUSD: number = commissions
+      .filter(c => c.currency_value === 'USD')
+      .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
+
+    let valorBruto: number
+    if (somaUSD >= taxaHotmart * 3) {
+      valorBruto = somaUSD
+    } else {
+      // Fallback: converte pelo conversion_rate embutido nas commissions
+      const convRate = commissions
+        .map(c => c.currency_conversion?.conversion_rate)
+        .find(r => r != null && Number(r) > 0)
+      const rate = Number(convRate ?? 0)
+      const priceValue = Number(
+        dados?.purchase?.original_offer_price?.value ??
+        dados?.purchase?.price?.value ??
+        0,
+      )
+      valorBruto = rate > 0 ? roundMoney(priceValue / rate) : somaUSD
+    }
 
     const moeda = 'USD'
     const valorOperacionalFinal = roundMoney(valorBruto - taxaHotmart)
