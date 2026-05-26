@@ -51,9 +51,9 @@ async function fixMoedasEstrangeiras() {
     const dados = payload?.data
     const commissions = (dados?.commissions ?? []) as HotmartCommission[]
 
-    // Vendas internacionais: valor_bruto = commission PRODUCER em USD
+    // Vendas internacionais: valor_bruto = soma de todas as commissions em USD
     const valorBruto: number = commissions
-      .filter(c => c.currency_value === 'USD' && String(c.source ?? '').toUpperCase() === 'PRODUCER')
+      .filter(c => c.currency_value === 'USD')
       .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
 
     const taxaHotmart: number = commissions

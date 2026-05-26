@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     if (priceCurrency !== 'BRL') {
       // Venda internacional: usar commissions em USD
       moeda = 'USD'
-      valorBruto = sameCurrencyValue(commissions, 'USD', source => source === 'PRODUCER')
+      valorBruto = sameCurrencyValue(commissions, 'USD', () => true)
       taxaHotmart = sameCurrencyValue(commissions, 'USD', source => source === 'MARKETPLACE')
       comissaoProdutor = valorBruto
       coproducerCommission = sameCurrencyValue(commissions, 'USD', source =>
