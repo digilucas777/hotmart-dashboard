@@ -78,19 +78,19 @@ export async function POST(req: NextRequest) {
         source.includes('AFFILIATE') || source.includes('AFILIADO'),
       )
     } else {
-      // Outra moeda (MXN, EUR, GBP, etc): converte para USD via conversion_rate
+      // Outra moeda (MXN, EUR, GBP, etc): converte para USD
       moeda = 'USD'
-      const convRate = commissions
-        .map(c => c.currency_conversion?.conversion_rate)
-        .find(r => r != null && Number(r) > 0)
-      const rate = Number(convRate ?? 0)
-      const priceValue = Number(
-        dados.purchase?.original_offer_price?.value ??
-        dados.purchase?.price?.value ??
-        0,
-      )
-      valorBruto = rate > 0 ? roundMoney(priceValue / rate) : 0
       taxaHotmart = sameCurrencyValue(commissions, 'USD', source => source === 'MARKETPLACE')
+      const origOffer = dados.purchase?.original_offer_price
+      if (origOffer?.currency_value === 'USD') {
+        valorBruto = Number(origOffer.value ?? 0)
+      } else {
+        const convRate = commissions
+          .map(c => c.currency_conversion?.conversion_rate)
+          .find(r => r != null && Number(r) > 0)
+        const rate = Number(convRate ?? 0)
+        valorBruto = rate > 0 ? roundMoney(Number(dados.purchase?.price?.value ?? 0) / rate) : 0
+      }
       comissaoProdutor = valorBruto
       coproducerCommission = sameCurrencyValue(commissions, 'USD', source =>
         source.includes('COPRODUCER') || source.includes('CO_PRODUCER') || source.includes('CO-PRODUCER') || source.includes('COPRODUTOR'),

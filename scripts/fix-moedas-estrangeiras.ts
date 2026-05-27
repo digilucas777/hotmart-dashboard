@@ -68,19 +68,19 @@ async function fixMoedasEstrangeiras() {
         .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
     } else {
       moeda = 'USD'
-      const convRate = commissions
-        .map(c => c.currency_conversion?.conversion_rate)
-        .find(r => r != null && Number(r) > 0)
-      const rate = Number(convRate ?? 0)
-      const priceValue = Number(
-        dados?.purchase?.original_offer_price?.value ??
-        dados?.purchase?.price?.value ??
-        0,
-      )
-      valorBruto = rate > 0 ? roundMoney(priceValue / rate) : 0
       taxaHotmart = commissions
         .filter(c => c.currency_value === 'USD' && String(c.source ?? '').toUpperCase() === 'MARKETPLACE')
         .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
+      const origOffer = dados?.purchase?.original_offer_price
+      if (origOffer?.currency_value === 'USD') {
+        valorBruto = Number(origOffer.value ?? 0)
+      } else {
+        const convRate = commissions
+          .map(c => c.currency_conversion?.conversion_rate)
+          .find(r => r != null && Number(r) > 0)
+        const rate = Number(convRate ?? 0)
+        valorBruto = rate > 0 ? roundMoney(Number(dados?.purchase?.price?.value ?? 0) / rate) : 0
+      }
     }
 
     const valorOperacionalFinal = roundMoney(valorBruto - taxaHotmart)
