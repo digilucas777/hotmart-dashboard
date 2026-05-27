@@ -22,6 +22,22 @@ interface PeriodFilterProps {
   onCustomChange?: (from: string, to: string) => void
   updatedAt?: Date | null
   hasMetaAds?: boolean
+  metaCacheUpdatedAt?: string | null
+}
+
+function formatBRT(iso: string): string {
+  const date = new Date(iso)
+  const parts = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+  const get = (t: string) => parts.find(p => p.type === t)?.value ?? ''
+  return `${get('day')}/${get('month')}/${get('year')} às ${get('hour')}:${get('minute')}`
 }
 
 function isoDate(d: Date) {
@@ -41,6 +57,7 @@ export function PeriodFilter({
   onCustomChange,
   updatedAt,
   hasMetaAds,
+  metaCacheUpdatedAt,
 }: PeriodFilterProps) {
   const [showCustom, setShowCustom] = useState(false)
   const [draftFrom, setDraftFrom] = useState(customFrom)
@@ -138,7 +155,12 @@ export function PeriodFilter({
           {updatedLabel}
         </span>
         {hasMetaAds && (
-          <span className="ml-auto text-xs text-slate-500">⏱ Dados Meta Ads atualizados a cada 30 min</span>
+          <span className="ml-auto flex flex-col items-end gap-0.5 text-xs text-slate-500">
+            <span>⏱ Atualização Meta Ads disponível a cada 30 min</span>
+            {metaCacheUpdatedAt && (
+              <span className="text-[10px] text-slate-600">· Última sincronização: {formatBRT(metaCacheUpdatedAt)}</span>
+            )}
+          </span>
         )}
       </div>
 

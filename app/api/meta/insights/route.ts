@@ -147,7 +147,7 @@ export async function GET(_request: Request) {
     if (cached) {
       const age = Date.now() - new Date(cached.updated_at as string).getTime()
       if (age < CACHE_TTL) {
-        return NextResponse.json(cached.data, { headers: { 'X-Cache': 'HIT' } })
+        return NextResponse.json(cached.data, { headers: { 'X-Cache': 'HIT', 'X-Cache-Updated-At': cached.updated_at as string } })
       }
     }
   }
@@ -291,7 +291,7 @@ export async function GET(_request: Request) {
         )
     }
 
-    return NextResponse.json(responseData, { headers: { 'X-Cache': 'MISS' } })
+    return NextResponse.json(responseData, { headers: { 'X-Cache': 'MISS', 'X-Cache-Updated-At': new Date().toISOString() } })
   } catch (err) {
     console.error('[INSIGHTS] erro:', err)
     return NextResponse.json({ error: 'meta_api_error' }, { status: 502 })

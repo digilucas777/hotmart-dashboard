@@ -395,6 +395,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [savingProducts, setSavingProducts] = useState(false)
 
   const [linkedMetaAccountId, setLinkedMetaAccountId] = useState<string | null>(null)
+  const [metaCacheUpdatedAt, setMetaCacheUpdatedAt] = useState<string | null>(null)
   const [metaInsights, setMetaInsights] = useState<Record<string, unknown> | null>(null)
   const [metaAds, setMetaAds] = useState<MetaCreativeResult | null>(null)
   const [metaCampaigns, setMetaCampaigns] = useState<MetaCampaignResult | null>(null)
@@ -483,6 +484,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle()
+      console.log('[META] loadLinkedAccount projeto_id:', projectId, '| meta_project_accounts:', pa)
       if (pa?.account_id) { setLinkedMetaAccountId(pa.account_id); return }
 
       // Fallback: legacy account_id stored in meta_connections
@@ -492,6 +494,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         .eq('projeto_id', projectId)
         .eq('status', 'connected')
         .maybeSingle()
+      console.log('[META] loadLinkedAccount fallback meta_connections:', mc)
       setLinkedMetaAccountId((mc as { account_id: string | null } | null)?.account_id ?? null)
     }
     void loadLinkedAccount()
@@ -508,7 +511,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     const preset = presetMap[period]
     if (!preset) { setMetaInsights(null); return }
     fetch(`/api/meta/insights?account_id=${encodeURIComponent(linkedMetaAccountId)}&date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' })
-      .then(r => r.ok ? r.json() as Promise<Record<string, unknown>> : null)
+      .then(r => {
+        if (r.ok) {
+          const updatedAt = r.headers.get('X-Cache-Updated-At')
+          if (updatedAt) setMetaCacheUpdatedAt(updatedAt)
+          return r.json() as Promise<Record<string, unknown>>
+        }
+        return null
+      })
       .then(data => setMetaInsights(data))
       .catch(() => setMetaInsights(null))
   }, [linkedMetaAccountId, period])
@@ -1326,6 +1336,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               updatedAt={lastUpdatedAt}
               onCustomChange={(from, to) => { setCustomFrom(from); setCustomTo(to) }}
               hasMetaAds={!!linkedMetaAccountId}
+              metaCacheUpdatedAt={metaCacheUpdatedAt}
             />
           </div>
           <div className="dashboard-action-bar dashboard-panel ml-auto flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-1.5 overflow-x-auto rounded-xl p-1">
