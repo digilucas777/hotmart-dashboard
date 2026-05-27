@@ -55,13 +55,13 @@ export async function POST(req: NextRequest) {
     let comissaoAfiliado: number
 
     if (priceCurrency !== 'BRL') {
-      // Venda internacional: usar commissions em USD, com fallback por conversion_rate
+      // Venda internacional: conversion_rate se tem afiliado/coprodutor, soma USD caso contrário
       moeda = 'USD'
       taxaHotmart = sameCurrencyValue(commissions, 'USD', source => source === 'MARKETPLACE')
+      const has_co_production = dados.product?.has_co_production === true
+      const tem_afiliado = (dados.affiliates?.length ?? 0) > 0
       const somaUSD = sameCurrencyValue(commissions, 'USD', () => true)
-      if (somaUSD >= taxaHotmart * 3) {
-        valorBruto = somaUSD
-      } else {
+      if (has_co_production || tem_afiliado) {
         const convRate = commissions
           .map(c => c.currency_conversion?.conversion_rate)
           .find(r => r != null && Number(r) > 0)
@@ -72,6 +72,8 @@ export async function POST(req: NextRequest) {
           0,
         )
         valorBruto = rate > 0 ? roundMoney(priceValue / rate) : somaUSD
+      } else {
+        valorBruto = somaUSD
       }
       comissaoProdutor = valorBruto
       coproducerCommission = sameCurrencyValue(commissions, 'USD', source =>

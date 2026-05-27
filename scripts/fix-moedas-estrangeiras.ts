@@ -65,6 +65,9 @@ async function fixMoedasEstrangeiras() {
     const dados = payload?.data
     const commissions = (dados?.commissions ?? []) as HotmartCommission[]
 
+    const has_co_production = dados?.product?.has_co_production === true
+    const tem_afiliado = (dados?.affiliates?.length ?? 0) > 0
+
     const taxaHotmart: number = commissions
       .filter(c => c.currency_value === 'USD' && String(c.source ?? '').toUpperCase() === 'MARKETPLACE')
       .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
@@ -74,10 +77,7 @@ async function fixMoedasEstrangeiras() {
       .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
 
     let valorBruto: number
-    if (somaUSD >= taxaHotmart * 3) {
-      valorBruto = somaUSD
-    } else {
-      // Fallback: converte pelo conversion_rate embutido nas commissions
+    if (has_co_production || tem_afiliado) {
       const convRate = commissions
         .map(c => c.currency_conversion?.conversion_rate)
         .find(r => r != null && Number(r) > 0)
@@ -88,12 +88,14 @@ async function fixMoedasEstrangeiras() {
         0,
       )
       valorBruto = rate > 0 ? roundMoney(priceValue / rate) : somaUSD
+    } else {
+      valorBruto = somaUSD
     }
 
     const moeda = 'USD'
     const valorOperacionalFinal = roundMoney(valorBruto - taxaHotmart)
 
-    console.log(`[${venda.hotmart_id}] ${venda.moeda} ${venda.valor_bruto} → ${moeda} ${valorBruto}`)
+    console.log(`[${venda.hotmart_id}] afiliado/coprodutor: ${tem_afiliado}/${has_co_production} | ${venda.moeda} ${venda.valor_bruto} → ${moeda} ${valorBruto}`)
 
     const { error: updateError } = await supabase
       .from('vendas')
