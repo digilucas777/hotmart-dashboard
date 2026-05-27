@@ -242,6 +242,14 @@ export async function GET(_request: Request) {
           )
           console.log('[INSIGHTS] roas_geral: faturamento_brl:', faturamento, 'spend_brl:', spend_brl)
           roas_geral = spend_brl > 0 ? faturamento / spend_brl : 0
+          console.log('[ROAS DEBUG] projeto_id:', projetoId)
+          console.log('[ROAS DEBUG] date_preset:', datePreset)
+          console.log('[ROAS DEBUG] from:', dateRange.from, 'to:', dateRange.to)
+          console.log('[ROAS DEBUG] hotmartIds:', hotmartIds)
+          console.log('[ROAS DEBUG] vendas encontradas:', vendas?.length)
+          console.log('[ROAS DEBUG] faturamento_brl:', faturamento)
+          console.log('[ROAS DEBUG] spend_brl:', spend_brl)
+          console.log('[ROAS DEBUG] roas_geral:', roas_geral)
         }
       }
     }
