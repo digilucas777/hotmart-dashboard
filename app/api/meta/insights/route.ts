@@ -36,43 +36,49 @@ type RawTotals = {
   video_25: number
 }
 
+// Server runs in UTC; vendas are saved in UTC-3 (Brasília). Offset = +3h to UTC.
+const BRT_OFFSET_MS = 3 * 60 * 60 * 1000
+
 function getDateRange(preset: string): { from: Date; to: Date } {
   const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  // Shift now to BRT to compute the correct calendar day
+  const nowBRT = new Date(now.getTime() - BRT_OFFSET_MS)
+  const y = nowBRT.getUTCFullYear()
+  const m = nowBRT.getUTCMonth()
+  const d = nowBRT.getUTCDate()
+  // Midnight BRT expressed as UTC (00:00 BRT = 03:00 UTC)
+  const todayBRT = new Date(Date.UTC(y, m, d) + BRT_OFFSET_MS)
   const DAY = 86_400_000
 
   switch (preset) {
     case 'today':
-      return { from: today, to: new Date(today.getTime() + DAY) }
-    case 'yesterday': {
-      const d = new Date(today.getTime() - DAY)
-      return { from: d, to: today }
-    }
+      return { from: todayBRT, to: new Date(todayBRT.getTime() + DAY) }
+    case 'yesterday':
+      return { from: new Date(todayBRT.getTime() - DAY), to: todayBRT }
     case 'this_week_sun_today': {
-      const d = new Date(today)
-      d.setDate(d.getDate() - d.getDay())
-      return { from: d, to: new Date(today.getTime() + DAY) }
+      const dow = nowBRT.getUTCDay()
+      return { from: new Date(todayBRT.getTime() - dow * DAY), to: new Date(todayBRT.getTime() + DAY) }
     }
     case 'last_week_sun_sat': {
-      const sun = new Date(today)
-      sun.setDate(sun.getDate() - sun.getDay() - 7)
-      return { from: sun, to: new Date(sun.getTime() + 7 * DAY) }
+      const dow = nowBRT.getUTCDay()
+      const thisSun = new Date(todayBRT.getTime() - dow * DAY)
+      return { from: new Date(thisSun.getTime() - 7 * DAY), to: thisSun }
     }
     case 'last_7d':
-      return { from: new Date(today.getTime() - 6 * DAY), to: new Date(today.getTime() + DAY) }
+      return { from: new Date(todayBRT.getTime() - 6 * DAY), to: new Date(todayBRT.getTime() + DAY) }
     case 'last_30d':
-      return { from: new Date(today.getTime() - 29 * DAY), to: new Date(today.getTime() + DAY) }
+      return { from: new Date(todayBRT.getTime() - 29 * DAY), to: new Date(todayBRT.getTime() + DAY) }
     case 'this_month': {
-      const d = new Date(today.getFullYear(), today.getMonth(), 1)
-      return { from: d, to: new Date(today.getTime() + DAY) }
+      const monthStart = new Date(Date.UTC(y, m, 1) + BRT_OFFSET_MS)
+      return { from: monthStart, to: new Date(todayBRT.getTime() + DAY) }
     }
     case 'last_month': {
-      const first = new Date(today.getFullYear(), today.getMonth() - 1, 1)
-      const last = new Date(today.getFullYear(), today.getMonth(), 1)
-      return { from: first, to: last }
+      const firstThisMonth = new Date(Date.UTC(y, m, 1) + BRT_OFFSET_MS)
+      const firstLastMonth = new Date(Date.UTC(y, m - 1, 1) + BRT_OFFSET_MS)
+      return { from: firstLastMonth, to: firstThisMonth }
     }
     default:
-      return { from: today, to: new Date(today.getTime() + DAY) }
+      return { from: todayBRT, to: new Date(todayBRT.getTime() + DAY) }
   }
 }
 
