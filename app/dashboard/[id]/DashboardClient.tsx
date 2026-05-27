@@ -737,6 +737,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             })
             return applyBottomMagnet(resolveOverlapsMulti(swapped, new Set([draggedId])))
           }
+          // Múltiplos widgets sobrepostos: volta para posição original
+          if (overlapping.length > 1) return prev
         }
 
         const moved = prev.map(w => {
@@ -812,12 +814,22 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     const srcCol = source.col_start ?? 1
     const srcRow = source.row_start ?? 1
 
-    // Place immediately to the right; wrap to next row if out of bounds
+    // Find a free slot: right of source → scan grid → after all widgets
+    const bounds = layoutBounds(widgets)
+    const isFree = (c: number, r: number) =>
+      !bounds.some(b => collidesBounds({ col: c, row: r, colSpan: col_span, rowSpan: row_span }, b))
+
     let col_start = srcCol + col_span
     let row_start = srcRow
-    if (col_start + col_span - 1 > GRID_COLUMNS) {
-      col_start = 1
-      row_start = srcRow + row_span
+    if (col_start + col_span - 1 > GRID_COLUMNS || !isFree(col_start, row_start)) {
+      const maxRow = maxLayoutRow(widgets) + row_span
+      let found = false
+      outer: for (let r = 1; r <= maxRow; r++) {
+        for (let c = 1; c <= GRID_COLUMNS - col_span + 1; c++) {
+          if (isFree(c, r)) { col_start = c; row_start = r; found = true; break outer }
+        }
+      }
+      if (!found) { col_start = 1; row_start = maxLayoutRow(widgets) }
     }
 
     const position = widgets.length
@@ -850,9 +862,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
     setWidgets(prev => {
       const newWidget: WidgetConfig = { ...(data as WidgetConfig), col_start, row_start, col_span, row_span }
-      const resolved = resolveOverlaps([...prev, newWidget], newWidget.id)
-      setSavedWidgets(resolved)
-      return resolved
+      return resolveOverlaps([...prev, newWidget], newWidget.id)
+      // savedWidgets não atualizado aqui: mantém hasUnsavedLayout=true para o botão Salvar
     })
   }, [widgets, projectId]) // eslint-disable-line react-hooks/exhaustive-deps
 

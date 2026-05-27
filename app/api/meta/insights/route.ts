@@ -221,6 +221,7 @@ export async function GET(_request: Request) {
           .in('id', produtoIds)
 
         const hotmartIds = (prods ?? []).map((r: { hotmart_id: string }) => r.hotmart_id)
+        console.log('[INSIGHTS] roas_geral: hotmartIds count:', hotmartIds.length, hotmartIds)
 
         if (hotmartIds.length > 0) {
           const { data: vendas } = await supabase
@@ -231,6 +232,7 @@ export async function GET(_request: Request) {
             .gte('data_venda', dateRange.from.toISOString())
             .lt('data_venda', dateRange.to.toISOString())
 
+          console.log('[INSIGHTS] roas_geral: vendas aprovadas count:', (vendas ?? []).length)
           const faturamento = (vendas ?? []).reduce(
             (sum: number, v: { valor_operacional_final: number; moeda: string }) => {
               const val = v.valor_operacional_final ?? 0
