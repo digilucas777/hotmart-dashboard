@@ -22,33 +22,16 @@ interface HotmartCommission {
 }
 
 async function fixMoedasEstrangeiras() {
-  const MOEDAS_ESTRANGEIRAS = ['GBP','EUR','MXN','COP','PEN','ARS','NGN','CAD','AUD','HNL','JPY','CHF']
+  const { data: vendas, error } = await supabase
+    .from('vendas')
+    .select('id, hotmart_id, moeda, valor_bruto, taxa_hotmart, valor_operacional_final, hotmart_payload')
+    .or('taxa_hotmart.eq.0,valor_operacional_final.lt.5')
+    .neq('moeda', 'BRL')
+    .not('hotmart_payload', 'is', null)
 
-  const [res1, res2] = await Promise.all([
-    supabase
-      .from('vendas')
-      .select('id, hotmart_id, moeda, valor_bruto, taxa_hotmart, valor_operacional_final, hotmart_payload')
-      .eq('taxa_hotmart', 0)
-      .in('moeda', MOEDAS_ESTRANGEIRAS),
-    supabase
-      .from('vendas')
-      .select('id, hotmart_id, moeda, valor_bruto, taxa_hotmart, valor_operacional_final, hotmart_payload')
-      .eq('moeda', 'USD')
-      .lt('valor_operacional_final', 1)
-      .not('hotmart_payload', 'is', null),
-  ])
+  if (error) { console.error('Erro ao buscar vendas:', error.message); process.exit(1) }
 
-  if (res1.error) { console.error('Erro query 1:', res1.error.message); process.exit(1) }
-  if (res2.error) { console.error('Erro query 2:', res2.error.message); process.exit(1) }
-
-  const seen = new Set<string>()
-  const vendas = [...(res1.data ?? []), ...(res2.data ?? [])].filter(v => {
-    if (seen.has(v.id)) return false
-    seen.add(v.id)
-    return true
-  })
-
-  if (vendas.length === 0) {
+  if (!vendas || vendas.length === 0) {
     console.log('Nenhuma venda para corrigir encontrada.')
     return
   }
@@ -65,19 +48,26 @@ async function fixMoedasEstrangeiras() {
     const dados = payload?.data
     const commissions = (dados?.commissions ?? []) as HotmartCommission[]
 
-    const has_co_production = dados?.product?.has_co_production === true
-    const tem_afiliado = (dados?.affiliates?.length ?? 0) > 0
+    const priceCurrency: string = dados?.purchase?.price?.currency_value ?? 'BRL'
 
-    const taxaHotmart: number = commissions
-      .filter(c => c.currency_value === 'USD' && String(c.source ?? '').toUpperCase() === 'MARKETPLACE')
-      .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
-
-    const somaUSD: number = commissions
-      .filter(c => c.currency_value === 'USD')
-      .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
-
+    let moeda: string
     let valorBruto: number
-    if (has_co_production || tem_afiliado) {
+    let taxaHotmart: number
+
+    if (priceCurrency === 'BRL') {
+      moeda = 'BRL'
+      valorBruto = Number(dados?.purchase?.price?.value ?? 0)
+      taxaHotmart = commissions
+        .filter(c => c.currency_value === 'BRL' && String(c.source ?? '').toUpperCase() === 'MARKETPLACE')
+        .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
+    } else if (priceCurrency === 'USD') {
+      moeda = 'USD'
+      valorBruto = Number(dados?.purchase?.price?.value ?? 0)
+      taxaHotmart = commissions
+        .filter(c => c.currency_value === 'USD' && String(c.source ?? '').toUpperCase() === 'MARKETPLACE')
+        .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
+    } else {
+      moeda = 'USD'
       const convRate = commissions
         .map(c => c.currency_conversion?.conversion_rate)
         .find(r => r != null && Number(r) > 0)
@@ -87,15 +77,15 @@ async function fixMoedasEstrangeiras() {
         dados?.purchase?.price?.value ??
         0,
       )
-      valorBruto = rate > 0 ? roundMoney(priceValue / rate) : somaUSD
-    } else {
-      valorBruto = somaUSD
+      valorBruto = rate > 0 ? roundMoney(priceValue / rate) : 0
+      taxaHotmart = commissions
+        .filter(c => c.currency_value === 'USD' && String(c.source ?? '').toUpperCase() === 'MARKETPLACE')
+        .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
     }
 
-    const moeda = 'USD'
     const valorOperacionalFinal = roundMoney(valorBruto - taxaHotmart)
 
-    console.log(`[${venda.hotmart_id}] afiliado/coprodutor: ${tem_afiliado}/${has_co_production} | ${venda.moeda} ${venda.valor_bruto} → ${moeda} ${valorBruto}`)
+    console.log(`[${venda.hotmart_id}] ${priceCurrency} | ${venda.valor_bruto} → ${moeda} ${valorBruto}`)
 
     const { error: updateError } = await supabase
       .from('vendas')

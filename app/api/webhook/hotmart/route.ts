@@ -43,8 +43,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const priceObj = dados.purchase?.price ?? dados.purchase?.original_offer_price
-    const priceCurrency: string = priceObj?.currency_value ?? 'BRL'
+    const priceCurrency: string = dados.purchase?.price?.currency_value ?? 'BRL'
     const commissions = (dados.commissions ?? []) as HotmartCommission[]
 
     let moeda: string
@@ -54,37 +53,9 @@ export async function POST(req: NextRequest) {
     let coproducerCommission: number
     let comissaoAfiliado: number
 
-    if (priceCurrency !== 'BRL') {
-      // Venda internacional: conversion_rate se tem afiliado/coprodutor, soma USD caso contrário
-      moeda = 'USD'
-      taxaHotmart = sameCurrencyValue(commissions, 'USD', source => source === 'MARKETPLACE')
-      const has_co_production = dados.product?.has_co_production === true
-      const tem_afiliado = (dados.affiliates?.length ?? 0) > 0
-      const somaUSD = sameCurrencyValue(commissions, 'USD', () => true)
-      if (has_co_production || tem_afiliado) {
-        const convRate = commissions
-          .map(c => c.currency_conversion?.conversion_rate)
-          .find(r => r != null && Number(r) > 0)
-        const rate = Number(convRate ?? 0)
-        const priceValue = Number(
-          dados.purchase?.original_offer_price?.value ??
-          dados.purchase?.price?.value ??
-          0,
-        )
-        valorBruto = rate > 0 ? roundMoney(priceValue / rate) : somaUSD
-      } else {
-        valorBruto = somaUSD
-      }
-      comissaoProdutor = valorBruto
-      coproducerCommission = sameCurrencyValue(commissions, 'USD', source =>
-        source.includes('COPRODUCER') || source.includes('CO_PRODUCER') || source.includes('CO-PRODUCER') || source.includes('COPRODUTOR'),
-      )
-      comissaoAfiliado = sameCurrencyValue(commissions, 'USD', source =>
-        source.includes('AFFILIATE') || source.includes('AFILIADO'),
-      )
-    } else {
+    if (priceCurrency === 'BRL') {
       moeda = 'BRL'
-      valorBruto = Number(priceObj?.value ?? 0)
+      valorBruto = Number(dados.purchase?.price?.value ?? 0)
       taxaHotmart = sameCurrencyValue(commissions, 'BRL', source => source === 'MARKETPLACE')
       comissaoProdutor = sameCurrencyValue(commissions, 'BRL', source =>
         source === 'PRODUCER' || source === 'SELLER' || source === 'VENDOR' || source.includes('OWNER'),
@@ -93,6 +64,38 @@ export async function POST(req: NextRequest) {
         source.includes('COPRODUCER') || source.includes('CO_PRODUCER') || source.includes('CO-PRODUCER') || source.includes('COPRODUTOR'),
       )
       comissaoAfiliado = sameCurrencyValue(commissions, 'BRL', source =>
+        source.includes('AFFILIATE') || source.includes('AFILIADO'),
+      )
+    } else if (priceCurrency === 'USD') {
+      moeda = 'USD'
+      valorBruto = Number(dados.purchase?.price?.value ?? 0)
+      taxaHotmart = sameCurrencyValue(commissions, 'USD', source => source === 'MARKETPLACE')
+      comissaoProdutor = valorBruto
+      coproducerCommission = sameCurrencyValue(commissions, 'USD', source =>
+        source.includes('COPRODUCER') || source.includes('CO_PRODUCER') || source.includes('CO-PRODUCER') || source.includes('COPRODUTOR'),
+      )
+      comissaoAfiliado = sameCurrencyValue(commissions, 'USD', source =>
+        source.includes('AFFILIATE') || source.includes('AFILIADO'),
+      )
+    } else {
+      // Outra moeda (MXN, EUR, GBP, etc): converte para USD via conversion_rate
+      moeda = 'USD'
+      const convRate = commissions
+        .map(c => c.currency_conversion?.conversion_rate)
+        .find(r => r != null && Number(r) > 0)
+      const rate = Number(convRate ?? 0)
+      const priceValue = Number(
+        dados.purchase?.original_offer_price?.value ??
+        dados.purchase?.price?.value ??
+        0,
+      )
+      valorBruto = rate > 0 ? roundMoney(priceValue / rate) : 0
+      taxaHotmart = sameCurrencyValue(commissions, 'USD', source => source === 'MARKETPLACE')
+      comissaoProdutor = valorBruto
+      coproducerCommission = sameCurrencyValue(commissions, 'USD', source =>
+        source.includes('COPRODUCER') || source.includes('CO_PRODUCER') || source.includes('CO-PRODUCER') || source.includes('COPRODUTOR'),
+      )
+      comissaoAfiliado = sameCurrencyValue(commissions, 'USD', source =>
         source.includes('AFFILIATE') || source.includes('AFILIADO'),
       )
     }
