@@ -80,18 +80,23 @@ async function fixMoedasEstrangeiras() {
         .filter(c => c.currency_value === 'USD' && String(c.source ?? '').toUpperCase() === 'MARKETPLACE')
         .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
     } else {
-      // Para qualquer moeda não-BRL e não-USD:
-      // 1. Tenta original_offer_price em USD
       const origOffer = dados?.purchase?.original_offer_price
-      if (origOffer?.currency_value === 'USD') {
-        valorBruto = Number(origOffer.value) || 0
-      } else {
-        // 2. Usa soma de TODAS as commissions USD (já calculada acima como somaUSD)
-        valorBruto = somaUSD
-      }
-      taxaHotmart = commissions
+      const taxaHotmartUSD = commissions
         .filter((c: any) => c.currency_value === 'USD' && String(c.source).toUpperCase() === 'MARKETPLACE')
         .reduce((s: number, c: any) => s + Number(c.value), 0)
+
+      // Se somaUSD for pelo menos 3x a taxa do marketplace, o payload está completo
+      if (somaUSD >= taxaHotmartUSD * 3) {
+        valorBruto = somaUSD
+      } else if (origOffer?.currency_value === 'USD') {
+        valorBruto = Number(origOffer.value) || 0
+      } else {
+        // Usa conversion_rate para converter original_offer_price para USD
+        const rate = commissions.find((c: any) => c.currency_conversion?.conversion_rate)?.currency_conversion?.conversion_rate
+        const priceValue = origOffer?.value ?? dados?.purchase?.price?.value
+        valorBruto = rate ? roundMoney(Number(priceValue) / rate) : somaUSD
+      }
+      taxaHotmart = taxaHotmartUSD
       moeda = 'USD'
     }
 

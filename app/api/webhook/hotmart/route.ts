@@ -45,6 +45,9 @@ export async function POST(req: NextRequest) {
 
     const priceCurrency: string = dados.purchase?.price?.currency_value ?? 'BRL'
     const commissions = (dados.commissions ?? []) as HotmartCommission[]
+    const somaUSD = commissions
+      .filter((c: any) => c.currency_value === 'USD')
+      .reduce((s: number, c: any) => s + Number(c.value), 0)
 
     let moeda: string
     let valorBruto: number
@@ -80,17 +83,21 @@ export async function POST(req: NextRequest) {
     } else {
       // Outra moeda (MXN, EUR, GBP, etc): converte para USD
       moeda = 'USD'
-      taxaHotmart = sameCurrencyValue(commissions, 'USD', source => source === 'MARKETPLACE')
       const origOffer = dados.purchase?.original_offer_price
-      if (origOffer?.currency_value === 'USD') {
-        valorBruto = Number(origOffer.value ?? 0)
+      const taxaHotmartUSD = sameCurrencyValue(commissions, 'USD', source => source === 'MARKETPLACE')
+
+      // Se somaUSD for pelo menos 3x a taxa do marketplace, o payload está completo
+      if (somaUSD >= taxaHotmartUSD * 3) {
+        valorBruto = somaUSD
+      } else if (origOffer?.currency_value === 'USD') {
+        valorBruto = Number(origOffer.value) || 0
       } else {
-        const convRate = commissions
-          .map(c => c.currency_conversion?.conversion_rate)
-          .find(r => r != null && Number(r) > 0)
-        const rate = Number(convRate ?? 0)
-        valorBruto = rate > 0 ? roundMoney(Number(dados.purchase?.price?.value ?? 0) / rate) : 0
+        // Usa conversion_rate para converter original_offer_price para USD
+        const rate = commissions.find((c: any) => c.currency_conversion?.conversion_rate)?.currency_conversion?.conversion_rate
+        const priceValue = origOffer?.value ?? dados.purchase?.price?.value
+        valorBruto = rate ? roundMoney(Number(priceValue) / rate) : somaUSD
       }
+      taxaHotmart = taxaHotmartUSD
       comissaoProdutor = valorBruto
       coproducerCommission = sameCurrencyValue(commissions, 'USD', source =>
         source.includes('COPRODUCER') || source.includes('CO_PRODUCER') || source.includes('CO-PRODUCER') || source.includes('COPRODUTOR'),
