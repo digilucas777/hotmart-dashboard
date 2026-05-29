@@ -51,11 +51,15 @@ async function fixMoedasEstrangeiras() {
 
     const priceCurrency: string = dados?.purchase?.price?.currency_value ?? 'BRL'
 
+    const somaUSD = commissions
+      .filter((c: any) => c.currency_value === 'USD')
+      .reduce((s: number, c: any) => s + Number(c.value), 0)
+
     if (venda.hotmart_id === 'HP2193577565') {
       console.log('[DEBUG HP2193577565] priceCurrency:', priceCurrency)
       console.log('[DEBUG HP2193577565] commissions raw:', JSON.stringify(commissions))
       console.log('[DEBUG HP2193577565] commissions USD:', JSON.stringify(commissions.filter((c: any) => c.currency_value === 'USD')))
-      console.log('[DEBUG HP2193577565] somaUSD:', commissions.filter((c: any) => c.currency_value === 'USD').reduce((s: number, c: any) => s + Number(c.value), 0))
+      console.log('[DEBUG HP2193577565] somaUSD:', somaUSD)
       console.log('[DEBUG HP2193577565] original_offer_price:', JSON.stringify(dados?.purchase?.original_offer_price))
     }
 
@@ -76,20 +80,19 @@ async function fixMoedasEstrangeiras() {
         .filter(c => c.currency_value === 'USD' && String(c.source ?? '').toUpperCase() === 'MARKETPLACE')
         .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
     } else {
-      moeda = 'USD'
-      taxaHotmart = commissions
-        .filter(c => c.currency_value === 'USD' && String(c.source ?? '').toUpperCase() === 'MARKETPLACE')
-        .reduce((sum, c) => sum + (Number(c.value) || 0), 0)
+      // Para qualquer moeda não-BRL e não-USD:
+      // 1. Tenta original_offer_price em USD
       const origOffer = dados?.purchase?.original_offer_price
       if (origOffer?.currency_value === 'USD') {
-        valorBruto = Number(origOffer.value ?? 0)
+        valorBruto = Number(origOffer.value) || 0
       } else {
-        const convRate = commissions
-          .map(c => c.currency_conversion?.conversion_rate)
-          .find(r => r != null && Number(r) > 0)
-        const rate = Number(convRate ?? 0)
-        valorBruto = rate > 0 ? roundMoney(Number(dados?.purchase?.price?.value ?? 0) / rate) : 0
+        // 2. Usa soma de TODAS as commissions USD (já calculada acima como somaUSD)
+        valorBruto = somaUSD
       }
+      taxaHotmart = commissions
+        .filter((c: any) => c.currency_value === 'USD' && String(c.source).toUpperCase() === 'MARKETPLACE')
+        .reduce((s: number, c: any) => s + Number(c.value), 0)
+      moeda = 'USD'
     }
 
     const valorOperacionalFinal = roundMoney(valorBruto - taxaHotmart)
