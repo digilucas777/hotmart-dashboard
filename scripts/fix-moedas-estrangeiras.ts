@@ -25,8 +25,9 @@ async function fixMoedasEstrangeiras() {
   const { data: vendas, error } = await supabase
     .from('vendas')
     .select('id, hotmart_id, moeda, valor_bruto, taxa_hotmart, valor_operacional_final, hotmart_payload')
-    .or('taxa_hotmart.eq.0,valor_operacional_final.lt.5')
+    .or('taxa_hotmart.eq.0,valor_operacional_final.lt.20')
     .neq('moeda', 'BRL')
+    .ilike('produto', '%tantric%')
     .not('hotmart_payload', 'is', null)
 
   if (error) { console.error('Erro ao buscar vendas:', error.message); process.exit(1) }
