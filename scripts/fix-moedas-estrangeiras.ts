@@ -51,6 +51,14 @@ async function fixMoedasEstrangeiras() {
 
     const priceCurrency: string = dados?.purchase?.price?.currency_value ?? 'BRL'
 
+    if (venda.hotmart_id === 'HP2193577565') {
+      console.log('[DEBUG HP2193577565] priceCurrency:', priceCurrency)
+      console.log('[DEBUG HP2193577565] commissions raw:', JSON.stringify(commissions))
+      console.log('[DEBUG HP2193577565] commissions USD:', JSON.stringify(commissions.filter((c: any) => c.currency_value === 'USD')))
+      console.log('[DEBUG HP2193577565] somaUSD:', commissions.filter((c: any) => c.currency_value === 'USD').reduce((s: number, c: any) => s + Number(c.value), 0))
+      console.log('[DEBUG HP2193577565] original_offer_price:', JSON.stringify(dados?.purchase?.original_offer_price))
+    }
+
     let moeda: string
     let valorBruto: number
     let taxaHotmart: number
