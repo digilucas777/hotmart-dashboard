@@ -76,6 +76,7 @@ const HOTMART_METRICS: { value: WidgetDataSource; label: string }[] = [
   { value: 'pending_count', label: 'Pendentes' },
   { value: 'cancelled_count', label: 'Cancelados' },
   { value: 'top_produtos', label: 'Top 5 Produtos' },
+  { value: 'todos_produtos', label: 'Todos os Produtos' },
 ]
 
 const META_METRICS: { value: WidgetDataSource; label: string }[] = [
@@ -176,6 +177,30 @@ function buildTopProdutos(vendas: Venda[]): string {
     .slice(0, 5)
   if (sorted.length === 0) return '🏆 Top Produtos:\n  Nenhuma venda no período.'
   const lines = ['🏆 Top Produtos:']
+  sorted.forEach(([name, { count, brl, foreignUsd }], i) => {
+    const brlPart = brl > 0 ? formatBRL(brl) + ' BRL' : ''
+    const usdPart = foreignUsd > 0 ? formatUSD(foreignUsd) + ' USD' : ''
+    const value = [brlPart, usdPart].filter(Boolean).join(' / ')
+    lines.push(`  ${i + 1}. ${name} — ${count} venda${count !== 1 ? 's' : ''} | ${value}`)
+  })
+  return lines.join('\n')
+}
+
+function buildTodosProdutos(vendas: Venda[]): string {
+  const approved = vendas.filter(v => v.status === 'approved')
+  const map = new Map<string, { count: number; brl: number; foreignUsd: number }>()
+  for (const v of approved) {
+    const name = v.produto ?? 'Desconhecido'
+    const entry = map.get(name) ?? { count: 0, brl: 0, foreignUsd: 0 }
+    entry.count++
+    const amount = getOfficialSaleAmount(v)
+    if (v.moeda === 'BRL') entry.brl += amount
+    else entry.foreignUsd += amount
+    map.set(name, entry)
+  }
+  const sorted = Array.from(map.entries()).sort((a, b) => b[1].count - a[1].count)
+  if (sorted.length === 0) return '🛍️ Produtos vendidos:\n  Nenhuma venda no período.'
+  const lines = ['🛍️ Produtos vendidos:']
   sorted.forEach(([name, { count, brl, foreignUsd }], i) => {
     const brlPart = brl > 0 ? formatBRL(brl) + ' BRL' : ''
     const usdPart = foreignUsd > 0 ? formatUSD(foreignUsd) + ' USD' : ''
@@ -435,6 +460,8 @@ export default function RelatoriosPage() {
     metricas.forEach(metric => {
       if (metric === 'top_produtos') {
         lines.push('', buildTopProdutos(vendas))
+      } else if (metric === 'todos_produtos') {
+        lines.push('', buildTodosProdutos(vendas))
       } else {
         const option = ALL_METRICS.find(o => o.value === metric)
         lines.push(`• ${option?.label ?? metric}: ${buildMetricValue(vendas, metric, metaInsights, isMetaConnected, exchangeRate)}`)

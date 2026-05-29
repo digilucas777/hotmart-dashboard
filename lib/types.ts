@@ -106,6 +106,7 @@ export type WidgetDataSource =
   | 'commission'
   | 'combined_by_day'
   | 'top_produtos'
+  | 'todos_produtos'
   | MetaDataSource
 
 export type WidgetWidth = 'full' | 'half' | '1/4' | '1/3' | '1/2' | '2/3' | '3/4'
