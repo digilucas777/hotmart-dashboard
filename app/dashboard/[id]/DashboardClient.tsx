@@ -706,29 +706,41 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     async function loadAfiliados() {
-      const { data: pp } = await supabase
+      console.log('[AFILIADO] loadAfiliados iniciado, projectId:', projectId)
+
+      const { data: pp, error: ppError } = await supabase
         .from('projeto_produtos')
         .select('produto_id')
         .eq('projeto_id', projectId)
+      console.log('[AFILIADO] projeto_produtos:', pp, 'erro:', ppError)
       const produtoIds = (pp ?? []).map((r: { produto_id: string }) => r.produto_id)
-      if (produtoIds.length === 0) return
+      if (produtoIds.length === 0) {
+        console.log('[AFILIADO] produtoIds vazio — saindo cedo')
+        return
+      }
 
-      const { data: prods } = await supabase
+      const { data: prods, error: prodsError } = await supabase
         .from('produtos')
         .select('hotmart_id')
         .in('id', produtoIds)
+      console.log('[AFILIADO] hotmartIds encontrados:', (prods ?? []).map((r: { hotmart_id: string }) => r.hotmart_id), 'erro:', prodsError)
       const hotmartIds = (prods ?? []).map((r: { hotmart_id: string }) => r.hotmart_id)
-      if (hotmartIds.length === 0) return
+      if (hotmartIds.length === 0) {
+        console.log('[AFILIADO] hotmartIds vazio — saindo cedo')
+        return
+      }
 
-      const { data } = await supabase
+      const { data, error: dataError } = await supabase
         .from('vendas')
         .select('afiliado_nome')
         .in('hotmart_produto_id', hotmartIds)
         .not('afiliado_nome', 'is', null)
+      console.log('[AFILIADO] rows retornadas:', data, 'erro:', dataError)
 
       const unique = Array.from(
         new Set((data ?? []).map((r: { afiliado_nome: string | null }) => r.afiliado_nome).filter(Boolean)),
       ).sort() as string[]
+      console.log('[AFILIADO] disponiveis:', unique)
       setAfiliadosDisponiveis(unique)
     }
     void loadAfiliados()
