@@ -735,12 +735,13 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         .select('afiliado_nome')
         .in('hotmart_produto_id', hotmartIds)
         .not('afiliado_nome', 'is', null)
+        .not('afiliado_nome', 'eq', '')
       console.log('[AFILIADO] rows retornadas:', data, 'erro:', dataError)
       console.log('[AFILIADO] rows raw:', JSON.stringify(data))
 
       const unique = Array.from(
-        new Set((data ?? []).map((r: { afiliado_nome: string | null }) => r.afiliado_nome).filter(Boolean)),
-      ).sort() as string[]
+        new Set((data ?? []).map((r: { afiliado_nome: string | null }) => r.afiliado_nome).filter((v): v is string => !!v && v.trim() !== '')),
+      ).sort()
       console.log('[AFILIADO] disponiveis:', unique)
       setAfiliadosDisponiveis(unique)
     }
