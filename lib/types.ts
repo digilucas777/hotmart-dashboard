@@ -21,6 +21,7 @@ export type Venda = {
   forma_pagamento?: string | null
   pais?: string | null
   origem?: string | null
+  afiliado_nome?: string | null
 }
 
 export type Projeto = {

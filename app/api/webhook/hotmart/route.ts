@@ -116,6 +116,12 @@ export async function POST(req: NextRequest) {
       dados.purchase?.origin ??
       null
 
+    const afiliado_nome: string | null =
+      dados.affiliates?.[0]?.name ??
+      dados.purchase?.affiliates?.[0]?.name ??
+      null
+    console.log('[WEBHOOK] afiliado_nome:', afiliado_nome)
+
     const transaction: string = dados.purchase?.transaction
     const venda = {
       hotmart_id: transaction,
@@ -129,6 +135,7 @@ export async function POST(req: NextRequest) {
       pais: dados.buyer?.address?.country ?? null,
       forma_pagamento,
       origem,
+      afiliado_nome,
       valor_recebido: comissaoProdutor,
       valor_bruto: valorBruto,
       taxa_hotmart: taxaHotmart,

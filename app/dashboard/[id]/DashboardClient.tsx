@@ -406,6 +406,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [showOrigensDropdown, setShowOrigensDropdown] = useState(false)
   const origensDropdownRef = useRef<HTMLDivElement>(null)
 
+  const [afiliadosDisponiveis, setAfiliadosDisponiveis] = useState<string[]>([])
+  const [afiliadosFilter, setAfiliadosFilter] = useState<string[]>([])
+  const [showAfiliadosDropdown, setShowAfiliadosDropdown] = useState(false)
+  const afiliadosDropdownRef = useRef<HTMLDivElement>(null)
+
   const customDateRange = useMemo((): { from: Date; to: Date } | undefined => {
     if (period !== 'custom') return undefined
     const parseLocal = (s: string) => {
@@ -698,6 +703,44 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
     void loadOrigens()
   }, [projectId])
+
+  useEffect(() => {
+    async function loadAfiliados() {
+      const { data: pp } = await supabase
+        .from('projeto_produtos')
+        .select('produto_id')
+        .eq('projeto_id', projectId)
+      const produtoIds = (pp ?? []).map((r: { produto_id: string }) => r.produto_id)
+      if (produtoIds.length === 0) return
+
+      const { data: prods } = await supabase
+        .from('produtos')
+        .select('hotmart_id')
+        .in('id', produtoIds)
+      const hotmartIds = (prods ?? []).map((r: { hotmart_id: string }) => r.hotmart_id)
+      if (hotmartIds.length === 0) return
+
+      const { data } = await supabase
+        .from('vendas')
+        .select('afiliado_nome')
+        .in('hotmart_produto_id', hotmartIds)
+        .not('afiliado_nome', 'is', null)
+
+      const unique = Array.from(
+        new Set((data ?? []).map((r: { afiliado_nome: string | null }) => r.afiliado_nome).filter(Boolean)),
+      ).sort() as string[]
+      setAfiliadosDisponiveis(unique)
+    }
+    void loadAfiliados()
+  }, [projectId])
+
+  useEffect(() => {
+    function onPointerDown(e: PointerEvent) {
+      if (!afiliadosDropdownRef.current?.contains(e.target as Node)) setShowAfiliadosDropdown(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => document.removeEventListener('pointerdown', onPointerDown)
+  }, [])
 
   const pushHistory = useCallback(() => {
     setUndoStack(prev => [...prev, widgets])
@@ -1191,16 +1234,25 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const hasUnsavedLayout = !sameLayout(widgets, savedWidgets)
   const previewPlacement = dragPreview ?? resizePreview
   const displayVendas = useMemo(() => {
-    if (origensFilter.length === 0) return vendas
-    const total = vendas.length
-    const filtered = vendas.filter(v => origensFilter.includes(parseOrigem(v.origem)))
-    console.log('[ORIGEM FILTER] selecionadas:', origensFilter, 'vendas antes:', total, 'depois:', filtered.length)
-    return filtered
-  }, [vendas, origensFilter])
+    let result = vendas
+    if (origensFilter.length > 0) {
+      result = result.filter(v => origensFilter.includes(parseOrigem(v.origem)))
+    }
+    if (afiliadosFilter.length > 0) {
+      result = result.filter(v => v.afiliado_nome != null && afiliadosFilter.includes(v.afiliado_nome))
+      console.log('[AFILIADO FILTER] selecionados:', afiliadosFilter)
+    }
+    if (origensFilter.length > 0) {
+      console.log('[ORIGEM FILTER] selecionadas:', origensFilter, 'vendas antes:', vendas.length, 'depois:', result.length)
+    }
+    return result
+  }, [vendas, origensFilter, afiliadosFilter])
   const displayCombinedVendas = useMemo(() => {
-    if (origensFilter.length === 0) return combinedVendas
-    return combinedVendas.filter(v => origensFilter.includes(parseOrigem(v.origem)))
-  }, [combinedVendas, origensFilter])
+    let result = combinedVendas
+    if (origensFilter.length > 0) result = result.filter(v => origensFilter.includes(parseOrigem(v.origem)))
+    if (afiliadosFilter.length > 0) result = result.filter(v => v.afiliado_nome != null && afiliadosFilter.includes(v.afiliado_nome))
+    return result
+  }, [combinedVendas, origensFilter, afiliadosFilter])
   const displayCustoTotal = custoTotal
   const approvedRecentVendas = recentVendas.filter(v => v.status === 'approved')
   const latestSale = approvedRecentVendas[0]
@@ -1436,6 +1488,54 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                           {checked && <Check size={10} className="text-cyan-400" />}
                         </span>
                         {origem}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          {afiliadosDisponiveis.length > 0 && (
+            <div ref={afiliadosDropdownRef} className="relative shrink-0 self-center">
+              <button
+                type="button"
+                onClick={() => setShowAfiliadosDropdown(v => !v)}
+                className="flex h-8 items-center gap-1.5 rounded-lg border border-[var(--dash-border)] bg-[var(--dash-panel)] px-3 text-xs font-medium text-[var(--dash-text)] transition-colors hover:border-[var(--dash-border-strong)]"
+              >
+                {afiliadosFilter.length === 0
+                  ? 'Afiliado: Todos'
+                  : `Afiliado: ${afiliadosFilter.join(', ')}`}
+                <ChevronDown size={13} className={`shrink-0 text-[var(--dash-muted)] transition-transform ${showAfiliadosDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              {showAfiliadosDropdown && (
+                <div className="absolute left-0 top-full z-50 mt-2 min-w-[180px] rounded-xl border border-[var(--dash-border)] bg-[var(--dash-panel)] p-1.5 shadow-2xl shadow-black/40">
+                  <button
+                    type="button"
+                    onClick={() => { setAfiliadosFilter([]); setShowAfiliadosDropdown(false) }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-[var(--dash-text)] transition-colors hover:bg-white/5"
+                  >
+                    <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${afiliadosFilter.length === 0 ? 'border-cyan-400 bg-cyan-400/20' : 'border-[var(--dash-border)]'}`}>
+                      {afiliadosFilter.length === 0 && <Check size={10} className="text-cyan-400" />}
+                    </span>
+                    Todos
+                  </button>
+                  {afiliadosDisponiveis.map(afiliado => {
+                    const checked = afiliadosFilter.includes(afiliado)
+                    return (
+                      <button
+                        key={afiliado}
+                        type="button"
+                        onClick={() =>
+                          setAfiliadosFilter(prev =>
+                            prev.includes(afiliado) ? prev.filter(a => a !== afiliado) : [...prev, afiliado],
+                          )
+                        }
+                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-[var(--dash-text)] transition-colors hover:bg-white/5"
+                      >
+                        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${checked ? 'border-cyan-400 bg-cyan-400/20' : 'border-[var(--dash-border)]'}`}>
+                          {checked && <Check size={10} className="text-cyan-400" />}
+                        </span>
+                        {afiliado}
                       </button>
                     )
                   })}
