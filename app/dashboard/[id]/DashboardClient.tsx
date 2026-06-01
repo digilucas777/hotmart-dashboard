@@ -33,7 +33,7 @@ import {
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { supabase } from '@/lib/supabase'
-import { formatRelativeTime, getPeriodRange, getPreviousPeriodRange, getOfficialSaleAmount } from '@/lib/utils'
+import { formatRelativeTime, getPeriodRange, getPreviousPeriodRange, getOfficialSaleAmount, parseOrigem } from '@/lib/utils'
 import type { Venda, Projeto, Produto, Period, WidgetConfig, WidgetType, WidgetDataSource } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
 import { AddWidgetModal } from '@/components/dashboard/AddWidgetModal'
@@ -401,6 +401,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [metaCampaigns, setMetaCampaigns] = useState<MetaCampaignResult | null>(null)
   const [showClearModal, setShowClearModal] = useState(false)
 
+  const [origensDisponiveis, setOrigensDisponiveis] = useState<string[]>([])
+  const [origensFilter, setOrigensFilter] = useState<string[]>([])
+  const [showOrigensDropdown, setShowOrigensDropdown] = useState(false)
+  const origensDropdownRef = useRef<HTMLDivElement>(null)
+
   const customDateRange = useMemo((): { from: Date; to: Date } | undefined => {
     if (period !== 'custom') return undefined
     const parseLocal = (s: string) => {
@@ -659,6 +664,40 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   useEffect(() => {
     void Promise.resolve().then(fetchCustos)
   }, [fetchCustos])
+
+  useEffect(() => {
+    async function loadOrigens() {
+      const { data: pp } = await supabase
+        .from('projeto_produtos')
+        .select('produto_id')
+        .eq('projeto_id', projectId)
+      const produtoIds = (pp ?? []).map((r: { produto_id: string }) => r.produto_id)
+      if (produtoIds.length === 0) return
+
+      const { data: prods } = await supabase
+        .from('produtos')
+        .select('hotmart_id')
+        .in('id', produtoIds)
+      const hotmartIds = (prods ?? []).map((r: { hotmart_id: string }) => r.hotmart_id)
+      if (hotmartIds.length === 0) return
+
+      const { data } = await supabase
+        .from('vendas')
+        .select('origem')
+        .in('hotmart_produto_id', hotmartIds)
+        .not('origem', 'is', null)
+
+      const parsed = Array.from(
+        new Set(
+          (data ?? [])
+            .map((r: { origem: string | null }) => parseOrigem(r.origem))
+            .filter(o => o !== '—'),
+        ),
+      ).sort() as string[]
+      setOrigensDisponiveis(parsed)
+    }
+    void loadOrigens()
+  }, [projectId])
 
   const pushHistory = useCallback(() => {
     setUndoStack(prev => [...prev, widgets])
@@ -1081,6 +1120,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   }
 
   useEffect(() => {
+    function onPointerDown(e: PointerEvent) {
+      if (!origensDropdownRef.current?.contains(e.target as Node)) setShowOrigensDropdown(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => document.removeEventListener('pointerdown', onPointerDown)
+  }, [])
+
+  useEffect(() => {
     if (!editMode) return
     function handleDocClick(e: MouseEvent) {
       const target = e.target as Element
@@ -1143,8 +1190,17 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const isReady = !loadingWidgets
   const hasUnsavedLayout = !sameLayout(widgets, savedWidgets)
   const previewPlacement = dragPreview ?? resizePreview
-  const displayVendas = vendas
-  const displayCombinedVendas = combinedVendas
+  const displayVendas = useMemo(() => {
+    if (origensFilter.length === 0) return vendas
+    const total = vendas.length
+    const filtered = vendas.filter(v => origensFilter.includes(parseOrigem(v.origem)))
+    console.log('[ORIGEM FILTER] selecionadas:', origensFilter, 'vendas antes:', total, 'depois:', filtered.length)
+    return filtered
+  }, [vendas, origensFilter])
+  const displayCombinedVendas = useMemo(() => {
+    if (origensFilter.length === 0) return combinedVendas
+    return combinedVendas.filter(v => origensFilter.includes(parseOrigem(v.origem)))
+  }, [combinedVendas, origensFilter])
   const displayCustoTotal = custoTotal
   const approvedRecentVendas = recentVendas.filter(v => v.status === 'approved')
   const latestSale = approvedRecentVendas[0]
@@ -1178,7 +1234,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   }
   const countryRanking = useMemo(() => {
     const groups = new Map<string, { label: string; count: number; revenue: number }>()
-    for (const venda of vendas.filter(v => v.status === 'approved')) {
+    for (const venda of displayVendas.filter(v => v.status === 'approved')) {
       const code = (venda.pais || '').trim().toUpperCase()
       const label = code ? code : 'Unknown'
       const current = groups.get(label) ?? { label, count: 0, revenue: 0 }
@@ -1187,9 +1243,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       groups.set(label, current)
     }
     return Array.from(groups.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 5)
-  }, [vendas])
+  }, [displayVendas])
   const insights = useMemo(() => {
-    const approved = vendas.filter(v => v.status === 'approved')
+    const approved = displayVendas.filter(v => v.status === 'approved')
     const topCountry = countryRanking[0]?.label
     const topProduct = Object.entries(approved.reduce<Record<string, number>>((acc, venda) => {
       const key = venda.produto || 'Produto'
@@ -1201,7 +1257,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       topCountry ? `${topCountry} lidera em receita entre os países.` : 'Mapa de países pronto para novas vendas.',
       topProduct ? `${topProduct} lidera o faturamento.` : 'Produtos aparecerão aqui assim que houver dados.',
     ]
-  }, [countryRanking, vendas])
+  }, [countryRanking, displayVendas])
   void nowTick
   const filteredProducts = useMemo(() => {
     const query = productSearch.trim().toLowerCase()
@@ -1339,6 +1395,54 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               metaCacheUpdatedAt={metaCacheUpdatedAt}
             />
           </div>
+          {origensDisponiveis.length > 0 && (
+            <div ref={origensDropdownRef} className="relative shrink-0 self-center">
+              <button
+                type="button"
+                onClick={() => setShowOrigensDropdown(v => !v)}
+                className="flex h-8 items-center gap-1.5 rounded-lg border border-[var(--dash-border)] bg-[var(--dash-panel)] px-3 text-xs font-medium text-[var(--dash-text)] transition-colors hover:border-[var(--dash-border-strong)]"
+              >
+                {origensFilter.length === 0
+                  ? 'Origem: Todas'
+                  : `Origem: ${origensFilter.join(', ')}`}
+                <ChevronDown size={13} className={`shrink-0 text-[var(--dash-muted)] transition-transform ${showOrigensDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              {showOrigensDropdown && (
+                <div className="absolute left-0 top-full z-50 mt-2 min-w-[180px] rounded-xl border border-[var(--dash-border)] bg-[var(--dash-panel)] p-1.5 shadow-2xl shadow-black/40">
+                  <button
+                    type="button"
+                    onClick={() => { setOrigensFilter([]); setShowOrigensDropdown(false) }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-[var(--dash-text)] transition-colors hover:bg-white/5"
+                  >
+                    <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${origensFilter.length === 0 ? 'border-cyan-400 bg-cyan-400/20' : 'border-[var(--dash-border)]'}`}>
+                      {origensFilter.length === 0 && <Check size={10} className="text-cyan-400" />}
+                    </span>
+                    Todas
+                  </button>
+                  {origensDisponiveis.map(origem => {
+                    const checked = origensFilter.includes(origem)
+                    return (
+                      <button
+                        key={origem}
+                        type="button"
+                        onClick={() =>
+                          setOrigensFilter(prev =>
+                            prev.includes(origem) ? prev.filter(o => o !== origem) : [...prev, origem],
+                          )
+                        }
+                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-[var(--dash-text)] transition-colors hover:bg-white/5"
+                      >
+                        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${checked ? 'border-cyan-400 bg-cyan-400/20' : 'border-[var(--dash-border)]'}`}>
+                          {checked && <Check size={10} className="text-cyan-400" />}
+                        </span>
+                        {origem}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
           <div className="dashboard-action-bar dashboard-panel ml-auto flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-1.5 overflow-x-auto rounded-xl p-1">
             <button
               onClick={fetchVendas}
