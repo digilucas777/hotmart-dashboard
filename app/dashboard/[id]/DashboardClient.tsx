@@ -504,7 +504,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     if (!linkedMetaAccountId) { setMetaInsights(null); return }
     const presetMap: Partial<Record<string, string>> = {
       today: 'today', yesterday: 'yesterday',
-      thisWeek: 'this_week_sun_today', lastWeek: 'last_week_sun_sat',
+      thisWeek: 'this_week_mon_today', lastWeek: 'last_week_mon_sun',
       thisMonth: 'this_month', lastMonth: 'last_month',
       last7d: 'last_7d', last30d: 'last_30d',
     }
@@ -527,7 +527,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     if (!linkedMetaAccountId) { setMetaAds(null); return }
     const presetMap: Partial<Record<string, string>> = {
       today: 'today', yesterday: 'yesterday',
-      thisWeek: 'this_week_sun_today', lastWeek: 'last_week_sun_sat',
+      thisWeek: 'this_week_mon_today', lastWeek: 'last_week_mon_sun',
       thisMonth: 'this_month', lastMonth: 'last_month',
       last7d: 'last_7d', last30d: 'last_30d',
     }
@@ -543,7 +543,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     if (!linkedMetaAccountId) { setMetaCampaigns(null); return }
     const presetMap: Partial<Record<string, string>> = {
       today: 'today', yesterday: 'yesterday',
-      thisWeek: 'this_week_sun_today', lastWeek: 'last_week_sun_sat',
+      thisWeek: 'this_week_mon_today', lastWeek: 'last_week_mon_sun',
       thisMonth: 'this_month', lastMonth: 'last_month',
       last7d: 'last_7d', last30d: 'last_30d',
     }

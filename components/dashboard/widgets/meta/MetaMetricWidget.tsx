@@ -28,10 +28,6 @@ function formatValue(value: number, format: MetaMetricResult['format']): string 
 }
 
 export function MetaMetricWidget({ title, data, isDemo = true, isPersonalizado = false }: { title: string; data: MetaMetricResult; isDemo?: boolean; isPersonalizado?: boolean }) {
-  const isPositive = data.change >= 0
-  const isGood = data.isGoodWhenUp ? isPositive : !isPositive
-  const changeColor = isGood ? '#10b981' : '#ef4444'
-  const changeArrow = isPositive ? '↑' : '↓'
   const isDual = data.format === 'currency_brl' && data.valueUsd !== undefined
 
   return (
@@ -78,17 +74,6 @@ export function MetaMetricWidget({ title, data, isDemo = true, isPersonalizado =
             {formatValue(data.value, data.format)}
           </p>
         )}
-      </div>
-
-      {/* Footer */}
-      <div className="mt-3 flex items-center gap-2">
-        <span
-          className="inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold"
-          style={{ background: `${changeColor}18`, color: changeColor, border: `1px solid ${changeColor}30` }}
-        >
-          {changeArrow} {Math.abs(data.change).toFixed(1)}%
-        </span>
-        <span className="text-xs text-[var(--dash-faint)]">vs período anterior</span>
       </div>
 
       {isDemo && (

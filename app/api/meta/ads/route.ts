@@ -53,7 +53,7 @@ async function fetchAccountAds(
   const insightFields = 'spend,impressions,clicks,ctr,actions,purchase_roas'
   const creativeFields = 'thumbnail_url,image_url,video_id'
   const filtering = encodeURIComponent(JSON.stringify([
-    { field: 'effective_status', operator: 'IN', value: ['ACTIVE', 'PAUSED'] },
+    { field: 'effective_status', operator: 'IN', value: ['ACTIVE'] },
   ]))
 
   const path = `/${accountId}/ads?fields=id,name,status,creative{${creativeFields}},insights{${insightFields}}&date_preset=${datePreset}&filtering=${filtering}&limit=50`

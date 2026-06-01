@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getAuthenticatedUser, metaFetch } from '../_utils'
 
-const RATE = 5.03
 const CACHE_TTL = 30 * 60 * 1000
 
 type ActionItem = { action_type: string; value: string }
@@ -63,6 +62,17 @@ function getDateRange(preset: string): { from: Date; to: Date } {
       const dow = nowBRT.getUTCDay()
       const thisSun = new Date(todayBRT.getTime() - dow * DAY)
       return { from: new Date(thisSun.getTime() - 7 * DAY), to: thisSun }
+    }
+    case 'this_week_mon_today': {
+      const dow = nowBRT.getUTCDay()
+      const daysFromMon = dow === 0 ? 6 : dow - 1
+      return { from: new Date(todayBRT.getTime() - daysFromMon * DAY), to: new Date(todayBRT.getTime() + DAY) }
+    }
+    case 'last_week_mon_sun': {
+      const dow = nowBRT.getUTCDay()
+      const daysFromMon = dow === 0 ? 6 : dow - 1
+      const thisMon = new Date(todayBRT.getTime() - daysFromMon * DAY)
+      return { from: new Date(thisMon.getTime() - 7 * DAY), to: thisMon }
     }
     case 'last_7d':
       return { from: new Date(todayBRT.getTime() - 6 * DAY), to: new Date(todayBRT.getTime() + DAY) }
@@ -173,6 +183,16 @@ export async function GET(_request: Request) {
   if (accountIds.length === 0 && legacyAccountId) accountIds = [legacyAccountId]
   if (accountIds.length === 0) return NextResponse.json({ error: 'no_accounts' }, { status: 400 })
 
+  let taxa = 5.85
+  try {
+    const fx = await fetch('https://api.frankfurter.app/latest?from=USD&to=BRL', { signal: AbortSignal.timeout(5000) })
+    if (fx.ok) {
+      const fxData = (await fx.json()) as { rates: { BRL: number } }
+      taxa = fxData.rates.BRL ?? 5.85
+    }
+  } catch { /* fallback 5.85 */ }
+  console.log('[ROAS] taxa_cambio usada:', taxa)
+
   try {
     const perAccount = await Promise.all(
       accountIds.map(aid => fetchAccountInsights(aid, connection.access_token, datePreset)),
@@ -207,7 +227,7 @@ export async function GET(_request: Request) {
 
     // ROAS (Geral): Hotmart faturamento / spend_brl for this project
     let roas_geral = 0
-    const spend_brl = spend_usd * RATE
+    const spend_brl = spend_usd * taxa
     if (projetoId && spend_usd > 0) {
       const dateRange = getDateRange(datePreset)
       console.log('[INSIGHTS] roas_geral: datePreset:', datePreset, 'range:', dateRange.from.toISOString(), '-', dateRange.to.toISOString(), 'spend_brl:', spend_brl)
@@ -242,7 +262,7 @@ export async function GET(_request: Request) {
           const faturamento = (vendas ?? []).reduce(
             (sum: number, v: { valor_operacional_final: number; moeda: string }) => {
               const val = v.valor_operacional_final ?? 0
-              return sum + (v.moeda === 'USD' ? val * RATE : val)
+              return sum + (v.moeda === 'USD' ? val * taxa : val)
             },
             0,
           )
@@ -262,9 +282,9 @@ export async function GET(_request: Request) {
 
     const responseData = {
       spend_usd,          spend_brl,
-      cpm_usd,            cpm_brl:           cpm_usd          * RATE,
-      cpc_usd,            cpc_brl:           cpc_usd          * RATE,
-      valor_compras_usd,  valor_compras_brl: valor_compras_usd * RATE,
+      cpm_usd,            cpm_brl:           cpm_usd          * taxa,
+      cpc_usd,            cpc_brl:           cpc_usd          * taxa,
+      valor_compras_usd,  valor_compras_brl: valor_compras_usd * taxa,
       impressions,
       alcance,
       frequencia,

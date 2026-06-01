@@ -433,8 +433,8 @@ export default function RelatoriosPage() {
       const PRESET_MAP: Record<string, string> = {
         today: 'today',
         yesterday: 'yesterday',
-        thisWeek: 'this_week_sun_today',
-        lastWeek: 'last_week_sun_sat',
+        thisWeek: 'this_week_mon_today',
+        lastWeek: 'last_week_mon_sun',
         thisMonth: 'this_month',
         lastMonth: 'last_month',
       }
