@@ -1263,7 +1263,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   }, [vendas, origensFilter, afiliadosFilter])
   const displayCombinedVendas = useMemo(() => {
     let result = combinedVendas
-    if (origensFilter.length > 0) result = result.filter(v => origensFilter.includes(parseOrigem(v.origem)))
+    if (origensFilter.length > 0) result = result.filter(v => { const o = parseOrigem(v.origem); return o !== null && origensFilter.includes(o) })
     if (afiliadosFilter.length > 0) result = result.filter(v => v.afiliado_nome != null && afiliadosFilter.includes(v.afiliado_nome))
     return result
   }, [combinedVendas, origensFilter, afiliadosFilter])
