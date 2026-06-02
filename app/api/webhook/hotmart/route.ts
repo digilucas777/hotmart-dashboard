@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
 
     const origem: string | null =
       dados.purchase?.tracking_parameters?.utm_source ??
-      dados.purchase?.origin ??
+      (typeof dados.purchase?.origin === 'object' ? dados.purchase?.origin?.src : dados.purchase?.origin) ??
       null
 
     const afiliado_nome: string | null =
