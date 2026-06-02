@@ -216,7 +216,7 @@ export function buildPieData(vendas: Venda[]): PiePoint[] {
 
 // ---------- Widget data ----------
 
-export type SeriesPoint = { label: string; value: number; valueBRL?: number; valueUSD?: number; currency?: 'BRL' | 'USD' | string }
+export type SeriesPoint = { label: string; value: number; valueBRL?: number; valueUSD?: number; currency?: 'BRL' | 'USD' | string; count?: number }
 
 export type CombinedPoint = {
   label: string
