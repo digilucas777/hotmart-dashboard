@@ -49,47 +49,52 @@ function getDateRange(preset: string): { from: Date; to: Date } {
   const todayBRT = new Date(Date.UTC(y, m, d) + BRT_OFFSET_MS)
   const DAY = 86_400_000
 
+  let result: { from: Date; to: Date }
+
   switch (preset) {
     case 'today':
-      return { from: todayBRT, to: new Date(todayBRT.getTime() + DAY) }
+      result = { from: todayBRT, to: new Date(todayBRT.getTime() + DAY) }; break
     case 'yesterday':
-      return { from: new Date(todayBRT.getTime() - DAY), to: todayBRT }
+      result = { from: new Date(todayBRT.getTime() - DAY), to: todayBRT }; break
     case 'this_week_sun_today': {
       const dow = nowBRT.getUTCDay()
-      return { from: new Date(todayBRT.getTime() - dow * DAY), to: new Date(todayBRT.getTime() + DAY) }
+      result = { from: new Date(todayBRT.getTime() - dow * DAY), to: new Date(todayBRT.getTime() + DAY) }; break
     }
     case 'last_week_sun_sat': {
       const dow = nowBRT.getUTCDay()
       const thisSun = new Date(todayBRT.getTime() - dow * DAY)
-      return { from: new Date(thisSun.getTime() - 7 * DAY), to: thisSun }
+      result = { from: new Date(thisSun.getTime() - 7 * DAY), to: thisSun }; break
     }
     case 'this_week_mon_today': {
       const dow = nowBRT.getUTCDay()
       const daysFromMon = dow === 0 ? 6 : dow - 1
-      return { from: new Date(todayBRT.getTime() - daysFromMon * DAY), to: new Date(todayBRT.getTime() + DAY) }
+      result = { from: new Date(todayBRT.getTime() - daysFromMon * DAY), to: new Date(todayBRT.getTime() + DAY) }; break
     }
     case 'last_week_mon_sun': {
       const dow = nowBRT.getUTCDay()
       const daysFromMon = dow === 0 ? 6 : dow - 1
       const thisMon = new Date(todayBRT.getTime() - daysFromMon * DAY)
-      return { from: new Date(thisMon.getTime() - 7 * DAY), to: thisMon }
+      result = { from: new Date(thisMon.getTime() - 7 * DAY), to: thisMon }; break
     }
     case 'last_7d':
-      return { from: new Date(todayBRT.getTime() - 6 * DAY), to: new Date(todayBRT.getTime() + DAY) }
+      result = { from: new Date(todayBRT.getTime() - 6 * DAY), to: new Date(todayBRT.getTime() + DAY) }; break
     case 'last_30d':
-      return { from: new Date(todayBRT.getTime() - 29 * DAY), to: new Date(todayBRT.getTime() + DAY) }
+      result = { from: new Date(todayBRT.getTime() - 29 * DAY), to: new Date(todayBRT.getTime() + DAY) }; break
     case 'this_month': {
       const monthStart = new Date(Date.UTC(y, m, 1) + BRT_OFFSET_MS)
-      return { from: monthStart, to: new Date(todayBRT.getTime() + DAY) }
+      result = { from: monthStart, to: new Date(todayBRT.getTime() + DAY) }; break
     }
     case 'last_month': {
       const firstThisMonth = new Date(Date.UTC(y, m, 1) + BRT_OFFSET_MS)
       const firstLastMonth = new Date(Date.UTC(y, m - 1, 1) + BRT_OFFSET_MS)
-      return { from: firstLastMonth, to: firstThisMonth }
+      result = { from: firstLastMonth, to: firstThisMonth }; break
     }
     default:
-      return { from: todayBRT, to: new Date(todayBRT.getTime() + DAY) }
+      result = { from: todayBRT, to: new Date(todayBRT.getTime() + DAY) }
   }
+
+  console.log('[DATE_RANGE] preset:', preset, 'from:', result.from, 'to:', result.to)
+  return result
 }
 
 async function fetchAccountInsights(

@@ -65,6 +65,7 @@ function CustomTooltip({
         <>
           <p className="text-sm font-semibold text-emerald-300">{formatBRL(point.valueBRL)}</p>
           <p className="text-xs font-medium text-cyan-300">({formatUSD(payload[0].value)})</p>
+          {point.count !== undefined && <div style={{fontSize:'11px', opacity:0.7}}>{point.count} venda{point.count !== 1 ? 's' : ''}</div>}
         </>
       ) : (
         <p className="text-sm font-semibold text-slate-100">
@@ -73,6 +74,7 @@ function CustomTooltip({
             : payload[0].value.toLocaleString('pt-BR')}
         </p>
       )}
+      {point?.count !== undefined && point?.currency !== 'USD' && <div style={{fontSize:'11px', opacity:0.7}}>{point.count} venda{point.count !== 1 ? 's' : ''}</div>}
     </div>
   )
 }
