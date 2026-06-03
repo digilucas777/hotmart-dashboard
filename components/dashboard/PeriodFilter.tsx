@@ -154,15 +154,15 @@ export function PeriodFilter({
           <Clock3 size={12} className="text-[var(--dash-faint)]" />
           {updatedLabel}
         </span>
-        {hasMetaAds && (
-          <span className="ml-auto flex flex-col items-end gap-0.5 text-xs text-slate-500">
-            <span>⏱ Atualização Meta Ads disponível a cada 30 min</span>
-            {metaCacheUpdatedAt && (
-              <span className="text-[10px] text-slate-600">· Última sincronização: {formatBRT(metaCacheUpdatedAt)}</span>
-            )}
-          </span>
-        )}
       </div>
+      {hasMetaAds && (
+        <div className="flex flex-col gap-0.5 px-1 text-xs text-slate-500">
+          <span>⏱ Atualização Meta Ads disponível a cada 30 min</span>
+          {metaCacheUpdatedAt && (
+            <span className="text-[10px] text-slate-600">· Última sincronização: {formatBRT(metaCacheUpdatedAt)}</span>
+          )}
+        </div>
+      )}
 
       {showCustom && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 px-4" onClick={() => setShowCustom(false)}>

@@ -950,11 +950,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
     if (data) {
       const placed: WidgetConfig = { ...(data as WidgetConfig), col_start, row_start, col_span, row_span }
-      setWidgets(prev => {
-        const next = [...prev, placed]
-        setSavedWidgets(next)
-        return next
-      })
+      console.log('[ADD_WIDGET] inserido em posição:', placed.col_start, placed.row_start)
+      setWidgets(prev => [...prev, placed])
+      setSavedWidgets(prev => [...prev, placed])
     }
   }
 
@@ -1502,9 +1500,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       </header>
 
       <main className="dashboard-main mx-auto max-w-[1400px] px-6 py-6">
-        <div className="dashboard-toolbar sticky top-14 z-30 mb-5 flex flex-col gap-1.5 overflow-visible rounded-xl border border-[var(--dash-border)] bg-[rgba(12,14,24,0.88)] p-1.5 shadow-sm backdrop-blur-sm lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-          <div className="min-w-0 flex-1">
+        <div className="dashboard-toolbar sticky top-14 z-30 mb-5 flex flex-col gap-1.5 overflow-visible rounded-xl border border-[var(--dash-border)] bg-[rgba(12,14,24,0.88)] p-1.5 shadow-sm backdrop-blur-sm lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0 lg:flex-1">
             <PeriodFilter
               value={period}
               onChange={setPeriod}
@@ -1516,6 +1513,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               metaCacheUpdatedAt={metaCacheUpdatedAt}
             />
           </div>
+          <div className="flex flex-row flex-wrap gap-2 lg:contents">
           {origensDisponiveis.length > 0 && (
             <div ref={origensDropdownRef} className="relative shrink-0">
               <button
@@ -1613,7 +1611,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             </div>
           )}
           </div>
-          <div className="dashboard-action-bar dashboard-panel flex w-full flex-nowrap items-center justify-end gap-1.5 overflow-x-auto rounded-xl p-1 lg:ml-auto lg:w-auto">
+          <div className="dashboard-action-bar dashboard-panel flex w-full flex-wrap items-center justify-end gap-2 rounded-xl p-1 lg:ml-auto lg:w-auto lg:flex-nowrap">
             <button
               onClick={handleRefresh}
               disabled={isRefreshing}
@@ -1955,9 +1953,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       )}
 
       {isRefreshing && (
-        <div className="pointer-events-none fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 flex items-center gap-2 rounded-2xl border border-cyan-500/20 bg-[#1a1a2e]/95 px-5 py-3 text-sm font-semibold text-white shadow-2xl backdrop-blur-sm">
-          <RefreshCw size={14} className="animate-spin text-cyan-400" />
-          Atualizando dados...
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4 rounded-2xl border border-[var(--dash-border)] bg-[var(--dash-panel)] p-8 shadow-2xl">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-[var(--dash-border)] border-t-cyan-400" />
+            <p className="text-sm font-medium text-[var(--dash-text)]">Atualizando dados...</p>
+            <p className="text-xs text-[var(--dash-faint)]">Hotmart + Meta Ads</p>
+          </div>
         </div>
       )}
 
