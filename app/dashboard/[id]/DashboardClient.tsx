@@ -400,6 +400,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [metaCampaigns, setMetaCampaigns] = useState<MetaCampaignResult | null>(null)
   const [showClearModal, setShowClearModal] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [successToast, setSuccessToast] = useState<string | null>(null)
 
   const [origensDisponiveis, setOrigensDisponiveis] = useState<string[]>([])
   const [origensFilter, setOrigensFilter] = useState<string[]>([])
@@ -410,6 +411,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [afiliadosFilter, setAfiliadosFilter] = useState<string[]>([])
   const [showAfiliadosDropdown, setShowAfiliadosDropdown] = useState(false)
   const afiliadosDropdownRef = useRef<HTMLDivElement>(null)
+  const dashboardSwitcherRef = useRef<HTMLDivElement>(null)
 
   const customDateRange = useMemo((): { from: Date; to: Date } | undefined => {
     if (period !== 'custom') return undefined
@@ -706,6 +708,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setIsRefreshing(true)
     try {
       await Promise.all([fetchVendas(), fetchMetaAds()])
+      setSuccessToast('Dados atualizados')
+      setTimeout(() => setSuccessToast(null), 5000)
     } finally {
       setIsRefreshing(false)
     }
@@ -792,6 +796,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   useEffect(() => {
     function onPointerDown(e: PointerEvent) {
       if (!afiliadosDropdownRef.current?.contains(e.target as Node)) setShowAfiliadosDropdown(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => document.removeEventListener('pointerdown', onPointerDown)
+  }, [])
+
+  useEffect(() => {
+    function onPointerDown(e: PointerEvent) {
+      if (!dashboardSwitcherRef.current?.contains(e.target as Node)) setShowDashboardSwitcher(false)
     }
     document.addEventListener('pointerdown', onPointerDown)
     return () => document.removeEventListener('pointerdown', onPointerDown)
@@ -1435,7 +1447,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               </h1>
             </div>
             {dashboardOptions.length > 0 && (
-              <div className="relative">
+              <div ref={dashboardSwitcherRef} className="relative">
                 <button
                   onClick={() => setShowDashboardSwitcher(prev => !prev)}
                   className="flex min-w-0 items-center gap-2.5 rounded-xl border border-[var(--dash-border)] bg-[var(--dash-panel)] px-3 py-2 text-left shadow-md shadow-black/10 transition-colors hover:border-[var(--dash-border-strong)] sm:min-w-60"
@@ -1468,7 +1480,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                             key={option.id}
                             onClick={() => {
                               setShowDashboardSwitcher(false)
-                              if (!active) router.push(`/dashboard/${option.id}`)
+                              if (!active) {
+                                router.push(`/dashboard/${option.id}`)
+                                setSuccessToast('Dashboard alterado')
+                                setTimeout(() => setSuccessToast(null), 3000)
+                              }
                             }}
                             className={`group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all ${
                               active
@@ -1955,11 +1971,17 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
       {isRefreshing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-[#1a1a2e] p-8 shadow-2xl">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-[var(--dash-border)] border-t-cyan-400" />
-            <p className="text-sm font-medium text-[var(--dash-text)]">Atualizando dados...</p>
-            <p className="text-xs text-[var(--dash-faint)]">Hotmart + Meta Ads</p>
+          <div className="flex items-center gap-3">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-cyan-400" />
+            <p className="text-sm font-medium text-white">Atualizando dados...</p>
           </div>
+        </div>
+      )}
+
+      {successToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl bg-emerald-500/90 px-4 py-3 text-sm font-medium text-white shadow-lg backdrop-blur-sm">
+          <span>✓</span>
+          <span>{successToast}</span>
         </div>
       )}
 
