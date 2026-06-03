@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft,
   Check,
   ChevronDown,
   Settings,
@@ -863,6 +862,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         const activeIds = selectedWidgetIdsRef.current
         const deltaCol = placement.col_start - (dragged.col_start ?? 1)
         const deltaRow = placement.row_start - (dragged.row_start ?? 1)
+        const fromPos = { col: dragged.col_start ?? 1, row: dragged.row_start ?? 1 }
+        const toPos = { col: placement.col_start, row: placement.row_start }
+        console.log('[DRAG] from:', fromPos, 'to:', toPos)
 
         // Single-widget drag: if dropped on exactly one other widget, swap positions.
         if (activeIds.size <= 1) {
@@ -883,10 +885,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               if (w.id === target.id) return { ...w, col_start: dragged.col_start ?? 1, row_start: dragged.row_start ?? 1 }
               return w
             })
-            return applyBottomMagnet(resolveOverlapsMulti(swapped, new Set([draggedId])))
+            const result = applyBottomMagnet(resolveOverlapsMulti(swapped, new Set([draggedId])))
+            console.log('[DRAG] layout após drop (swap):', result.map(w => ({ id: w.id, col: w.col_start, row: w.row_start })))
+            return result
           }
-          // Múltiplos widgets sobrepostos: volta para posição original
-          if (overlapping.length > 1) return prev
+          // Múltiplos sobrepostos: move o widget e empurra os outros para baixo
         }
 
         const moved = prev.map(w => {
@@ -899,7 +902,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             row_start: Math.max(1, (w.row_start ?? 1) + deltaRow),
           }
         })
-        return applyBottomMagnet(resolveOverlapsMulti(moved, activeIds))
+        const newLayout = applyBottomMagnet(resolveOverlapsMulti(moved, activeIds))
+        console.log('[DRAG] layout após drop:', newLayout.map(w => ({ id: w.id, col: w.col_start, row: w.row_start })))
+        return newLayout
       })
     },
     [dragPreview, getPlacementFromDelta, pushHistory],
@@ -1413,23 +1418,19 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         className="sticky top-0 z-40 border-b border-[var(--dash-border)] bg-[color:var(--dash-bg)]/88 shadow-lg shadow-black/10 backdrop-blur-sm"
       >
         <div className="mx-auto flex min-h-14 max-w-[1400px] flex-wrap items-center gap-2.5 px-4 py-2 sm:px-6">
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-1.5 text-sm text-[var(--dash-faint)] transition-colors hover:text-[var(--dash-text)]"
-          >
-            <ArrowLeft size={15} />
-            Dashboards
-          </Link>
-          <div className="hidden h-5 w-px bg-[var(--dash-border)] sm:block" />
           <div className="dashboard-topbar flex min-w-0 flex-1 items-center gap-2.5 rounded-2xl px-2.5 py-1.5 sm:px-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 via-blue-500 to-violet-500 text-white shadow-md shadow-cyan-500/15">
+            <Link
+              href="/"
+              title="Página inicial"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 via-blue-500 to-violet-500 text-white shadow-md shadow-cyan-500/15 transition-opacity hover:opacity-80"
+            >
               <Rocket size={18} />
-            </div>
+            </Link>
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dash-faint)]">
                 Dashboard
               </p>
-              <h1 className="truncate text-base font-extrabold text-[var(--dash-text)] sm:text-lg">
+              <h1 className="max-w-[180px] truncate text-base font-extrabold text-[var(--dash-text)] sm:max-w-xs sm:text-lg">
                 {projeto?.nome ?? '...'}
               </h1>
             </div>
@@ -1437,7 +1438,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               <div className="relative">
                 <button
                   onClick={() => setShowDashboardSwitcher(prev => !prev)}
-                  className="flex min-w-0 items-center gap-2.5 rounded-xl border border-[var(--dash-border)] bg-[var(--dash-panel)] px-2.5 py-1.5 text-left shadow-md shadow-black/10 transition-colors hover:border-[var(--dash-border-strong)] sm:min-w-60"
+                  className="flex min-w-0 items-center gap-2.5 rounded-xl border border-[var(--dash-border)] bg-[var(--dash-panel)] px-3 py-2 text-left shadow-md shadow-black/10 transition-colors hover:border-[var(--dash-border-strong)] sm:min-w-60"
                   title="Trocar dashboard"
                 >
                   <div className="grid h-8 w-10 shrink-0 grid-cols-3 items-end gap-1 rounded-lg bg-gradient-to-br from-cyan-400/20 to-violet-500/20 p-1.5">
@@ -1449,7 +1450,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                     <p className="truncate text-xs font-extrabold text-[var(--dash-text)]">{projeto?.nome ?? 'Dashboard'}</p>
                     <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dash-faint)]">Ativo</p>
                   </div>
-                  <ChevronDown size={15} className={`shrink-0 text-[var(--dash-muted)] transition-transform ${showDashboardSwitcher ? 'rotate-180' : ''}`} />
+                  <ChevronDown size={18} className={`shrink-0 text-[var(--dash-text)] transition-transform ${showDashboardSwitcher ? 'rotate-180' : ''}`} />
                 </button>
 
                 {showDashboardSwitcher && (
@@ -1500,7 +1501,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       </header>
 
       <main className="dashboard-main mx-auto max-w-[1400px] px-6 py-6">
-        <div className="dashboard-toolbar sticky top-14 z-30 mb-5 flex flex-col gap-1.5 overflow-visible rounded-xl border border-[var(--dash-border)] bg-[rgba(12,14,24,0.88)] p-1.5 shadow-sm backdrop-blur-sm lg:flex-row lg:items-center lg:justify-between">
+        <div className="dashboard-toolbar mb-5 flex flex-col gap-1.5 overflow-visible rounded-xl border border-[var(--dash-border)] bg-[rgba(12,14,24,0.88)] p-1.5 shadow-sm backdrop-blur-sm lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0 lg:flex-1">
             <PeriodFilter
               value={period}
