@@ -400,6 +400,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [metaAds, setMetaAds] = useState<MetaCreativeResult | null>(null)
   const [metaCampaigns, setMetaCampaigns] = useState<MetaCampaignResult | null>(null)
   const [showClearModal, setShowClearModal] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   const [origensDisponiveis, setOrigensDisponiveis] = useState<string[]>([])
   const [origensFilter, setOrigensFilter] = useState<string[]>([])
@@ -670,6 +671,47 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     void Promise.resolve().then(fetchCustos)
   }, [fetchCustos])
 
+  const fetchMetaAds = useCallback(async () => {
+    if (!linkedMetaAccountId) return
+    const presetMap: Partial<Record<string, string>> = {
+      today: 'today', yesterday: 'yesterday',
+      thisWeek: 'this_week_mon_today', lastWeek: 'last_week_mon_sun',
+      thisMonth: 'this_month', lastMonth: 'last_month',
+      last7d: 'last_7d', last30d: 'last_30d',
+    }
+    const preset = presetMap[period]
+    if (!preset) return
+    await Promise.all([
+      supabase.from('meta_insights_cache').delete().eq('projeto_id', projectId).eq('date_preset', preset),
+      supabase.from('meta_ads_cache').delete().eq('projeto_id', projectId).eq('date_preset', preset),
+    ])
+    const [insightsRes, adsRes, campaignsRes] = await Promise.all([
+      fetch(`/api/meta/insights?account_id=${encodeURIComponent(linkedMetaAccountId)}&date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' }),
+      fetch(`/api/meta/ads?account_id=${encodeURIComponent(linkedMetaAccountId)}&date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' }),
+      fetch(`/api/meta/campaigns?account_id=${encodeURIComponent(linkedMetaAccountId)}&date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' }),
+    ])
+    if (insightsRes.ok) {
+      const updatedAt = insightsRes.headers.get('X-Cache-Updated-At')
+      if (updatedAt) setMetaCacheUpdatedAt(updatedAt)
+      setMetaInsights(await insightsRes.json() as Record<string, unknown>)
+    } else {
+      setMetaInsights(null)
+    }
+    if (adsRes.ok) setMetaAds(await adsRes.json() as MetaCreativeResult)
+    else setMetaAds(null)
+    if (campaignsRes.ok) setMetaCampaigns(await campaignsRes.json() as MetaCampaignResult)
+    else setMetaCampaigns(null)
+  }, [linkedMetaAccountId, period, projectId])
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true)
+    try {
+      await Promise.all([fetchVendas(), fetchMetaAds()])
+    } finally {
+      setIsRefreshing(false)
+    }
+  }, [fetchVendas, fetchMetaAds])
+
   useEffect(() => {
     async function loadOrigens() {
       const { data: pp } = await supabase
@@ -867,8 +909,19 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     const position = widgets.length
     const col_span = widthToSpan(config.width)
     const row_span = heightToRows(config.height, config.type)
-    const maxRow = widgets.reduce((max, w) => Math.max(max, (w.row_start ?? 1) + (w.row_span ?? 1) - 1), 0)
-    const payload = { ...config, projeto_id: projectId, position, col_start: 1, row_start: maxRow + 1, col_span, row_span }
+    const bounds = layoutBounds(widgets)
+    const isFreeSlot = (c: number, r: number) =>
+      !bounds.some(b => collidesBounds({ col: c, row: r, colSpan: col_span, rowSpan: row_span }, b))
+    const searchMax = maxLayoutRow(widgets) + row_span
+    let col_start = 1
+    let row_start = maxLayoutRow(widgets) + 1
+    let slotFound = false
+    for (let r = 1; r <= searchMax && !slotFound; r++) {
+      for (let c = 1; c <= GRID_COLUMNS - col_span + 1; c++) {
+        if (isFreeSlot(c, r)) { col_start = c; row_start = r; slotFound = true; break }
+      }
+    }
+    const payload = { ...config, projeto_id: projectId, position, col_start, row_start, col_span, row_span }
     const legacyPayload = { ...config, projeto_id: projectId, position }
 
     setWidgetError(null)
@@ -896,8 +949,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       return
     }
     if (data) {
+      const placed: WidgetConfig = { ...(data as WidgetConfig), col_start, row_start, col_span, row_span }
       setWidgets(prev => {
-        const next = compactLayout([...prev, withGridDefaults(data as WidgetConfig, prev.length)])
+        const next = [...prev, placed]
         setSavedWidgets(next)
         return next
       })
@@ -1449,6 +1503,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
       <main className="dashboard-main mx-auto max-w-[1400px] px-6 py-6">
         <div className="dashboard-toolbar sticky top-14 z-30 mb-5 flex flex-col gap-1.5 overflow-visible rounded-xl border border-[var(--dash-border)] bg-[rgba(12,14,24,0.88)] p-1.5 shadow-sm backdrop-blur-sm lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
           <div className="min-w-0 flex-1">
             <PeriodFilter
               value={period}
@@ -1462,7 +1517,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             />
           </div>
           {origensDisponiveis.length > 0 && (
-            <div ref={origensDropdownRef} className="relative shrink-0 self-center">
+            <div ref={origensDropdownRef} className="relative shrink-0">
               <button
                 type="button"
                 onClick={() => setShowOrigensDropdown(v => !v)}
@@ -1510,7 +1565,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             </div>
           )}
           {afiliadosDisponiveis.length > 0 && (
-            <div ref={afiliadosDropdownRef} className="relative shrink-0 self-center">
+            <div ref={afiliadosDropdownRef} className="relative shrink-0">
               <button
                 type="button"
                 onClick={() => setShowAfiliadosDropdown(v => !v)}
@@ -1557,14 +1612,16 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               )}
             </div>
           )}
-          <div className="dashboard-action-bar dashboard-panel ml-auto flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-1.5 overflow-x-auto rounded-xl p-1">
+          </div>
+          <div className="dashboard-action-bar dashboard-panel flex w-full flex-nowrap items-center justify-end gap-1.5 overflow-x-auto rounded-xl p-1 lg:ml-auto lg:w-auto">
             <button
-              onClick={fetchVendas}
+              onClick={handleRefresh}
+              disabled={isRefreshing}
               title="Atualizar"
-              className="flex shrink-0 items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-violet-500 px-3 py-1.5 text-sm font-semibold text-white shadow-md shadow-cyan-500/15 transition-colors"
+              className="flex shrink-0 items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-violet-500 px-3 py-1.5 text-sm font-semibold text-white shadow-md shadow-cyan-500/15 transition-colors disabled:opacity-60"
             >
-              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-              Atualizar
+              <RefreshCw size={15} className={isRefreshing ? 'animate-spin' : ''} />
+              {isRefreshing ? 'Atualizando...' : 'Atualizar'}
             </button>
             {!editMode ? (
               <Button
@@ -1894,6 +1951,13 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       {undoToast && (
         <div className="pointer-events-none fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-2xl border border-white/10 bg-[#1a1a2e]/95 px-5 py-3 text-sm font-semibold text-white shadow-2xl backdrop-blur-sm">
           Ação desfeita
+        </div>
+      )}
+
+      {isRefreshing && (
+        <div className="pointer-events-none fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 flex items-center gap-2 rounded-2xl border border-cyan-500/20 bg-[#1a1a2e]/95 px-5 py-3 text-sm font-semibold text-white shadow-2xl backdrop-blur-sm">
+          <RefreshCw size={14} className="animate-spin text-cyan-400" />
+          Atualizando dados...
         </div>
       )}
 
