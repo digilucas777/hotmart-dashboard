@@ -1309,6 +1309,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           .in('hotmart_produto_id', hotmartIds)
           .not('oferta_codigo', 'is', null)
       : { data: [] }
+    console.log('[OFERTAS DEBUG] hotmartIds:', hotmartIds)
+    console.log('[OFERTAS DEBUG] offerRows count:', (offerRows ?? []).length)
+    console.log('[OFERTAS DEBUG] offerRows xjdu2238:', (offerRows ?? []).filter((r: any) => r.oferta_codigo === 'xjdu2238'))
     const productIdByHotmartId = new Map(products.map(p => [p.hotmart_id, p.id]))
     const offersByProduct: Record<string, ProdutoOferta[]> = {}
     ;((offerRows ?? []) as Array<{
