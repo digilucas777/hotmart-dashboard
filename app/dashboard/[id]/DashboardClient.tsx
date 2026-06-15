@@ -1304,11 +1304,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     const hotmartIds = products.map(p => p.hotmart_id).filter(Boolean)
     const { data: offerRows } = hotmartIds.length > 0
       ? await supabase
-          .from('vendas')
-          .select('hotmart_produto_id, oferta_codigo, oferta_nome, oferta_preco, oferta_moeda')
-          .in('hotmart_produto_id', hotmartIds)
-          .not('oferta_codigo', 'is', null)
-          .limit(5000)
+          .rpc('get_distinct_ofertas', { hotmart_ids: hotmartIds })
+          .select()
       : { data: [] }
     console.log('[OFERTAS DEBUG] hotmartIds:', hotmartIds)
     console.log('[OFERTAS DEBUG] offerRows count:', (offerRows ?? []).length)
