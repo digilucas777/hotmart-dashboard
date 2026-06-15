@@ -1308,6 +1308,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           .select('hotmart_produto_id, oferta_codigo, oferta_nome, oferta_preco, oferta_moeda')
           .in('hotmart_produto_id', hotmartIds)
           .not('oferta_codigo', 'is', null)
+          .limit(5000)
       : { data: [] }
     console.log('[OFERTAS DEBUG] hotmartIds:', hotmartIds)
     console.log('[OFERTAS DEBUG] offerRows count:', (offerRows ?? []).length)
