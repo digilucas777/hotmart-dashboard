@@ -123,16 +123,8 @@ export async function POST(req: NextRequest) {
     console.log('[WEBHOOK] afiliado_nome:', afiliado_nome)
 
     const offer = dados.purchase?.offer
-    const oferta_codigo: string | null =
-      offer?.code ? String(offer.code) :
-      offer?.name ? String(offer.name) :
-      offer?.description ? String(offer.description) :
-      null
-    const oferta_nome: string | null =
-      offer?.name ? String(offer.name) :
-      offer?.description ? String(offer.description) :
-      offer?.code ? String(offer.code) :
-      null
+    const oferta_codigo: string | null = offer?.code ? String(offer.code) : null
+    const oferta_nome: string | null = offer?.name ? String(offer.name) : null
     const oferta_descricao: string | null = offer?.description ? String(offer.description) : null
     const oferta_preco: number | null =
       dados.purchase?.original_offer_price?.value != null

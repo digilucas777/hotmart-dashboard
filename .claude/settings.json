@@ -9,7 +9,25 @@
       "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\User\\\\hotmart-dashboard\\\\components\\\\dashboard\\\\widgets\\\\\" | ForEach-Object { $_.Name })",
       "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\User\\\\hotmart-dashboard\\\\components\\\\dashboard\\\\\" | ForEach-Object { $_.Name })",
       "Bash(git fetch *)",
-      "Bash(git show *)"
+      "Bash(git show *)",
+      "PowerShell(npm run build 2>&1)",
+      "PowerShell(git add app/api/meta/insights/route.ts app/api/meta/ads/route.ts app/api/meta/accounts/route.ts app/api/meta/oauth/start/route.ts)",
+      "PowerShell(git push)",
+      "PowerShell(git add components/layout/Sidebar.tsx app/integracoes/page.tsx lib/utils.ts components/dashboard/widgets/MetricWidget.tsx components/dashboard/widgets/WidgetRenderer.tsx app/dashboard/[id]/DashboardClient.tsx)",
+      "Bash(npm run build)",
+      "Bash(npm run dev)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(npx tsx *)",
+      "Bash(cd C:\\Users\\User\\hotmart-dashboard*)",
+      "PowerShell(cd C:\\Users\\User\\hotmart-dashboard*)",
+      "PowerShell(git commit *)",
+      "PowerShell(git status)",
+      "PowerShell(git diff *)",
+      "PowerShell(npm run dev)"
     ]
   }
 }

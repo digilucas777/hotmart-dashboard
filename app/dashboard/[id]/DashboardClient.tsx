@@ -1332,7 +1332,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       offersByProduct[produtoId]!.push({
         produto_id: produtoId,
         codigo: row.oferta_codigo,
-        nome: row.oferta_nome || row.oferta_codigo,
+        nome: row.oferta_nome || '(sem nome)',
         preco: row.oferta_preco,
         moeda: row.oferta_moeda,
       })
@@ -1340,6 +1340,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     Object.values(offersByProduct).forEach(offers => {
       offers.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
     })
+    console.log('[OFERTAS] por produto:', JSON.stringify(offersByProduct, null, 2))
     const { data: selectedOffers } = await supabase
       .from('projeto_produto_ofertas')
       .select('produto_id, oferta_codigo, oferta_nome, oferta_preco, oferta_moeda')
