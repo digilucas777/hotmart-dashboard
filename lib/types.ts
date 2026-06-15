@@ -5,6 +5,13 @@ export type Venda = {
   hotmart_id: string
   hotmart_produto_id?: string | null
   produto: string
+  oferta_codigo?: string | null
+  oferta_nome?: string | null
+  oferta_descricao?: string | null
+  oferta_preco?: number | null
+  oferta_moeda?: string | null
+  plano_id?: string | null
+  plano_nome?: string | null
   comprador_nome: string
   comprador_email: string
   valor: number

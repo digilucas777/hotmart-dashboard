@@ -73,6 +73,42 @@ type GridPlacement = {
   row_span: number
 }
 
+type ProdutoOferta = {
+  produto_id: string
+  codigo: string
+  nome: string
+  preco: number | null
+  moeda: string | null
+}
+
+type ProjetoProdutoLink = {
+  produto_id: string
+  todas_ofertas?: boolean | null
+}
+
+type ProjetoProdutoOfertaLink = {
+  produto_id: string
+  oferta_codigo: string
+  oferta_nome: string
+  oferta_preco?: number | null
+  oferta_moeda?: string | null
+}
+
+type OfferSelectionMode = 'all' | 'custom'
+
+function formatOfferPrice(preco?: number | null, moeda?: string | null): string | null {
+  if (preco == null || Number.isNaN(Number(preco))) return null
+  const currency = moeda || 'BRL'
+  try {
+    return new Intl.NumberFormat(currency === 'USD' ? 'en-US' : 'pt-BR', {
+      style: 'currency',
+      currency,
+    }).format(Number(preco))
+  } catch {
+    return `${currency} ${Number(preco).toFixed(2)}`
+  }
+}
+
 function widthToSpan(width?: string) {
   if (width === 'full') return 12
   if (width === '1/4') return 3
@@ -390,6 +426,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [showProducts, setShowProducts] = useState(false)
   const [allProducts, setAllProducts] = useState<Produto[]>([])
   const [linkedIds, setLinkedIds] = useState<string[]>([])
+  const [productOffers, setProductOffers] = useState<Record<string, ProdutoOferta[]>>({})
+  const [offerModeByProduct, setOfferModeByProduct] = useState<Record<string, OfferSelectionMode>>({})
+  const [selectedOfferCodes, setSelectedOfferCodes] = useState<Record<string, string[]>>({})
   const [productSearch, setProductSearch] = useState('')
   const [savingProducts, setSavingProducts] = useState(false)
 
@@ -567,15 +606,44 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       .catch(() => setMetaCampaigns(null))
   }, [linkedMetaAccountId, period, projectId])
 
+  const filterRowsByOfferSelection = useCallback((
+    rows: Venda[],
+    produtos: { id: string; hotmart_id: string }[],
+    productLinks: ProjetoProdutoLink[],
+    offerLinks: ProjetoProdutoOfertaLink[],
+  ) => {
+    const productIdByHotmartId = new Map(produtos.map(p => [p.hotmart_id, p.id]))
+    const allOfferProducts = new Set(
+      productLinks
+        .filter(link => link.todas_ofertas !== false)
+        .map(link => link.produto_id),
+    )
+    const allowedOffersByProduct = offerLinks.reduce((acc, link) => {
+      if (!acc[link.produto_id]) acc[link.produto_id] = new Set<string>()
+      acc[link.produto_id]!.add(link.oferta_codigo)
+      return acc
+    }, {} as Record<string, Set<string>>)
+
+    return rows.filter(venda => {
+      const productId = venda.hotmart_produto_id ? productIdByHotmartId.get(venda.hotmart_produto_id) : undefined
+      if (!productId) return false
+      if (allOfferProducts.has(productId)) return true
+      const allowedOffers = allowedOffersByProduct[productId]
+      if (!allowedOffers || allowedOffers.size === 0) return false
+      return !!venda.oferta_codigo && allowedOffers.has(venda.oferta_codigo)
+    })
+  }, [])
+
   const fetchVendas = useCallback(async () => {
     setLoading(true)
     try {
       const { data: pp } = await supabase
         .from('projeto_produtos')
-        .select('produto_id')
+        .select('produto_id, todas_ofertas')
         .eq('projeto_id', projectId)
 
-      const produtoIds = (pp ?? []).map((r: { produto_id: string }) => r.produto_id)
+      const productLinks = (pp ?? []) as ProjetoProdutoLink[]
+      const produtoIds = productLinks.map(r => r.produto_id)
 
       if (produtoIds.length === 0) {
         setVendas([])
@@ -587,10 +655,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
       const { data: prods } = await supabase
         .from('produtos')
-        .select('hotmart_id')
+        .select('id, hotmart_id')
         .in('id', produtoIds)
 
-      const hotmartIds = (prods ?? []).map((r: { hotmart_id: string }) => r.hotmart_id)
+      const products = (prods ?? []) as { id: string; hotmart_id: string }[]
+      const hotmartIds = products.map(r => r.hotmart_id)
 
       if (hotmartIds.length === 0) {
         setVendas([])
@@ -602,6 +671,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
       const { from, to } = getPeriodRange(period, customDateRange)
       const previousRange = getPreviousPeriodRange(period, customDateRange)
+      const { data: selectedOffers } = await supabase
+        .from('projeto_produto_ofertas')
+        .select('produto_id, oferta_codigo, oferta_nome, oferta_preco, oferta_moeda')
+        .eq('projeto_id', projectId)
+      const offerLinks = (selectedOffers ?? []) as ProjetoProdutoOfertaLink[]
 
       const { data } = await supabase
         .from('vendas')
@@ -611,7 +685,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         .lt('data_venda', to.toISOString())
         .order('data_venda', { ascending: false })
 
-      setVendas((data ?? []) as Venda[])
+      setVendas(filterRowsByOfferSelection((data ?? []) as Venda[], products, productLinks, offerLinks))
 
       const { data: previousData } = await supabase
         .from('vendas')
@@ -621,7 +695,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         .lt('data_venda', previousRange.to.toISOString())
         .order('data_venda', { ascending: false })
 
-      setPreviousVendas((previousData ?? []) as Venda[])
+      setPreviousVendas(filterRowsByOfferSelection((previousData ?? []) as Venda[], products, productLinks, offerLinks))
 
       const { data: recentData } = await supabase
         .from('vendas')
@@ -629,9 +703,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         .in('hotmart_produto_id', hotmartIds)
         .eq('status', 'approved')
         .order('data_venda', { ascending: false })
-        .limit(8)
+        .limit(80)
 
-      setRecentVendas((recentData ?? []) as Venda[])
+      setRecentVendas(filterRowsByOfferSelection((recentData ?? []) as Venda[], products, productLinks, offerLinks).slice(0, 8))
 
       const now = new Date()
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -646,12 +720,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         .lt('data_venda', new Date(todayStart.getTime() + 86_400_000).toISOString())
         .order('data_venda', { ascending: false })
 
-      setCombinedVendas((combinedData ?? []) as Venda[])
+      setCombinedVendas(filterRowsByOfferSelection((combinedData ?? []) as Venda[], products, productLinks, offerLinks))
       setLastUpdatedAt(new Date())
     } finally {
       setLoading(false)
     }
-  }, [projectId, period, customDateRange])
+  }, [projectId, period, customDateRange, filterRowsByOfferSelection])
 
   useEffect(() => {
     void Promise.resolve().then(fetchVendas)
@@ -1224,21 +1298,101 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     const { data: all } = await supabase.from('produtos').select('*').order('nome')
     const { data: linked } = await supabase
       .from('projeto_produtos')
-      .select('produto_id')
+      .select('produto_id, todas_ofertas')
       .eq('projeto_id', projectId)
-    setAllProducts((all ?? []) as Produto[])
-    setLinkedIds((linked ?? []).map((r: { produto_id: string }) => r.produto_id))
+    const products = (all ?? []) as Produto[]
+    const hotmartIds = products.map(p => p.hotmart_id).filter(Boolean)
+    const { data: offerRows } = hotmartIds.length > 0
+      ? await supabase
+          .from('vendas')
+          .select('hotmart_produto_id, oferta_codigo, oferta_nome, oferta_preco, oferta_moeda')
+          .in('hotmart_produto_id', hotmartIds)
+          .not('oferta_codigo', 'is', null)
+      : { data: [] }
+    const productIdByHotmartId = new Map(products.map(p => [p.hotmart_id, p.id]))
+    const offersByProduct: Record<string, ProdutoOferta[]> = {}
+    ;((offerRows ?? []) as Array<{
+      hotmart_produto_id: string | null
+      oferta_codigo: string | null
+      oferta_nome: string | null
+      oferta_preco: number | null
+      oferta_moeda: string | null
+    }>).forEach(row => {
+      if (!row.hotmart_produto_id || !row.oferta_codigo) return
+      const produtoId = productIdByHotmartId.get(row.hotmart_produto_id)
+      if (!produtoId) return
+      const existing = offersByProduct[produtoId]?.find(o => o.codigo === row.oferta_codigo)
+      if (existing) {
+        if (!existing.nome && row.oferta_nome) existing.nome = row.oferta_nome
+        if (existing.preco == null && row.oferta_preco != null) existing.preco = row.oferta_preco
+        if (!existing.moeda && row.oferta_moeda) existing.moeda = row.oferta_moeda
+        return
+      }
+      if (!offersByProduct[produtoId]) offersByProduct[produtoId] = []
+      offersByProduct[produtoId]!.push({
+        produto_id: produtoId,
+        codigo: row.oferta_codigo,
+        nome: row.oferta_nome || row.oferta_codigo,
+        preco: row.oferta_preco,
+        moeda: row.oferta_moeda,
+      })
+    })
+    Object.values(offersByProduct).forEach(offers => {
+      offers.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+    })
+    const { data: selectedOffers } = await supabase
+      .from('projeto_produto_ofertas')
+      .select('produto_id, oferta_codigo, oferta_nome, oferta_preco, oferta_moeda')
+      .eq('projeto_id', projectId)
+    const offerCodesByProduct = ((selectedOffers ?? []) as ProjetoProdutoOfertaLink[]).reduce((acc, row) => {
+      if (!acc[row.produto_id]) acc[row.produto_id] = []
+      acc[row.produto_id]!.push(row.oferta_codigo)
+      return acc
+    }, {} as Record<string, string[]>)
+    const modes = ((linked ?? []) as ProjetoProdutoLink[]).reduce((acc, row) => {
+      acc[row.produto_id] = row.todas_ofertas === false ? 'custom' : 'all'
+      return acc
+    }, {} as Record<string, OfferSelectionMode>)
+
+    setAllProducts(products)
+    setProductOffers(offersByProduct)
+    setLinkedIds(((linked ?? []) as ProjetoProdutoLink[]).map(r => r.produto_id))
+    setOfferModeByProduct(modes)
+    setSelectedOfferCodes(offerCodesByProduct)
     setProductSearch('')
     setShowProducts(true)
   }
 
   const saveProducts = async () => {
     setSavingProducts(true)
+    await supabase.from('projeto_produto_ofertas').delete().eq('projeto_id', projectId)
     await supabase.from('projeto_produtos').delete().eq('projeto_id', projectId)
     if (linkedIds.length > 0) {
       await supabase
         .from('projeto_produtos')
-        .insert(linkedIds.map(pid => ({ projeto_id: projectId, produto_id: pid })))
+        .insert(linkedIds.map(pid => ({
+          projeto_id: projectId,
+          produto_id: pid,
+          todas_ofertas: offerModeByProduct[pid] !== 'custom',
+        })))
+
+      const offerRows = linkedIds.flatMap(pid => {
+        if (offerModeByProduct[pid] !== 'custom') return []
+        const selected = new Set(selectedOfferCodes[pid] ?? [])
+        return (productOffers[pid] ?? [])
+          .filter(offer => selected.has(offer.codigo))
+          .map(offer => ({
+            projeto_id: projectId,
+            produto_id: pid,
+            oferta_codigo: offer.codigo,
+            oferta_nome: offer.nome,
+            oferta_preco: offer.preco,
+            oferta_moeda: offer.moeda,
+          }))
+      })
+      if (offerRows.length > 0) {
+        await supabase.from('projeto_produto_ofertas').insert(offerRows)
+      }
     }
     setSavingProducts(false)
     setShowProducts(false)
@@ -1402,6 +1556,44 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       product.hotmart_id.toLowerCase().includes(query),
     )
   }, [allProducts, productSearch])
+  const selectedOfferCount = useMemo(() => {
+    return linkedIds.reduce((count, productId) => {
+      if (offerModeByProduct[productId] !== 'custom') return count
+      return count + (selectedOfferCodes[productId]?.length ?? 0)
+    }, 0)
+  }, [linkedIds, offerModeByProduct, selectedOfferCodes])
+
+  const toggleProductSelection = useCallback((productId: string, checked: boolean) => {
+    setLinkedIds(prev => checked
+      ? Array.from(new Set([...prev, productId]))
+      : prev.filter(id => id !== productId))
+    if (checked) {
+      setOfferModeByProduct(prev => ({ ...prev, [productId]: prev[productId] ?? 'all' }))
+      setSelectedOfferCodes(prev => {
+        if (prev[productId]) return prev
+        return { ...prev, [productId]: (productOffers[productId] ?? []).map(offer => offer.codigo) }
+      })
+    }
+  }, [productOffers])
+
+  const setProductOfferMode = useCallback((productId: string, mode: OfferSelectionMode) => {
+    setOfferModeByProduct(prev => ({ ...prev, [productId]: mode }))
+    if (mode === 'custom') {
+      setSelectedOfferCodes(prev => {
+        if (prev[productId]?.length) return prev
+        return { ...prev, [productId]: (productOffers[productId] ?? []).map(offer => offer.codigo) }
+      })
+    }
+  }, [productOffers])
+
+  const toggleOfferSelection = useCallback((productId: string, offerCode: string, checked: boolean) => {
+    setSelectedOfferCodes(prev => {
+      const current = new Set(prev[productId] ?? [])
+      if (checked) current.add(offerCode)
+      else current.delete(offerCode)
+      return { ...prev, [productId]: [...current] }
+    })
+  }, [])
   const displayedWidgets = useMemo(() => {
     if (!previewPlacement) return widgets
     const draggedId = previewPlacement.id
@@ -2015,17 +2207,18 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         open={showProducts}
         onClose={() => setShowProducts(false)}
         title="Configurar Produtos"
-        maxWidth="max-w-lg"
+        maxWidth="max-w-2xl"
       >
         <div className="space-y-4">
           {/* Header info */}
           <div className="flex items-center justify-between rounded-xl border border-white/8 bg-white/3 px-4 py-3">
             <p className="text-xs text-slate-400">
-              Somente vendas dos produtos selecionados aparecem no dashboard.
+              Somente vendas dos produtos e ofertas selecionadas aparecem no dashboard.
             </p>
             {linkedIds.length > 0 && (
               <span className="ml-3 shrink-0 rounded-full bg-indigo-500/20 px-2.5 py-0.5 text-xs font-bold text-indigo-300">
-                {linkedIds.length} selecionado{linkedIds.length !== 1 ? 's' : ''}
+                {linkedIds.length} produto{linkedIds.length !== 1 ? 's' : ''}
+                {selectedOfferCount > 0 ? ` · ${selectedOfferCount} oferta${selectedOfferCount !== 1 ? 's' : ''}` : ''}
               </span>
             )}
           </div>
@@ -2046,14 +2239,25 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           {allProducts.length > 0 && (
             <div className="flex gap-2">
               <button
-                onClick={() => setLinkedIds(allProducts.map(p => p.id))}
+                onClick={() => {
+                  setLinkedIds(allProducts.map(p => p.id))
+                  setOfferModeByProduct(Object.fromEntries(allProducts.map(p => [p.id, 'all' as OfferSelectionMode])))
+                  setSelectedOfferCodes(Object.fromEntries(allProducts.map(p => [
+                    p.id,
+                    (productOffers[p.id] ?? []).map(offer => offer.codigo),
+                  ])))
+                }}
                 className="text-xs font-medium text-indigo-400 transition-colors hover:text-indigo-300"
               >
-                Selecionar todos
+                Selecionar todos os produtos
               </button>
               <span className="text-slate-700">·</span>
               <button
-                onClick={() => setLinkedIds([])}
+                onClick={() => {
+                  setLinkedIds([])
+                  setOfferModeByProduct({})
+                  setSelectedOfferCodes({})
+                }}
                 className="text-xs font-medium text-slate-500 transition-colors hover:text-slate-300"
               >
                 Limpar seleção
@@ -2073,41 +2277,139 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           ) : filteredProducts.length === 0 ? (
             <p className="py-4 text-center text-sm text-slate-600">Nenhum produto encontrado.</p>
           ) : (
-            <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
+            <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
               {filteredProducts.map(p => {
                 const checked = linkedIds.includes(p.id)
+                const offers = productOffers[p.id] ?? []
+                const mode = offerModeByProduct[p.id] ?? 'all'
+                const selectedOffers = selectedOfferCodes[p.id] ?? []
                 return (
-                  <label
+                  <div
                     key={p.id}
-                    className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-3 transition-all ${
+                    className={`rounded-xl border transition-all ${
                       checked
                         ? 'border-indigo-500/30 bg-indigo-500/8'
                         : 'border-transparent bg-white/3 hover:border-white/8 hover:bg-white/5'
                     }`}
                   >
-                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-black ${
-                      checked ? 'bg-indigo-500 text-white' : 'bg-white/8 text-slate-400'
-                    }`}>
-                      {checked
-                        ? <Check size={14} />
-                        : p.nome.charAt(0).toUpperCase()
-                      }
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-slate-200">{p.nome}</p>
-                      <p className="font-mono text-[11px] text-slate-600">{p.hotmart_id}</p>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={e =>
-                        setLinkedIds(prev =>
-                          e.target.checked ? [...prev, p.id] : prev.filter(id => id !== p.id),
-                        )
-                      }
-                      className="sr-only"
-                    />
-                  </label>
+                    <label className="flex cursor-pointer items-center gap-3 px-3 py-3">
+                      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-black ${
+                        checked ? 'bg-indigo-500 text-white' : 'bg-white/8 text-slate-400'
+                      }`}>
+                        {checked
+                          ? <Check size={14} />
+                          : p.nome.charAt(0).toUpperCase()
+                        }
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-slate-200">{p.nome}</p>
+                        <p className="font-mono text-[11px] text-slate-600">{p.hotmart_id}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2 text-[11px] text-slate-500">
+                        {offers.length > 0 ? (
+                          <span>{offers.length} oferta{offers.length !== 1 ? 's' : ''}</span>
+                        ) : (
+                          <span>Sem ofertas</span>
+                        )}
+                        <ChevronDown
+                          size={14}
+                          className={`transition-transform ${checked ? 'rotate-180 text-indigo-300' : 'text-slate-600'}`}
+                        />
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={e => toggleProductSelection(p.id, e.target.checked)}
+                        className="sr-only"
+                      />
+                    </label>
+
+                    {checked && (
+                      <div className="border-t border-white/8 px-3 pb-3 pt-2">
+                        {offers.length === 0 ? (
+                          <p className="rounded-lg bg-black/10 px-3 py-2 text-xs text-slate-500">
+                            Nenhuma oferta identificada nas vendas deste produto ainda.
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setProductOfferMode(p.id, 'all')}
+                                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                                  mode === 'all'
+                                    ? 'bg-indigo-500 text-white'
+                                    : 'bg-white/5 text-slate-400 hover:bg-white/8 hover:text-slate-200'
+                                }`}
+                              >
+                                Todas as ofertas
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setProductOfferMode(p.id, 'custom')}
+                                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                                  mode === 'custom'
+                                    ? 'bg-indigo-500 text-white'
+                                    : 'bg-white/5 text-slate-400 hover:bg-white/8 hover:text-slate-200'
+                                }`}
+                              >
+                                Selecionar ofertas
+                              </button>
+                              {mode === 'custom' && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedOfferCodes(prev => ({
+                                    ...prev,
+                                    [p.id]: offers.map(offer => offer.codigo),
+                                  }))}
+                                  className="text-xs font-medium text-indigo-300 hover:text-indigo-200"
+                                >
+                                  Marcar todas
+                                </button>
+                              )}
+                            </div>
+
+                            {mode === 'custom' && (
+                              <div className="grid gap-1.5 sm:grid-cols-2">
+                                {offers.map(offer => {
+                                  const offerChecked = selectedOffers.includes(offer.codigo)
+                                  const price = formatOfferPrice(offer.preco, offer.moeda)
+                                  return (
+                                    <label
+                                      key={offer.codigo}
+                                      className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 transition-colors ${
+                                        offerChecked
+                                          ? 'border-indigo-400/30 bg-indigo-400/10'
+                                          : 'border-white/8 bg-white/3 hover:bg-white/5'
+                                      }`}
+                                    >
+                                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+                                        offerChecked
+                                          ? 'border-indigo-400 bg-indigo-500 text-white'
+                                          : 'border-white/15 text-transparent'
+                                      }`}>
+                                        <Check size={12} />
+                                      </span>
+                                      <span className="min-w-0 flex-1">
+                                        <span className="block truncate text-xs font-medium text-slate-200">{offer.nome}</span>
+                                        {price && <span className="block text-[11px] text-slate-500">{price}</span>}
+                                      </span>
+                                      <input
+                                        type="checkbox"
+                                        checked={offerChecked}
+                                        onChange={e => toggleOfferSelection(p.id, offer.codigo, e.target.checked)}
+                                        className="sr-only"
+                                      />
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )
               })}
             </div>

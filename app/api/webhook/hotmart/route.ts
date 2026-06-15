@@ -46,8 +46,8 @@ export async function POST(req: NextRequest) {
     const priceCurrency: string = dados.purchase?.price?.currency_value ?? 'BRL'
     const commissions = (dados.commissions ?? []) as HotmartCommission[]
     const somaUSD = commissions
-      .filter((c: any) => c.currency_value === 'USD')
-      .reduce((s: number, c: any) => s + Number(c.value), 0)
+      .filter((c) => c.currency_value === 'USD')
+      .reduce((s: number, c) => s + Number(c.value), 0)
 
     let moeda: string
     let valorBruto: number
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
       if (origOffer?.currency_value === 'USD') {
         valorBruto = Number(origOffer.value) || 0
       } else {
-        const rate = commissions.find((c: any) => c.currency_conversion?.conversion_rate)?.currency_conversion?.conversion_rate
+        const rate = commissions.find((c) => c.currency_conversion?.conversion_rate)?.currency_conversion?.conversion_rate
         const priceValue = origOffer?.value ?? dados.purchase?.price?.value
         valorBruto = rate ? roundMoney(Number(priceValue) / rate) : somaUSD
       }
@@ -122,11 +122,43 @@ export async function POST(req: NextRequest) {
       null
     console.log('[WEBHOOK] afiliado_nome:', afiliado_nome)
 
+    const offer = dados.purchase?.offer
+    const oferta_codigo: string | null =
+      offer?.code ? String(offer.code) :
+      offer?.name ? String(offer.name) :
+      offer?.description ? String(offer.description) :
+      null
+    const oferta_nome: string | null =
+      offer?.name ? String(offer.name) :
+      offer?.description ? String(offer.description) :
+      offer?.code ? String(offer.code) :
+      null
+    const oferta_descricao: string | null = offer?.description ? String(offer.description) : null
+    const oferta_preco: number | null =
+      dados.purchase?.original_offer_price?.value != null
+        ? Number(dados.purchase.original_offer_price.value)
+        : dados.purchase?.price?.value != null
+          ? Number(dados.purchase.price.value)
+          : null
+    const oferta_moeda: string | null =
+      dados.purchase?.original_offer_price?.currency_value ??
+      dados.purchase?.price?.currency_value ??
+      null
+    const plano_id: string | null = dados.subscription?.plan?.id ? String(dados.subscription.plan.id) : null
+    const plano_nome: string | null = dados.subscription?.plan?.name ? String(dados.subscription.plan.name) : null
+
     const transaction: string = dados.purchase?.transaction
     const venda = {
       hotmart_id: transaction,
       hotmart_produto_id: hotmart_produto_id || null,
       produto: nome_produto,
+      oferta_codigo,
+      oferta_nome,
+      oferta_descricao,
+      oferta_preco,
+      oferta_moeda,
+      plano_id,
+      plano_nome,
       comprador_nome: dados.buyer?.name,
       comprador_email: dados.buyer?.email,
       valor: valorOperacionalFinal,
@@ -154,14 +186,19 @@ export async function POST(req: NextRequest) {
       .upsert(venda, { onConflict: 'hotmart_id' })
 
     if (error && (error.message.includes('schema cache') || error.message.includes('valor_operacional_final'))) {
-      const {
-        valor_bruto,
-        taxa_hotmart,
-        comissao_produtor,
-        comissao_afiliado,
-        valor_operacional_final,
-        ...legacyVenda
-      } = venda
+      const legacyVenda: Partial<typeof venda> = { ...venda }
+      delete legacyVenda.valor_bruto
+      delete legacyVenda.taxa_hotmart
+      delete legacyVenda.comissao_produtor
+      delete legacyVenda.comissao_afiliado
+      delete legacyVenda.valor_operacional_final
+      delete legacyVenda.oferta_codigo
+      delete legacyVenda.oferta_nome
+      delete legacyVenda.oferta_descricao
+      delete legacyVenda.oferta_preco
+      delete legacyVenda.oferta_moeda
+      delete legacyVenda.plano_id
+      delete legacyVenda.plano_nome
       const retry = await supabase
         .from('vendas')
         .upsert(legacyVenda, { onConflict: 'hotmart_id' })
