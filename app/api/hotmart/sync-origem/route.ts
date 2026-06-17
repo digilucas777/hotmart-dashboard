@@ -1,6 +1,10 @@
 export const dynamic = 'force-dynamic'
 
+let cachedToken: { token: string; expiresAt: number } | null = null
+
 async function getToken(): Promise<string> {
+  if (cachedToken && Date.now() < cachedToken.expiresAt) return cachedToken.token
+
   const clientId = process.env.HOTMART_CLIENT_ID
   const clientSecret = process.env.HOTMART_CLIENT_SECRET
   if (!clientId || !clientSecret) throw new Error('Hotmart credentials not configured')
@@ -21,7 +25,8 @@ async function getToken(): Promise<string> {
   }
 
   const data = await res.json()
-  return data.access_token as string
+  cachedToken = { token: data.access_token as string, expiresAt: Date.now() + 60 * 60 * 1000 }
+  return cachedToken.token
 }
 
 export async function GET(request: Request) {

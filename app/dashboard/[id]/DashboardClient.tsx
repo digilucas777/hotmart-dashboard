@@ -792,19 +792,19 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     const rows = (data ?? []) as { id: string; hotmart_id: string }[]
     if (rows.length === 0) return
 
-    await Promise.all(
-      rows.map(async (row) => {
-        try {
-          const res = await fetch(`/api/hotmart/sync-origem?transaction=${encodeURIComponent(row.hotmart_id)}`, { cache: 'no-store' })
-          if (!res.ok) return
+    for (const row of rows) {
+      try {
+        const res = await fetch(`/api/hotmart/sync-origem?transaction=${encodeURIComponent(row.hotmart_id)}`, { cache: 'no-store' })
+        if (res.ok) {
           const { origem } = await res.json()
-          if (!origem) return
-          await supabase.from('vendas').update({ origem }).eq('id', row.id)
-        } catch {
-          // ignore individual failures
+          console.log('[SYNC ORIGEM]', row.hotmart_id, '→', origem ?? 'sem origem')
+          if (origem) await supabase.from('vendas').update({ origem }).eq('id', row.id)
         }
-      })
-    )
+      } catch {
+        // ignore individual failures
+      }
+      await new Promise(resolve => setTimeout(resolve, 300))
+    }
   }, [])
 
   const handleRefresh = useCallback(async () => {
