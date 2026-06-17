@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { GridLayout, noCompactor } from 'react-grid-layout'
+import { GridLayout, horizontalCompactor } from 'react-grid-layout'
 import type { Layout, LayoutItem } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
@@ -111,9 +111,9 @@ export function DashboardGrid({
           margin: [0, 0] as [number, number],
           containerPadding: [0, 0] as [number, number],
         }}
-        dragConfig={{ enabled: isEditing, handle: '.widget-drag-handle' }}
+        dragConfig={{ enabled: isEditing, handle: '.drag-handle' }}
         resizeConfig={{ enabled: isEditing }}
-        compactor={noCompactor}
+        compactor={horizontalCompactor}
         onDragStop={(newLayout) => {
           onPushHistory()
           onLayoutChange(applyLayout(widgets, newLayout))

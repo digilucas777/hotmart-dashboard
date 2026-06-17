@@ -2,7 +2,7 @@
 
 import { memo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { Copy, GripVertical, Pencil, Trash2 } from 'lucide-react'
+import { Copy, Pencil, Trash2 } from 'lucide-react'
 import { computeComparableMetric, computeWidgetData, formatPeriodComparisonLabel, getValueFormat } from '@/lib/utils'
 import type { Period, Venda, WidgetConfig } from '@/lib/types'
 import { SalesTable } from '@/components/dashboard/SalesTable'
@@ -170,12 +170,12 @@ function WidgetRendererBase({
       {editMode && (
         <>
           <div
-            className={`pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-cyan-400/10 to-transparent transition-opacity ${
+            className={`drag-handle absolute inset-x-0 top-0 z-10 h-8 cursor-grab bg-gradient-to-b from-cyan-400/10 to-transparent transition-opacity active:cursor-grabbing ${
               isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
             }`}
           />
           <div
-            className={`absolute right-3 top-3 z-30 flex items-center gap-1 transition-opacity ${
+            className={`absolute right-3 top-1.5 z-30 flex items-center gap-1 transition-opacity ${
               isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
             }`}
             onPointerDown={e => e.stopPropagation()}
@@ -213,12 +213,6 @@ function WidgetRendererBase({
               className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-red-500/10 hover:text-red-400"
             >
               <Trash2 size={13} />
-            </button>
-            <button
-              title="Arrastar"
-              className="widget-drag-handle rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-white/5 hover:text-slate-400 cursor-grab"
-            >
-              <GripVertical size={13} />
             </button>
           </div>
         </>
