@@ -430,6 +430,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [offerModeByProduct, setOfferModeByProduct] = useState<Record<string, OfferSelectionMode>>({})
   const [selectedOfferCodes, setSelectedOfferCodes] = useState<Record<string, string[]>>({})
   const [productSearch, setProductSearch] = useState('')
+  const [showOnlySelected, setShowOnlySelected] = useState(false)
   const [savingProducts, setSavingProducts] = useState(false)
 
   const [linkedMetaAccountId, setLinkedMetaAccountId] = useState<string | null>(null)
@@ -1295,11 +1296,15 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   }, [widgets])
 
   const openProductsModal = async () => {
-    const { data: all } = await supabase.from('produtos').select('*').order('nome')
-    const { data: linked } = await supabase
-      .from('projeto_produtos')
-      .select('produto_id, todas_ofertas')
-      .eq('projeto_id', projectId)
+    const [
+      { data: all },
+      { data: linked },
+      { data: selectedOffers },
+    ] = await Promise.all([
+      supabase.from('produtos').select('*').order('nome'),
+      supabase.from('projeto_produtos').select('produto_id, todas_ofertas').eq('projeto_id', projectId),
+      supabase.from('projeto_produto_ofertas').select('produto_id, oferta_codigo, oferta_nome, oferta_preco, oferta_moeda').eq('projeto_id', projectId),
+    ])
     const products = (all ?? []) as Produto[]
     const hotmartIds = products.map(p => p.hotmart_id).filter(Boolean)
     const { data: offerRows } = hotmartIds.length > 0
@@ -1342,7 +1347,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       products.map(async (product) => {
         if (!product.hotmart_id) return
         try {
-          const res = await fetch(`/api/hotmart/offers?product_id=${product.hotmart_id}`)
+          const res = await fetch(`/api/hotmart/offers?product_id=${product.hotmart_id}`, {
+            signal: AbortSignal.timeout(3000),
+          })
           if (!res.ok) return
           const { offers } = await res.json() as { offers: { code: string; name: string; price: number | null; currency: string }[] }
           if (!offers?.length) return
@@ -1375,10 +1382,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       offers.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
     })
     console.log('[OFERTAS] por produto:', JSON.stringify(offersByProduct, null, 2))
-    const { data: selectedOffers } = await supabase
-      .from('projeto_produto_ofertas')
-      .select('produto_id, oferta_codigo, oferta_nome, oferta_preco, oferta_moeda')
-      .eq('projeto_id', projectId)
     const offerCodesByProduct = ((selectedOffers ?? []) as ProjetoProdutoOfertaLink[]).reduce((acc, row) => {
       if (!acc[row.produto_id]) acc[row.produto_id] = []
       acc[row.produto_id]!.push(row.oferta_codigo)
@@ -1395,6 +1398,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setOfferModeByProduct(modes)
     setSelectedOfferCodes(offerCodesByProduct)
     setProductSearch('')
+    setShowOnlySelected(false)
     setShowProducts(true)
   }
 
@@ -1584,13 +1588,15 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   }, [countryRanking, displayVendas])
   void nowTick
   const filteredProducts = useMemo(() => {
+    let list = allProducts
+    if (showOnlySelected) list = list.filter(p => linkedIds.includes(p.id))
     const query = productSearch.trim().toLowerCase()
-    if (!query) return allProducts
-    return allProducts.filter(product =>
+    if (!query) return list
+    return list.filter(product =>
       product.nome.toLowerCase().includes(query) ||
       product.hotmart_id.toLowerCase().includes(query),
     )
-  }, [allProducts, productSearch])
+  }, [allProducts, productSearch, showOnlySelected, linkedIds])
   const selectedOfferCount = useMemo(() => {
     return linkedIds.reduce((count, productId) => {
       if (offerModeByProduct[productId] !== 'custom') return count
@@ -2297,6 +2303,13 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               >
                 Limpar seleção
               </button>
+              <span className="text-slate-700">·</span>
+              <button
+                onClick={() => setShowOnlySelected(v => !v)}
+                className={`text-xs font-medium transition-colors ${showOnlySelected ? 'text-indigo-300 hover:text-indigo-200' : 'text-slate-500 hover:text-slate-300'}`}
+              >
+                {showOnlySelected ? 'Ver todos' : 'Ver selecionados'}
+              </button>
             </div>
           )}
 
@@ -2428,6 +2441,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                                       <span className="min-w-0 flex-1">
                                         <span className="block truncate text-xs font-medium text-slate-200">{offer.nome}</span>
                                         {price && <span className="block text-[11px] text-slate-500">{price}</span>}
+                                        <span className="block font-mono text-[10px] text-slate-600">{offer.codigo}</span>
                                       </span>
                                       <input
                                         type="checkbox"
