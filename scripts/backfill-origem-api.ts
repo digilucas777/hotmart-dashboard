@@ -70,6 +70,7 @@ async function backfill() {
     .is('origem', null)
     .not('hotmart_id', 'is', null)
     .eq('status', 'approved')
+    .gte('data_venda', new Date(Date.now() - 30 * 86_400_000).toISOString())
 
   if (error) {
     console.error('Erro ao buscar vendas:', error.message)
