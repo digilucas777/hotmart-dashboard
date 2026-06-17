@@ -19,35 +19,20 @@ import {
   Redo2,
   X,
 } from 'lucide-react'
-import {
-  DndContext,
-  KeyboardSensor,
-  PointerSensor,
-  DragOverlay,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragMoveEvent,
-  type DragStartEvent,
-} from '@dnd-kit/core'
-import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
+import { DashboardGrid } from '@/components/dashboard/DashboardGrid'
 import { supabase } from '@/lib/supabase'
 import { formatRelativeTime, getPeriodRange, getPreviousPeriodRange, getOfficialSaleAmount, parseOrigem } from '@/lib/utils'
 import type { Venda, Projeto, Produto, Period, WidgetConfig, WidgetType, WidgetDataSource } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
 import { AddWidgetModal } from '@/components/dashboard/AddWidgetModal'
 import { EditWidgetModal } from '@/components/dashboard/EditWidgetModal'
-import { WidgetRenderer } from '@/components/dashboard/widgets/WidgetRenderer'
-import type { ResizeDirection } from '@/components/dashboard/widgets/WidgetRenderer'
+
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import type { MetaCreativeResult, MetaCampaignResult } from '@/lib/meta-ads-mock'
 
 const GRID_COLUMNS = 12
-const GRID_ROW_HEIGHT = 20
-const GRID_GAP = 0
-const GRID_ITEM_PADDING = 10
 const LAYOUT_STORAGE_PREFIX = 'dashboard-layout:'
 const THEME_STORAGE_KEY = 'dashboard-theme'
 
@@ -408,11 +393,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [editMode, setEditMode] = useState(false)
   const [showAddWidget, setShowAddWidget] = useState(false)
   const [editingWidgetId, setEditingWidgetId] = useState<string | null>(null)
-  const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null)
   const [selectedWidgetIds, setSelectedWidgetIds] = useState<Set<string>>(new Set())
-  const selectedWidgetIdsRef = useRef<Set<string>>(new Set())
-  const [dragPreview, setDragPreview] = useState<GridPlacement | null>(null)
-  const [resizePreview, setResizePreview] = useState<GridPlacement | null>(null)
   const [savedWidgets, setSavedWidgets] = useState<WidgetConfig[]>([])
   const [undoStack, setUndoStack] = useState<WidgetConfig[][]>([])
   const [redoStack, setRedoStack] = useState<WidgetConfig[][]>([])
@@ -421,7 +402,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [widgetError, setWidgetError] = useState<string | null>(null)
   const [undoToast, setUndoToast] = useState(false)
   const undoToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const gridRef = useRef<HTMLDivElement>(null)
 
   const [showProducts, setShowProducts] = useState(false)
   const [allProducts, setAllProducts] = useState<Produto[]>([])
@@ -463,11 +443,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     const to = new Date(parseLocal(customTo).getTime() + 86_400_000)
     return { from, to }
   }, [period, customFrom, customTo])
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  )
 
   useEffect(() => {
     fetch('/api/exchange-rate')
@@ -917,113 +892,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setRedoStack([])
   }, [widgets])
 
-  const getPlacementFromDelta = useCallback(
-    (id: string, delta: { x: number; y: number }): GridPlacement | null => {
-      const grid = gridRef.current
-      if (!grid) return null
-      const widget = widgets.find(w => w.id === id)
-      if (!widget) return null
-
-      const rect = grid.getBoundingClientRect()
-      const colWidth = (rect.width - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS
-      const colStep = colWidth + GRID_GAP
-      const rowStep = GRID_ROW_HEIGHT + GRID_GAP
-      const colSpan = widget.col_span ?? widthToSpan(widget.width)
-      const rowSpan = normalizeRowSpan(widget)
-      const currentCol = widget.col_start ?? 1
-      const currentRow = widget.row_start ?? 1
-      const col_start = Math.min(
-        GRID_COLUMNS - colSpan + 1,
-        Math.max(1, Math.round(((currentCol - 1) * colStep + delta.x) / colStep) + 1),
-      )
-      const row_start = Math.max(
-        1,
-        Math.round(((currentRow - 1) * rowStep + delta.y) / rowStep) + 1,
-      )
-
-      return { id, col_start, row_start, col_span: colSpan, row_span: rowSpan }
-    },
-    [widgets],
-  )
-
-  // Keep ref in sync so drag callbacks always read current selection without stale closure.
-  useEffect(() => { selectedWidgetIdsRef.current = selectedWidgetIds }, [selectedWidgetIds])
-
-  const handleDragStart = useCallback((event: DragStartEvent) => {
-    const id = String(event.active.id)
-    setActiveWidgetId(id)
-    // If dragging an unselected widget, reset selection to just that widget.
-    setSelectedWidgetIds(prev => prev.has(id) ? prev : new Set([id]))
-  }, [])
-
-  const handleDragMove = useCallback(
-    (event: DragMoveEvent) => {
-      setDragPreview(getPlacementFromDelta(String(event.active.id), event.delta))
-    },
-    [getPlacementFromDelta],
-  )
-
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      setActiveWidgetId(null)
-      const draggedId = String(event.active.id)
-      const placement = dragPreview ?? getPlacementFromDelta(draggedId, event.delta)
-      setDragPreview(null)
-      if (!placement) return
-      pushHistory()
-      setWidgets(prev => {
-        const dragged = prev.find(w => w.id === draggedId)
-        if (!dragged) return prev
-        const activeIds = selectedWidgetIdsRef.current
-        const deltaCol = placement.col_start - (dragged.col_start ?? 1)
-        const deltaRow = placement.row_start - (dragged.row_start ?? 1)
-        const fromPos = { col: dragged.col_start ?? 1, row: dragged.row_start ?? 1 }
-        const toPos = { col: placement.col_start, row: placement.row_start }
-        console.log('[DRAG] from:', fromPos, 'to:', toPos)
-
-        // Single-widget drag: if dropped on exactly one other widget, swap positions.
-        if (activeIds.size <= 1) {
-          const newBox = { col: placement.col_start, row: placement.row_start, colSpan: placement.col_span, rowSpan: placement.row_span }
-          const overlapping = prev.filter(w => {
-            if (w.id === draggedId) return false
-            return collidesBounds(newBox, {
-              col: w.col_start ?? 1,
-              row: w.row_start ?? 1,
-              colSpan: w.col_span ?? widthToSpan(w.width),
-              rowSpan: normalizeRowSpan(w),
-            })
-          })
-          if (overlapping.length === 1) {
-            const target = overlapping[0]
-            const swapped = prev.map(w => {
-              if (w.id === draggedId) return { ...w, col_start: placement.col_start, row_start: placement.row_start }
-              if (w.id === target.id) return { ...w, col_start: dragged.col_start ?? 1, row_start: dragged.row_start ?? 1 }
-              return w
-            })
-            const result = applyBottomMagnet(resolveOverlapsMulti(swapped, new Set([draggedId])))
-            console.log('[DRAG] layout após drop (swap):', result.map(w => ({ id: w.id, col: w.col_start, row: w.row_start })))
-            return result
-          }
-          // Múltiplos sobrepostos: move o widget e empurra os outros para baixo
-        }
-
-        const moved = prev.map(w => {
-          if (w.id === draggedId) return { ...w, col_start: placement.col_start, row_start: placement.row_start }
-          if (!activeIds.has(w.id)) return w
-          const colSpan = w.col_span ?? widthToSpan(w.width)
-          return {
-            ...w,
-            col_start: Math.min(GRID_COLUMNS - colSpan + 1, Math.max(1, (w.col_start ?? 1) + deltaCol)),
-            row_start: Math.max(1, (w.row_start ?? 1) + deltaRow),
-          }
-        })
-        const newLayout = applyBottomMagnet(resolveOverlapsMulti(moved, activeIds))
-        console.log('[DRAG] layout após drop:', newLayout.map(w => ({ id: w.id, col: w.col_start, row: w.row_start })))
-        return newLayout
-      })
-    },
-    [dragPreview, getPlacementFromDelta, pushHistory],
-  )
 
   const addWidget = async (config: Omit<WidgetConfig, 'id' | 'projeto_id' | 'position'>) => {
     const position = widgets.length
@@ -1166,84 +1034,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setShowClearModal(false)
     setEditMode(false)
   }, [projectId])
-
-  const getResizePlacement = useCallback((
-    id: string,
-    width: number,
-    height: number,
-    direction: ResizeDirection = 'bottom-right',
-    deltaX = 0,
-    deltaY = 0,
-  ): GridPlacement | null => {
-    const grid = gridRef.current
-    const widget = widgets.find(w => w.id === id)
-    if (!grid || !widget) return null
-
-    const rect = grid.getBoundingClientRect()
-    const colWidth = rect.width / GRID_COLUMNS
-    const currentCol = widget.col_start ?? 1
-    const currentRow = widget.row_start ?? 1
-    const currentColSpan = widget.col_span ?? widthToSpan(widget.width)
-    const currentRowSpan = normalizeRowSpan(widget)
-    const affectsLeft = direction.includes('left')
-    const affectsRight = direction.includes('right')
-    const affectsTop = direction.includes('top')
-    const affectsBottom = direction.includes('bottom')
-
-    let col_start = currentCol
-    let row_start = currentRow
-    let col_span = currentColSpan
-    let row_span = currentRowSpan
-
-    if (affectsLeft) {
-      const colDelta = Math.round(deltaX / colWidth)
-      col_start = Math.min(currentCol + currentColSpan - 2, Math.max(1, currentCol + colDelta))
-      col_span = currentColSpan - (col_start - currentCol)
-    } else if (affectsRight) {
-      col_span = normalizeColSpan(Math.round((width + GRID_ITEM_PADDING * 2) / colWidth))
-    }
-
-    const minCols = minColSpanForType(widget.type)
-    const minRows = minRowSpanForType(widget.type)
-    col_span = Math.min(GRID_COLUMNS - col_start + 1, Math.max(minCols, normalizeColSpan(col_span)))
-
-    if (affectsTop) {
-      const rowDelta = Math.round(deltaY / GRID_ROW_HEIGHT)
-      row_start = Math.min(currentRow + currentRowSpan - minRows, Math.max(1, currentRow + rowDelta))
-      row_span = currentRowSpan - (row_start - currentRow)
-    } else if (affectsBottom) {
-      row_span = Math.max(minRows, Math.round((height + GRID_ITEM_PADDING * 2) / GRID_ROW_HEIGHT))
-    }
-
-    row_span = Math.max(minRows, row_span)
-
-    if (widget.type === 'metric') {
-      row_span = snapToMetricRows(row_span)
-      if (affectsTop) {
-        row_start = Math.max(1, currentRow + currentRowSpan - row_span)
-      }
-    }
-
-    return {
-      id,
-      col_start,
-      row_start,
-      col_span,
-      row_span,
-    }
-  }, [widgets])
-
-  const previewWidgetResize = useCallback((id: string, width: number, height: number, direction: ResizeDirection, deltaX: number, deltaY: number) => {
-    setResizePreview(getResizePlacement(id, width, height, direction, deltaX, deltaY))
-  }, [getResizePlacement])
-
-  const commitWidgetResize = useCallback((id: string, width: number, height: number, direction: ResizeDirection, deltaX: number, deltaY: number) => {
-    const placement = getResizePlacement(id, width, height, direction, deltaX, deltaY)
-    setResizePreview(null)
-    if (!placement) return
-    pushHistory()
-    setWidgets(prev => resolveOverlaps(prev.map(w => applyPlacement(w, placement)), id))
-  }, [getResizePlacement, pushHistory])
 
   const organizeLayout = useCallback(() => {
     pushHistory()
@@ -1478,7 +1268,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     if (!editMode) return
     function handleDocClick(e: MouseEvent) {
       const target = e.target as Element
-      if (!target.closest('.dashboard-widget-shell')) {
+      if (!target.closest('.dashboard-widget-rgl')) {
         setSelectedWidgetIds(new Set())
       }
     }
@@ -1486,32 +1276,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     return () => document.removeEventListener('click', handleDocClick)
   }, [editMode])
 
-  useEffect(() => {
-    if (!activeWidgetId) return
-
-    let pointerY = 0
-    const onPointerMove = (e: PointerEvent) => { pointerY = e.clientY }
-    window.addEventListener('pointermove', onPointerMove)
-
-    const EDGE = 80
-    const BASE_SPEED = 12
-    let rafId: number
-    function tick() {
-      const vh = window.innerHeight
-      if (pointerY > 0 && pointerY < EDGE) {
-        window.scrollBy(0, -Math.round(BASE_SPEED * (1 - pointerY / EDGE)))
-      } else if (pointerY > vh - EDGE) {
-        window.scrollBy(0, Math.round(BASE_SPEED * (1 - (vh - pointerY) / EDGE)))
-      }
-      rafId = requestAnimationFrame(tick)
-    }
-    rafId = requestAnimationFrame(tick)
-
-    return () => {
-      window.removeEventListener('pointermove', onPointerMove)
-      cancelAnimationFrame(rafId)
-    }
-  }, [activeWidgetId])
 
   useEffect(() => {
     if (!editMode) return
@@ -1536,7 +1300,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
   const isReady = !loadingWidgets
   const hasUnsavedLayout = !sameLayout(widgets, savedWidgets)
-  const previewPlacement = dragPreview ?? resizePreview
   const displayVendas = useMemo(() => {
     let result = vendas
     if (origensFilter.length > 0) {
@@ -1663,28 +1426,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       return { ...prev, [productId]: [...current] }
     })
   }, [])
-  const displayedWidgets = useMemo(() => {
-    if (!previewPlacement) return widgets
-    const draggedId = previewPlacement.id
-    const dragged = widgets.find(w => w.id === draggedId)
-    if (!dragged) return widgets
-    const activeIds = selectedWidgetIds
-    const deltaCol = previewPlacement.col_start - (dragged.col_start ?? 1)
-    const deltaRow = previewPlacement.row_start - (dragged.row_start ?? 1)
-    return widgets.map(w => {
-      if (w.id === draggedId) return applyPlacement(w, previewPlacement)
-      if (activeIds.has(w.id)) {
-        const colSpan = w.col_span ?? widthToSpan(w.width)
-        return {
-          ...w,
-          col_start: Math.min(GRID_COLUMNS - colSpan + 1, Math.max(1, (w.col_start ?? 1) + deltaCol)),
-          row_start: Math.max(1, (w.row_start ?? 1) + deltaRow),
-        }
-      }
-      return w
-    })
-  }, [previewPlacement, widgets, selectedWidgetIds])
-
   return (
     <div className="dashboard-shell min-h-screen text-[var(--dash-text)]" data-dashboard-theme={theme}>
       <header
@@ -2061,89 +1802,39 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           </div>
         ) : (
           <div className="relative">
-          <DndContext
-            sensors={sensors}
-            onDragStart={handleDragStart}
-            onDragMove={handleDragMove}
-            onDragEnd={handleDragEnd}
-            onDragCancel={() => {
-              setActiveWidgetId(null)
-              setDragPreview(null)
+          <DashboardGrid
+            widgets={widgets}
+            isEditing={editMode}
+            onLayoutChange={(updated) => setWidgets(updated)}
+            onPushHistory={pushHistory}
+            vendas={displayVendas}
+            previousVendas={previousVendas}
+            combinedVendas={displayCombinedVendas}
+            period={period}
+            exchangeRate={exchangeRate}
+            custoTotal={displayCustoTotal}
+            customRange={customDateRange}
+            loading={false}
+            selectedWidgetIds={selectedWidgetIds}
+            onSelect={(id, multi) => {
+              if (multi) {
+                setSelectedWidgetIds(prev => {
+                  const next = new Set(prev)
+                  if (next.has(id)) next.delete(id); else next.add(id)
+                  return next
+                })
+              } else {
+                setSelectedWidgetIds(new Set([id]))
+              }
             }}
-          >
-              <div
-                ref={gridRef}
-                className="dashboard-grid relative grid"
-                style={{
-                  gridAutoRows: `${GRID_ROW_HEIGHT}px`,
-                  gap: `${GRID_GAP}px`,
-                }}
-              >
-                {previewPlacement && (
-                  <div
-                    className="pointer-events-none m-2.5 rounded-2xl border border-dashed border-white/70 bg-white/8 shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_18px_45px_rgba(99,102,241,0.18)]"
-                    style={{
-                      gridColumn: `${previewPlacement.col_start} / span ${previewPlacement.col_span}`,
-                      gridRow: `${previewPlacement.row_start} / span ${previewPlacement.row_span}`,
-                    }}
-                  />
-                )}
-                {displayedWidgets.map(w => (
-                  <WidgetRenderer
-                    key={w.id}
-                    config={w}
-                    vendas={displayVendas}
-                    previousVendas={previousVendas}
-                    combinedVendas={displayCombinedVendas}
-                    period={period}
-                    exchangeRate={exchangeRate}
-                    custoTotal={displayCustoTotal}
-                    customRange={customDateRange}
-                    editMode={editMode}
-                    loading={false}
-                    selected={selectedWidgetIds.has(w.id)}
-                    isGroupDragging={!!activeWidgetId && selectedWidgetIds.has(w.id) && w.id !== activeWidgetId}
-                    onSelect={(id, multi) => {
-                      if (multi) {
-                        setSelectedWidgetIds(prev => {
-                          const next = new Set(prev)
-                          if (next.has(id)) next.delete(id); else next.add(id)
-                          return next
-                        })
-                      } else {
-                        setSelectedWidgetIds(new Set([id]))
-                      }
-                    }}
-                    onDelete={deleteWidget}
-                    onDuplicate={editMode ? duplicateWidget : undefined}
-                    onEdit={editMode ? setEditingWidgetId : undefined}
-                    onPreviewResize={previewWidgetResize}
-                    onCommitResize={commitWidgetResize}
-                    linkedMetaAccountId={linkedMetaAccountId}
-                    metaInsights={metaInsights}
-                    metaAds={metaAds}
-                    metaCampaigns={metaCampaigns}
-                  />
-                ))}
-              </div>
-              <DragOverlay dropAnimation={null}>
-                {activeWidgetId ? (
-                  <div className="flex items-center gap-2 rounded-2xl border border-cyan-400/30 bg-[#1d1d31]/90 px-5 py-4 text-sm font-semibold text-slate-100 shadow-2xl shadow-cyan-500/20 backdrop-blur">
-                    {selectedWidgetIds.size > 1 && (
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500 text-[10px] font-black text-white">
-                        {selectedWidgetIds.size}
-                      </span>
-                    )}
-                    {widgets.find(w => w.id === activeWidgetId)?.title}
-                    {selectedWidgetIds.size > 1 && (
-                      <span className="text-xs font-normal text-slate-400">
-                        +{selectedWidgetIds.size - 1} mais
-                      </span>
-                    )}
-                  </div>
-                ) : null}
-              </DragOverlay>
-          </DndContext>
+            onDelete={deleteWidget}
+            onDuplicate={editMode ? duplicateWidget : undefined}
+            onEdit={editMode ? setEditingWidgetId : undefined}
+            linkedMetaAccountId={linkedMetaAccountId}
+            metaInsights={metaInsights}
+            metaAds={metaAds}
+            metaCampaigns={metaCampaigns}
+          />
           <aside className="dashboard-panel fixed right-4 top-28 z-20 hidden max-h-[calc(100vh-8rem)] w-56 overflow-y-auto rounded-xl p-2 xl:block">
             <div className="mb-2 flex items-center gap-2 rounded-lg border border-emerald-400/12 bg-emerald-400/[0.04] px-2 py-1.5">
               <span className="relative flex h-2.5 w-2.5">

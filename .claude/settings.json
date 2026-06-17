@@ -27,7 +27,12 @@
       "PowerShell(git commit *)",
       "PowerShell(git status)",
       "PowerShell(git diff *)",
-      "PowerShell(npm run dev)"
+      "PowerShell(npm run dev)",
+      "Bash(node -e \"const rgl = require\\('react-grid-layout'\\); console.log\\(Object.keys\\(rgl\\)\\)\")",
+      "Bash(node -e \"const t = require\\('@types/react-grid-layout'\\); console.log\\('ok'\\)\")",
+      "Bash(node -e \"const f = require\\('./node_modules/@types/react-grid-layout/index.d.ts'\\); console.log\\(f\\)\")",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/react-grid-layout/package.json'\\).version\\)\")",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/@types/react-grid-layout/package.json'\\).version\\)\")"
     ]
   }
 }
