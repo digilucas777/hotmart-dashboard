@@ -779,16 +779,44 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     else setMetaCampaigns(null)
   }, [linkedMetaAccountId, period, projectId])
 
+  const fetchHotmartOrigens = useCallback(async () => {
+    const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000).toISOString()
+    const { data } = await supabase
+      .from('vendas')
+      .select('id, hotmart_id')
+      .is('origem', null)
+      .eq('status', 'approved')
+      .gte('data_venda', twoDaysAgo)
+      .not('hotmart_id', 'is', null)
+
+    const rows = (data ?? []) as { id: string; hotmart_id: string }[]
+    if (rows.length === 0) return
+
+    await Promise.all(
+      rows.map(async (row) => {
+        try {
+          const res = await fetch(`/api/hotmart/sync-origem?transaction=${encodeURIComponent(row.hotmart_id)}`, { cache: 'no-store' })
+          if (!res.ok) return
+          const { origem } = await res.json()
+          if (!origem) return
+          await supabase.from('vendas').update({ origem }).eq('id', row.id)
+        } catch {
+          // ignore individual failures
+        }
+      })
+    )
+  }, [])
+
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
     try {
-      await Promise.all([fetchVendas(), fetchMetaAds()])
+      await Promise.all([fetchVendas(), fetchMetaAds(), fetchHotmartOrigens()])
       setSuccessToast('Dados atualizados')
       setTimeout(() => setSuccessToast(null), 5000)
     } finally {
       setIsRefreshing(false)
     }
-  }, [fetchVendas, fetchMetaAds])
+  }, [fetchVendas, fetchMetaAds, fetchHotmartOrigens])
 
   useEffect(() => {
     async function loadOrigens() {
