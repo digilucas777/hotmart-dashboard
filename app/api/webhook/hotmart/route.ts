@@ -1,6 +1,46 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
+let cachedTokenHotmart: { token: string; expiresAt: number } | null = null
+
+async function getTokenHotmart(): Promise<string> {
+  if (cachedTokenHotmart && Date.now() < cachedTokenHotmart.expiresAt) return cachedTokenHotmart.token
+
+  const clientId = process.env.HOTMART_CLIENT_ID
+  const clientSecret = process.env.HOTMART_CLIENT_SECRET
+  if (!clientId || !clientSecret) throw new Error('Hotmart credentials not configured')
+
+  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+  const res = await fetch('https://api-sec-vlc.hotmart.com/security/oauth/token', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${credentials}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'grant_type=client_credentials',
+  })
+
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Hotmart auth failed [${res.status}]: ${body}`)
+  }
+
+  const data = await res.json()
+  cachedTokenHotmart = { token: data.access_token as string, expiresAt: Date.now() + 60 * 60 * 1000 }
+  return cachedTokenHotmart.token
+}
+
+async function fetchOrigemViaApi(hotmartId: string, token: string): Promise<string | null> {
+  const res = await fetch(
+    `https://developers.hotmart.com/payments/api/v1/sales/history?transaction=${encodeURIComponent(hotmartId)}`,
+    { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(10000) },
+  )
+  if (!res.ok) return null
+  const data = await res.json()
+  const purchase = (data?.items ?? [])[0]
+  return purchase?.tracking?.source ?? null
+}
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -111,10 +151,23 @@ export async function POST(req: NextRequest) {
     const cardBrand: string | null = dados.purchase?.payment?.card_type ?? dados.purchase?.payment?.brand ?? null
     const forma_pagamento = cardBrand ? `${paymentType}|${cardBrand}` : paymentType
 
+    const hotmartId: string | null = dados.purchase?.transaction ?? null
+
     const origem: string | null =
       dados.purchase?.tracking_parameters?.utm_source ??
       (typeof dados.purchase?.origin === 'object' ? dados.purchase?.origin?.src : dados.purchase?.origin) ??
       null
+
+    let origemFinal = origem
+    if (!origemFinal && hotmartId) {
+      try {
+        const token = await getTokenHotmart()
+        origemFinal = await fetchOrigemViaApi(hotmartId, token)
+        if (origemFinal) console.log('[WEBHOOK] origem via API:', hotmartId, '→', origemFinal)
+      } catch {
+        // falha silenciosa, origem fica null
+      }
+    }
 
     const afiliado_nome: string | null =
       dados.affiliates?.[0]?.name ??
@@ -158,7 +211,7 @@ export async function POST(req: NextRequest) {
       status,
       pais: dados.buyer?.address?.country ?? null,
       forma_pagamento,
-      origem,
+      origem: origemFinal,
       afiliado_nome,
       valor_recebido: comissaoProdutor,
       valor_bruto: valorBruto,
