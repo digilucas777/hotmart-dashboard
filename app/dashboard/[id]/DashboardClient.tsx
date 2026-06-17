@@ -785,13 +785,13 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
     try {
-      await Promise.all([fetchVendas(), fetchMetaAds(), fetchHotmartOrigens()])
+      await Promise.all([fetchVendas(), fetchMetaAds()])
       setSuccessToast('Dados atualizados')
       setTimeout(() => setSuccessToast(null), 5000)
     } finally {
       setIsRefreshing(false)
     }
-  }, [fetchVendas, fetchMetaAds, fetchHotmartOrigens])
+  }, [fetchVendas, fetchMetaAds])
 
   useEffect(() => {
     async function loadOrigens() {
