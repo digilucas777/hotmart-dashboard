@@ -164,8 +164,8 @@ export async function POST(req: NextRequest) {
         const token = await getTokenHotmart()
         origemFinal = await fetchOrigemViaApi(hotmartId, token)
         if (origemFinal) console.log('[WEBHOOK] origem via API:', hotmartId, '→', origemFinal)
-      } catch {
-        // falha silenciosa, origem fica null
+      } catch (err: any) {
+        console.log('[WEBHOOK] erro ao buscar origem via API:', hotmartId, err?.message)
       }
     }
 
