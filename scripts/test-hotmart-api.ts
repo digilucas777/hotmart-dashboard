@@ -1,3 +1,5 @@
+export {}
+
 const CLIENT_ID = process.env.HOTMART_CLIENT_ID
 const CLIENT_SECRET = process.env.HOTMART_CLIENT_SECRET
 

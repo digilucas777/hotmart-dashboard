@@ -1,3 +1,5 @@
+export {}
+
 const WEBHOOK_URL = 'https://hotmart-dashboard-woad.vercel.app/api/webhook/hotmart'
 
 const payload = {
