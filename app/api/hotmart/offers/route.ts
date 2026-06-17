@@ -35,23 +35,28 @@ export async function GET(request: Request) {
   try {
     const token = await getToken()
 
-    const res = await fetch(
-      `https://developers.hotmart.com/products/api/v1/product/${productId}/offers`,
-      {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        signal: AbortSignal.timeout(10000),
-      }
-    )
+    const url = `https://developers.hotmart.com/products/api/v1/product/${productId}/offers`
+    console.log('[hotmart/offers] product_id recebido:', productId)
+    console.log('[hotmart/offers] URL chamada:', url)
+
+    const res = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(10000),
+    })
+
+    console.log('[hotmart/offers] status da resposta:', res.status)
 
     if (!res.ok) {
       const body = await res.text()
+      console.log('[hotmart/offers] body da resposta (erro):', body)
       return Response.json({ error: `Hotmart API error [${res.status}]: ${body}` }, { status: res.status })
     }
 
     const data = await res.json()
+    console.log('[hotmart/offers] body completo da resposta:', JSON.stringify(data, null, 2))
 
     const offers = ((data as any[]) ?? []).map((offer: any) => ({
       code: offer.code ?? offer.offer_code ?? '',
