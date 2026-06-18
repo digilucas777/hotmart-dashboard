@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { GridLayout, horizontalCompactor } from 'react-grid-layout'
+import { GridLayout, noCompactor } from 'react-grid-layout'
 import type { Layout, LayoutItem } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
@@ -11,6 +11,27 @@ import type { MetaCreativeResult, MetaCampaignResult } from '@/lib/meta-ads-mock
 
 type MetaInsightsRaw = Record<string, unknown>
 
+function widgetSizeLimits(type: WidgetConfig['type']): Pick<LayoutItem, 'minW' | 'minH' | 'maxW' | 'maxH'> {
+  switch (type) {
+    case 'metric':
+    case 'meta-metric':
+      return { minW: 2, minH: 2, maxW: 6, maxH: 4 }
+    case 'bar':
+    case 'pie':
+    case 'line':
+    case 'meta-chart':
+    case 'meta-funnel':
+    case 'combined':
+      return { minW: 3, minH: 3, maxW: 12, maxH: 8 }
+    case 'table':
+    case 'meta-campaign':
+    case 'meta-creative':
+      return { minW: 6, minH: 4, maxW: 12, maxH: 10 }
+    default:
+      return { minW: 3, minH: 3, maxW: 6, maxH: 8 }
+  }
+}
+
 function widgetToLayout(w: WidgetConfig): LayoutItem {
   return {
     i: w.id,
@@ -18,6 +39,7 @@ function widgetToLayout(w: WidgetConfig): LayoutItem {
     y: (w.row_start ?? 1) - 1,
     w: w.col_span ?? 6,
     h: w.row_span ?? 12,
+    ...widgetSizeLimits(w.type),
   }
 }
 
@@ -102,7 +124,7 @@ export function DashboardGrid({
   const layout = widgets.map(widgetToLayout)
 
   return (
-    <div ref={containerRef}>
+    <div ref={containerRef} style={{ minHeight: 400 }}>
       <GridLayout
         className="dashboard-rgl"
         layout={layout}
@@ -115,7 +137,7 @@ export function DashboardGrid({
         }}
         dragConfig={{ enabled: isEditing }}
         resizeConfig={{ enabled: isEditing, handles: ['s', 'w', 'e', 'n', 'sw', 'nw', 'se', 'ne'] }}
-        compactor={horizontalCompactor}
+        compactor={noCompactor}
         onDragStop={(newLayout) => {
           onPushHistory()
           onLayoutChange(applyLayout(widgets, newLayout))
