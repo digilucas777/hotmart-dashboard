@@ -111,7 +111,7 @@ export function DashboardGrid({
           margin: [0, 0] as [number, number],
           containerPadding: [0, 0] as [number, number],
         }}
-        dragConfig={{ enabled: isEditing, handle: '.drag-handle' }}
+        dragConfig={{ enabled: isEditing }}
         resizeConfig={{ enabled: isEditing }}
         compactor={horizontalCompactor}
         onDragStop={(newLayout) => {

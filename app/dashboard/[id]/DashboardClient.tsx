@@ -1266,14 +1266,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     if (!editMode) return
-    function handleDocClick(e: MouseEvent) {
+    function handleDocPointerDown(e: PointerEvent) {
       const target = e.target as Element
       if (!target.closest('.dashboard-widget-rgl')) {
         setSelectedWidgetIds(new Set())
       }
     }
-    document.addEventListener('click', handleDocClick)
-    return () => document.removeEventListener('click', handleDocClick)
+    document.addEventListener('pointerdown', handleDocPointerDown)
+    return () => document.removeEventListener('pointerdown', handleDocPointerDown)
   }, [editMode])
 
 

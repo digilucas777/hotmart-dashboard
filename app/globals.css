@@ -319,3 +319,10 @@ body {
 .react-grid-item.react-draggable-dragging {
   z-index: 100 !important;
 }
+
+.react-grid-placeholder {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1.5px dashed rgba(255, 255, 255, 0.25) !important;
+  border-radius: 12px !important;
+  opacity: 1 !important;
+}
