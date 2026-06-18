@@ -1675,36 +1675,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 >
                   <Redo2 size={13} />
                 </Button>
-                {selectedWidgetIds.size === 1 && widgets.find(w => w.id === [...selectedWidgetIds][0])?.type === 'metric' && (() => {
-                  const sid = [...selectedWidgetIds][0]!
-                  const sw = widgets.find(w => w.id === sid)!
-                  const cur = normalizeRowSpan(sw)
-                  const labels: ['P', 'M', 'G'] = ['P', 'M', 'G']
-                  const tips = ['Pequeno: ícone + título + valor', 'Médio: + detalhe', 'Grande: + comparação']
-                  return (
-                    <>
-                      <div className="mx-0.5 h-4 w-px shrink-0 bg-[var(--dash-border)]" />
-                      {labels.map((label, i) => (
-                        <button
-                          key={label}
-                          title={tips[i]}
-                          onClick={() => {
-                            pushHistory()
-                            setWidgets(prev => prev.map(w => w.id === sid ? { ...w, row_span: METRIC_SNAP_ROWS[i]! } : w))
-                          }}
-                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-black transition-all ${
-                            cur === METRIC_SNAP_ROWS[i]
-                              ? 'bg-gradient-to-r from-cyan-500 to-violet-500 text-white shadow-md shadow-cyan-500/20'
-                              : 'border border-[var(--dash-border)] bg-white/5 text-[var(--dash-faint)] hover:text-[var(--dash-text)]'
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                      <div className="mx-0.5 h-4 w-px shrink-0 bg-[var(--dash-border)]" />
-                    </>
-                  )
-                })()}
                 <Button
                   variant="outline"
                   size="sm"
@@ -1758,20 +1728,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             )}
           </div>
         </div>
-        {editMode && (
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--dash-border)] bg-[var(--dash-panel)] px-4 py-3 text-xs text-[var(--dash-muted)] shadow-xl shadow-black/20">
-            <span>
-              {selectedWidgetIds.size > 0
-                ? selectedWidgetIds.size > 1
-                  ? `${selectedWidgetIds.size} widgets selecionados. Arraste qualquer um para mover o grupo.`
-                  : 'Widget selecionado. Arraste o card ou aproxime o mouse das bordas para redimensionar.'
-                : 'Clique para selecionar · Shift+clique para selecionar múltiplos · Arraste para mover.'}
-            </span>
-            <span className={layoutError ? 'font-semibold text-red-300' : hasUnsavedLayout ? 'font-semibold text-[var(--dash-neon)]' : 'text-[var(--dash-faint)]'}>
-              {layoutError ?? (hasUnsavedLayout ? 'Alterações não salvas' : 'Layout salvo')}
-            </span>
-          </div>
-        )}
         {widgetError && (
           <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs font-semibold text-red-200">
             Erro ao criar widget: {widgetError}
@@ -1830,6 +1786,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             onDelete={deleteWidget}
             onDuplicate={editMode ? duplicateWidget : undefined}
             onEdit={editMode ? setEditingWidgetId : undefined}
+            onResize={editMode ? (id, w, h) => {
+              pushHistory()
+              setWidgets(prev => prev.map(widget => widget.id === id ? { ...widget, col_span: w, row_span: h } : widget))
+            } : undefined}
             linkedMetaAccountId={linkedMetaAccountId}
             metaInsights={metaInsights}
             metaAds={metaAds}

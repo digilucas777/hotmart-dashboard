@@ -72,6 +72,7 @@ function WidgetRendererBase({
   onDelete,
   onDuplicate,
   onEdit,
+  onResize,
 }: {
   config: WidgetConfig
   vendas: Venda[]
@@ -92,6 +93,7 @@ function WidgetRendererBase({
   onDelete: (id: string) => void
   onDuplicate?: (id: string) => void
   onEdit?: (id: string) => void
+  onResize?: (id: string, w: number, h: number) => void
 }) {
   const [chartPeriod, setChartPeriod] = useState<Period>(period)
 
@@ -165,6 +167,23 @@ function WidgetRendererBase({
             background: 'radial-gradient(ellipse at 50% 0%, rgba(34, 211, 238, 0.04), transparent 65%)',
           }}
         />
+      )}
+
+      {isSelected && editMode && onResize && (
+        <div
+          className="absolute left-2 top-2 z-30 flex gap-1"
+          onPointerDown={e => e.stopPropagation()}
+        >
+          {([['P', 3, 2], ['M', 4, 3], ['G', 6, 4]] as const).map(([label, w, h]) => (
+            <button
+              key={label}
+              onClick={e => { e.stopPropagation(); onResize(config.id, w, h) }}
+              className="flex h-6 w-6 items-center justify-center rounded-md bg-black/60 text-[10px] font-black text-white/70 backdrop-blur-sm transition-colors hover:bg-cyan-500/80 hover:text-white"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       )}
 
       {editMode && (
@@ -324,5 +343,6 @@ export const WidgetRenderer = memo(WidgetRendererBase, (prev, next) =>
   prev.linkedMetaAccountId === next.linkedMetaAccountId &&
   prev.metaInsights === next.metaInsights &&
   prev.metaAds === next.metaAds &&
-  prev.metaCampaigns === next.metaCampaigns
+  prev.metaCampaigns === next.metaCampaigns &&
+  prev.onResize === next.onResize
 )

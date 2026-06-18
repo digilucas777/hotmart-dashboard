@@ -53,6 +53,7 @@ type Props = {
   onDelete: (id: string) => void
   onDuplicate?: (id: string) => void
   onEdit?: (id: string) => void
+  onResize?: (id: string, w: number, h: number) => void
   linkedMetaAccountId?: string | null
   metaInsights?: MetaInsightsRaw | null
   metaAds?: MetaCreativeResult | null
@@ -77,6 +78,7 @@ export function DashboardGrid({
   onDelete,
   onDuplicate,
   onEdit,
+  onResize,
   linkedMetaAccountId,
   metaInsights,
   metaAds,
@@ -112,7 +114,7 @@ export function DashboardGrid({
           containerPadding: [0, 0] as [number, number],
         }}
         dragConfig={{ enabled: isEditing }}
-        resizeConfig={{ enabled: isEditing }}
+        resizeConfig={{ enabled: isEditing, handles: ['s', 'w', 'e', 'n', 'sw', 'nw', 'se', 'ne'] }}
         compactor={horizontalCompactor}
         onDragStop={(newLayout) => {
           onPushHistory()
@@ -141,6 +143,7 @@ export function DashboardGrid({
               onDelete={onDelete}
               onDuplicate={onDuplicate}
               onEdit={onEdit}
+              onResize={onResize}
               linkedMetaAccountId={linkedMetaAccountId}
               metaInsights={metaInsights}
               metaAds={metaAds}
