@@ -4,20 +4,22 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  BarChart3,
   Bell,
   Clock3,
   Copy,
-  CreditCard,
   Edit3,
   ExternalLink,
+  FileText,
   ImageIcon,
   LayoutDashboard,
+  LayoutGrid,
   Loader2,
   LogOut,
+  Plug,
   Plus,
   Settings,
   ShieldCheck,
+  ShoppingCart,
   Sparkles,
   Trash2,
   UserRound,
@@ -28,9 +30,10 @@ import type { Projeto } from '@/lib/types'
 import { DashSpeedLogo } from './DashSpeedLogo'
 
 const navItems = [
-  { label: 'Meus Dashboards', icon: LayoutDashboard, href: '/dashboard' },
-  { label: 'Integrações', icon: BarChart3, href: '/integracoes' },
-  { label: 'Billing', icon: CreditCard, href: '/pricing' },
+  { label: 'Dashboards', icon: LayoutGrid, href: '/dashboard' },
+  { label: 'Vendas', icon: ShoppingCart, href: '/vendas' },
+  { label: 'Relatórios', icon: FileText, href: '/relatorios' },
+  { label: 'Integrações', icon: Plug, href: '/integracoes' },
   { label: 'Configurações', icon: Settings, href: '/configuracoes' },
 ]
 
@@ -380,7 +383,7 @@ export function UserAppShell() {
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-white/10 bg-[#0b0d14]/90 p-5 backdrop-blur-2xl lg:block">
         <DashSpeedLogo />
         <nav className="mt-10 space-y-2">
-          {navItems.filter(item => item.label !== 'Billing').map(({ label, icon: Icon, href }, index) => (
+          {navItems.map(({ label, icon: Icon, href }, index) => (
             <Link
               key={label}
               href={href}
@@ -623,7 +626,7 @@ export function UserAppShell() {
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-white/10 bg-[#0b0d14]/95 p-2 backdrop-blur-2xl lg:hidden">
-        {navItems.filter(item => item.label !== 'Billing').map(({ label, icon: Icon, href }, index) => (
+        {navItems.map(({ label, icon: Icon, href }, index) => (
           <Link key={label} href={href} className={`flex flex-1 flex-col items-center justify-center rounded-2xl px-2 py-2 text-[10px] font-bold ${index === 0 ? 'bg-cyan-400/10 text-cyan-100' : 'text-slate-500'}`}>
             <Icon size={17} />
             <span className="mt-1">{label.split(' ')[0]}</span>

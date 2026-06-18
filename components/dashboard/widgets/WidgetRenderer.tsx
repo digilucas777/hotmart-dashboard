@@ -169,22 +169,32 @@ function WidgetRendererBase({
         />
       )}
 
-      {isSelected && editMode && onResize && (
-        <div
-          className="absolute left-2 top-2 z-30 flex gap-1"
-          onPointerDown={e => e.stopPropagation()}
-        >
-          {([['P', 3, 2], ['M', 4, 3], ['G', 6, 4]] as const).map(([label, w, h]) => (
-            <button
-              key={label}
-              onClick={e => { e.stopPropagation(); onResize(config.id, w, h) }}
-              className="flex h-6 w-6 items-center justify-center rounded-md bg-black/60 text-[10px] font-black text-white/70 backdrop-blur-sm transition-colors hover:bg-cyan-500/80 hover:text-white"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
+      {isSelected && editMode && onResize && (() => {
+        const isChartType = ['line', 'bar', 'pie', 'combined', 'meta-chart', 'meta-funnel'].includes(config.type)
+        const isTableType = ['table', 'meta-campaign', 'meta-creative'].includes(config.type)
+        const heights = isChartType ? [4, 5, 6] : isTableType ? [3, 5, 7] : [2, 3, 4]
+        const sizes: [string, number, number][] = [
+          ['P', 3, heights[0]!],
+          ['M', 4, heights[1]!],
+          ['G', 6, heights[2]!],
+        ]
+        return (
+          <div
+            className="absolute left-2 top-2 z-30 flex gap-1"
+            onPointerDown={e => e.stopPropagation()}
+          >
+            {sizes.map(([label, w, h]) => (
+              <button
+                key={label}
+                onClick={e => { e.stopPropagation(); onResize(config.id, w, h) }}
+                className="flex h-6 w-6 items-center justify-center rounded-md bg-black/60 text-[10px] font-black text-white/70 backdrop-blur-sm transition-colors hover:bg-cyan-500/80 hover:text-white"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )
+      })()}
 
       {editMode && (
         <>
