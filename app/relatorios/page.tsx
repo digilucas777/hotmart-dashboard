@@ -355,26 +355,38 @@ export default function RelatoriosPage() {
         return
       }
 
+      // 1. produto_id + todas_ofertas para saber o modo de cada produto
       const { data: links } = await supabase
         .from('projeto_produtos')
-        .select('produto_id')
+        .select('produto_id, todas_ofertas')
         .eq('projeto_id', form.projeto_id)
-      const produtoIds = (links ?? []).map((r: { produto_id: string }) => r.produto_id)
+      const productLinks = (links ?? []) as { produto_id: string; todas_ofertas: boolean | null }[]
+      const produtoIds = productLinks.map(r => r.produto_id)
       if (produtoIds.length === 0) {
         setVendas([])
         return
       }
 
+      // 2. id + hotmart_id para o mapa de conversão usado no filtro
       const { data: produtos } = await supabase
         .from('produtos')
-        .select('hotmart_id')
+        .select('id, hotmart_id')
         .in('id', produtoIds)
-      const hotmartIds = (produtos ?? []).map((r: { hotmart_id: string }) => r.hotmart_id)
+      const produtoRows = (produtos ?? []) as { id: string; hotmart_id: string }[]
+      const hotmartIds = produtoRows.map(r => r.hotmart_id)
       if (hotmartIds.length === 0) {
         setVendas([])
         return
       }
 
+      // 3. ofertas selecionadas quando todas_ofertas = false
+      const { data: selectedOffers } = await supabase
+        .from('projeto_produto_ofertas')
+        .select('produto_id, oferta_codigo')
+        .eq('projeto_id', form.projeto_id)
+      const offerLinks = (selectedOffers ?? []) as { produto_id: string; oferta_codigo: string }[]
+
+      // 4. vendas no período
       const { from, to } = reportRange(form.periodo, customFrom, customTo)
       const { data } = await supabase
         .from('vendas')
@@ -382,7 +394,31 @@ export default function RelatoriosPage() {
         .in('hotmart_produto_id', hotmartIds)
         .gte('data_venda', from.toISOString())
         .lt('data_venda', to.toISOString())
-      setVendas((data ?? []) as Venda[])
+      const allVendas = (data ?? []) as Venda[]
+
+      // 5. filtro de ofertas — mesma lógica do DashboardClient.filterRowsByOfferSelection
+      const productIdByHotmartId = new Map(produtoRows.map(p => [p.hotmart_id, p.id]))
+      const allOfferProductIds = new Set(
+        productLinks.filter(l => l.todas_ofertas !== false).map(l => l.produto_id),
+      )
+      const allowedOffersByProduct = offerLinks.reduce<Record<string, Set<string>>>((acc, link) => {
+        if (!acc[link.produto_id]) acc[link.produto_id] = new Set()
+        acc[link.produto_id]!.add(link.oferta_codigo)
+        return acc
+      }, {})
+
+      const filtered = allVendas.filter(venda => {
+        const productId = venda.hotmart_produto_id
+          ? productIdByHotmartId.get(venda.hotmart_produto_id)
+          : undefined
+        if (!productId) return false
+        if (allOfferProductIds.has(productId)) return true
+        const allowed = allowedOffersByProduct[productId]
+        if (!allowed || allowed.size === 0) return false
+        return !!venda.oferta_codigo && allowed.has(venda.oferta_codigo)
+      })
+
+      setVendas(filtered)
     }
 
     loadProjectSales()
