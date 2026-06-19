@@ -592,6 +592,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     ).then(results => {
       const valid = results.filter(Boolean) as Record<string, unknown>[]
       if (valid.length === 0) { setMetaInsights(null); return }
+      valid.forEach((r, i) => {
+        console.log('[META SPEND] conta:', linkedMetaAccountIds[i], 'spend USD:', r['spend'], 'spend_brl:', r['spend_brl'])
+      })
       if (valid.length === 1) { setMetaInsights(valid[0]!); return }
       // Consolidate: sum additive fields, recalculate ratios
       const SUM_KEYS = ['spend', 'spend_brl', 'impressions', 'reach', 'clicks', 'link_clicks',
@@ -602,6 +605,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         merged[key] = valid.reduce((s, r) => s + (Number(r[key] ?? 0)), 0)
       }
       const totalSpend = Number(merged['spend'] ?? 0)
+      console.log('[META SPEND] total USD:', totalSpend, 'spend_brl somado:', merged['spend_brl'])
       const totalImpressions = Number(merged['impressions'] ?? 0)
       const totalClicks = Number(merged['link_clicks'] ?? merged['cliques_no_link'] ?? 0)
       const totalPurchases = Number(merged['purchases'] ?? merged['compras'] ?? 0)
@@ -881,11 +885,15 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     if (insightsAll.length === 0) { setMetaInsights(null) }
     else if (insightsAll.length === 1) { setMetaInsights(insightsAll[0]!) }
     else {
+      insightsAll.forEach((r, i) => {
+        console.log('[META SPEND] conta:', linkedMetaAccountIds[i], 'spend USD:', r['spend'], 'spend_brl:', r['spend_brl'])
+      })
       const SUM_KEYS = ['spend', 'spend_brl', 'impressions', 'reach', 'clicks', 'link_clicks',
         'cliques_no_link', 'checkouts', 'purchases', 'compras', 'leads', 'video_views', 'alcance']
       const merged: Record<string, unknown> = { ...insightsAll[0] }
       for (const key of SUM_KEYS) merged[key] = insightsAll.reduce((s, r) => s + (Number(r[key] ?? 0)), 0)
       const totalSpend = Number(merged['spend'] ?? 0)
+      console.log('[META SPEND] total USD:', totalSpend, 'spend_brl somado:', merged['spend_brl'])
       const totalImpressions = Number(merged['impressions'] ?? 0)
       const totalClicks = Number(merged['link_clicks'] ?? merged['cliques_no_link'] ?? 0)
       const totalRevenue = insightsAll.reduce((s, r) => s + (Number(r['purchase_roas'] ?? 0) * Number(r['spend'] ?? 0)), 0)
