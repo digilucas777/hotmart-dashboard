@@ -616,7 +616,7 @@ export default function RelatoriosPage() {
     if (!previewRef.current) return
     try {
       const html2canvas = (await import('html2canvas')).default
-      const canvas = await html2canvas(previewRef.current, {
+      const canvas = await (html2canvas as any)(previewRef.current, {
         backgroundColor: '#0d2018',
         useCORS: true,
         scale: 2,
