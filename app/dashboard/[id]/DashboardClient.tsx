@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
+  Camera,
   Check,
   ChevronDown,
   Settings,
@@ -439,6 +440,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [userPerms, setUserPerms] = useState<UserPerms>(null)
   const [permsLoaded, setPermsLoaded] = useState(false)
   const [showDeleteDashboard, setShowDeleteDashboard] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const exportGridRef = useRef<HTMLDivElement>(null)
 
   const [origensDisponiveis, setOrigensDisponiveis] = useState<string[]>([])
   const [origensFilter, setOrigensFilter] = useState<string[]>([])
@@ -1362,6 +1365,44 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [editMode, widgets])
 
+  async function exportarImagem() {
+    if (!exportGridRef.current) return
+    setIsExporting(true)
+    const toolbar = document.querySelector('.dashboard-toolbar') as HTMLElement | null
+    const headerEl = document.querySelector('header') as HTMLElement | null
+    const asideEl = exportGridRef.current.querySelector('aside') as HTMLElement | null
+    if (toolbar) toolbar.style.visibility = 'hidden'
+    if (headerEl) headerEl.style.visibility = 'hidden'
+    if (asideEl) asideEl.style.display = 'none'
+    try {
+      const html2canvas = (await import('html2canvas')).default
+      const canvas = await html2canvas(exportGridRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#0f0f1a',
+        scrollX: 0,
+        scrollY: -window.scrollY,
+        windowWidth: document.documentElement.scrollWidth,
+        windowHeight: document.documentElement.scrollHeight,
+      })
+      const now = new Date()
+      const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+      const link = document.createElement('a')
+      link.download = `${projeto?.nome ?? 'dashboard'}_${date}.png`
+      link.href = canvas.toDataURL('image/png')
+      link.click()
+      setSuccessToast('Imagem exportada!')
+      setTimeout(() => setSuccessToast(null), 3000)
+    } catch (err) {
+      console.error('[EXPORT]', err)
+    } finally {
+      if (toolbar) toolbar.style.visibility = ''
+      if (headerEl) headerEl.style.visibility = ''
+      if (asideEl) asideEl.style.display = ''
+      setIsExporting(false)
+    }
+  }
+
   const isReady = !loadingWidgets && permsLoaded
   const hasUnsavedLayout = !sameLayout(widgets, savedWidgets)
 
@@ -1710,6 +1751,15 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               <RefreshCw size={15} className={isRefreshing ? 'animate-spin' : ''} />
               {isRefreshing ? 'Atualizando...' : 'Atualizar'}
             </button>
+            <button
+              onClick={exportarImagem}
+              disabled={isExporting || !isReady}
+              title="Exportar imagem do dashboard"
+              className="flex shrink-0 items-center gap-2 rounded-lg border border-[var(--dash-border)] bg-[var(--dash-panel)] px-3 py-1.5 text-sm font-semibold text-[var(--dash-text)] transition-colors hover:border-[var(--dash-border-strong)] disabled:opacity-60"
+            >
+              <Camera size={15} />
+              Exportar
+            </button>
             {!editMode ? (
               canEditLayout && (
                 <Button
@@ -1849,7 +1899,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             )}
           </div>
         ) : (
-          <div className="relative">
+          <div ref={exportGridRef} className="relative">
           <DashboardGrid
             widgets={widgets}
             isEditing={editMode}
@@ -1974,6 +2024,15 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           <div className="flex items-center gap-3">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-cyan-400" />
             <p className="text-sm font-medium text-white">Atualizando dados...</p>
+          </div>
+        </div>
+      )}
+
+      {isExporting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="flex items-center gap-3">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-violet-400" />
+            <p className="text-sm font-medium text-white">Gerando imagem...</p>
           </div>
         </div>
       )}
