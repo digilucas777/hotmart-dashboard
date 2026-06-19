@@ -72,7 +72,6 @@ function WidgetRendererBase({
   onDelete,
   onDuplicate,
   onEdit,
-  onResize,
 }: {
   config: WidgetConfig
   vendas: Venda[]
@@ -93,7 +92,6 @@ function WidgetRendererBase({
   onDelete: (id: string) => void
   onDuplicate?: (id: string) => void
   onEdit?: (id: string) => void
-  onResize?: (id: string, w: number, h: number) => void
 }) {
   const [chartPeriod, setChartPeriod] = useState<Period>(period)
 
@@ -169,32 +167,6 @@ function WidgetRendererBase({
         />
       )}
 
-      {isSelected && editMode && onResize && (() => {
-        const isChartType = ['line', 'bar', 'pie', 'combined', 'meta-chart', 'meta-funnel'].includes(config.type)
-        const isTableType = ['table', 'meta-campaign', 'meta-creative'].includes(config.type)
-        const heights = isChartType ? [4, 5, 6] : isTableType ? [3, 5, 7] : [2, 3, 4]
-        const sizes: [string, number, number][] = [
-          ['P', 3, heights[0]!],
-          ['M', 4, heights[1]!],
-          ['G', 6, heights[2]!],
-        ]
-        return (
-          <div
-            className="absolute left-2 top-2 z-30 flex gap-1"
-            onPointerDown={e => e.stopPropagation()}
-          >
-            {sizes.map(([label, w, h]) => (
-              <button
-                key={label}
-                onClick={e => { e.stopPropagation(); onResize(config.id, w, h) }}
-                className="rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-bold leading-4 text-white transition-colors hover:bg-cyan-500/80"
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )
-      })()}
 
       {editMode && (
         <>
@@ -353,6 +325,5 @@ export const WidgetRenderer = memo(WidgetRendererBase, (prev, next) =>
   prev.linkedMetaAccountId === next.linkedMetaAccountId &&
   prev.metaInsights === next.metaInsights &&
   prev.metaAds === next.metaAds &&
-  prev.metaCampaigns === next.metaCampaigns &&
-  prev.onResize === next.onResize
+  prev.metaCampaigns === next.metaCampaigns
 )

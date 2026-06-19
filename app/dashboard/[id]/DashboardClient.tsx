@@ -1262,7 +1262,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
     setSavingProducts(false)
     setShowProducts(false)
-    fetchVendas()
+    await fetchVendas()
   }
 
   useEffect(() => {
@@ -1800,10 +1800,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             onDelete={deleteWidget}
             onDuplicate={editMode ? duplicateWidget : undefined}
             onEdit={editMode ? setEditingWidgetId : undefined}
-            onResize={editMode ? (id, w, h) => {
-              pushHistory()
-              setWidgets(prev => prev.map(widget => widget.id === id ? { ...widget, col_span: w, row_span: h } : widget))
-            } : undefined}
             linkedMetaAccountId={linkedMetaAccountId}
             metaInsights={metaInsights}
             metaAds={metaAds}

@@ -32,7 +32,12 @@
       "Bash(node -e \"const t = require\\('@types/react-grid-layout'\\); console.log\\('ok'\\)\")",
       "Bash(node -e \"const f = require\\('./node_modules/@types/react-grid-layout/index.d.ts'\\); console.log\\(f\\)\")",
       "Bash(node -e \"console.log\\(require\\('./node_modules/react-grid-layout/package.json'\\).version\\)\")",
-      "Bash(node -e \"console.log\\(require\\('./node_modules/@types/react-grid-layout/package.json'\\).version\\)\")"
+      "Bash(node -e \"console.log\\(require\\('./node_modules/@types/react-grid-layout/package.json'\\).version\\)\")",
+      "Bash(node -e \"const rgl = require\\('./node_modules/react-grid-layout'\\); console.log\\(Object.keys\\(rgl\\)\\)\")",
+      "Bash(node -e \"const rgl = require\\('./node_modules/react-grid-layout'\\); console.log\\(Object.keys\\(rgl.ResponsiveGridLayout\\)\\)\")",
+      "Bash(node -e \"const {GridLayout} = require\\('./node_modules/react-grid-layout'\\); const c = GridLayout; console.log\\(c.propTypes ? Object.keys\\(c.propTypes\\) : 'no propTypes'\\)\")",
+      "Bash(node -e \"const rgl = require\\('./node_modules/react-grid-layout'\\); console.log\\(typeof rgl.WidthProvider\\)\")",
+      "Bash(node -e \"const pkg = require\\('./node_modules/react-grid-layout/package.json'\\); console.log\\(JSON.stringify\\(pkg.exports, null, 2\\)\\)\")"
     ]
   }
 }

@@ -11,27 +11,6 @@ import type { MetaCreativeResult, MetaCampaignResult } from '@/lib/meta-ads-mock
 
 type MetaInsightsRaw = Record<string, unknown>
 
-function widgetSizeLimits(type: WidgetConfig['type']): Pick<LayoutItem, 'minW' | 'minH' | 'maxW' | 'maxH'> {
-  switch (type) {
-    case 'metric':
-    case 'meta-metric':
-      return { minW: 2, minH: 2, maxW: 6, maxH: 4 }
-    case 'bar':
-    case 'pie':
-    case 'line':
-    case 'meta-chart':
-    case 'meta-funnel':
-    case 'combined':
-      return { minW: 3, minH: 3, maxW: 12, maxH: 8 }
-    case 'table':
-    case 'meta-campaign':
-    case 'meta-creative':
-      return { minW: 6, minH: 4, maxW: 12, maxH: 10 }
-    default:
-      return { minW: 3, minH: 3, maxW: 6, maxH: 8 }
-  }
-}
-
 function widgetToLayout(w: WidgetConfig): LayoutItem {
   return {
     i: w.id,
@@ -39,7 +18,6 @@ function widgetToLayout(w: WidgetConfig): LayoutItem {
     y: (w.row_start ?? 1) - 1,
     w: w.col_span ?? 6,
     h: w.row_span ?? 12,
-    ...widgetSizeLimits(w.type),
   }
 }
 
@@ -81,7 +59,6 @@ type Props = {
   onDelete: (id: string) => void
   onDuplicate?: (id: string) => void
   onEdit?: (id: string) => void
-  onResize?: (id: string, w: number, h: number) => void
   linkedMetaAccountId?: string | null
   metaInsights?: MetaInsightsRaw | null
   metaAds?: MetaCreativeResult | null
@@ -106,7 +83,6 @@ export function DashboardGrid({
   onDelete,
   onDuplicate,
   onEdit,
-  onResize,
   linkedMetaAccountId,
   metaInsights,
   metaAds,
@@ -184,7 +160,6 @@ export function DashboardGrid({
               onDelete={onDelete}
               onDuplicate={onDuplicate}
               onEdit={onEdit}
-              onResize={onResize}
               linkedMetaAccountId={linkedMetaAccountId}
               metaInsights={metaInsights}
               metaAds={metaAds}
