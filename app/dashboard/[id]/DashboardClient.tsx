@@ -421,6 +421,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [showClearModal, setShowClearModal] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [successToast, setSuccessToast] = useState<string | null>(null)
+  const [isMobile, setIsMobile] = useState(false)
+  const [mobileEditWarning, setMobileEditWarning] = useState(false)
 
   const [origensDisponiveis, setOrigensDisponiveis] = useState<string[]>([])
   const [origensFilter, setOrigensFilter] = useState<string[]>([])
@@ -885,6 +887,13 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
     document.addEventListener('pointerdown', onPointerDown)
     return () => document.removeEventListener('pointerdown', onPointerDown)
+  }, [])
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
   }, [])
 
   const pushHistory = useCallback(() => {
@@ -1645,6 +1654,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 variant="outline"
                 size="sm"
                 onClick={() => {
+                  if (isMobile) {
+                    setMobileEditWarning(true)
+                    setTimeout(() => setMobileEditWarning(false), 3000)
+                    return
+                  }
                   setEditMode(true)
                   setSelectedWidgetIds(new Set())
                 }}
@@ -1894,6 +1908,13 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl bg-emerald-500/90 px-4 py-3 text-sm font-medium text-white shadow-lg backdrop-blur-sm">
           <span>✓</span>
           <span>{successToast}</span>
+        </div>
+      )}
+
+      {mobileEditWarning && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl bg-amber-500/90 px-4 py-3 text-sm font-medium text-white shadow-lg backdrop-blur-sm">
+          <span>⚠</span>
+          <span>Edição disponível apenas no desktop</span>
         </div>
       )}
 

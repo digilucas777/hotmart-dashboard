@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { GridLayout, noCompactor } from 'react-grid-layout'
+import { ResponsiveGridLayout, verticalCompactor } from 'react-grid-layout'
 import type { Layout, LayoutItem } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
@@ -41,6 +41,12 @@ function widgetToLayout(w: WidgetConfig): LayoutItem {
     h: w.row_span ?? 12,
     ...widgetSizeLimits(w.type),
   }
+}
+
+function mobileHeightForType(type: WidgetConfig['type']): number {
+  if (type === 'metric' || type === 'meta-metric') return 2
+  if (type === 'table' || type === 'meta-campaign' || type === 'meta-creative') return 5
+  return 4
 }
 
 function applyLayout(widgets: WidgetConfig[], newLayout: Layout): WidgetConfig[] {
@@ -108,6 +114,7 @@ export function DashboardGrid({
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(1200)
+  const [currentBreakpoint, setCurrentBreakpoint] = useState('md')
 
   useEffect(() => {
     const el = containerRef.current
@@ -117,32 +124,44 @@ export function DashboardGrid({
       if (w) setContainerWidth(w)
     })
     observer.observe(el)
-    setContainerWidth(el.clientWidth || 1200)
+    const initial = el.clientWidth || 1200
+    setContainerWidth(initial)
+    setCurrentBreakpoint(initial < 768 ? 'sm' : 'md')
     return () => observer.disconnect()
   }, [])
 
-  const layout = widgets.map(widgetToLayout)
+  const isMobile = currentBreakpoint === 'sm'
+
+  const desktopLayout = widgets.map(widgetToLayout)
+  const mobileLayout = widgets.reduce<LayoutItem[]>((acc, w) => {
+    const h = mobileHeightForType(w.type)
+    const prevY = acc.length > 0 ? acc[acc.length - 1]!.y + acc[acc.length - 1]!.h : 0
+    acc.push({ i: w.id, x: 0, y: prevY, w: 2, h })
+    return acc
+  }, [])
+
+  const layouts = { md: desktopLayout, sm: mobileLayout }
 
   return (
     <div ref={containerRef} style={{ minHeight: 400 }}>
-      <GridLayout
+      <ResponsiveGridLayout
         className="dashboard-rgl"
-        layout={layout}
         width={containerWidth}
-        gridConfig={{
-          cols: 12,
-          rowHeight: 20,
-          margin: [0, 0] as [number, number],
-          containerPadding: [0, 0] as [number, number],
-        }}
-        dragConfig={{ enabled: isEditing }}
-        resizeConfig={{ enabled: isEditing, handles: ['s', 'w', 'e', 'n', 'sw', 'nw', 'se', 'ne'] }}
-        compactor={noCompactor}
-        onDragStop={(newLayout) => {
+        layouts={layouts}
+        breakpoints={{ md: 768, sm: 0 }}
+        cols={{ md: 12, sm: 2 }}
+        rowHeight={isMobile ? 80 : 20}
+        margin={[0, 0] as [number, number]}
+        containerPadding={[0, 0] as [number, number]}
+        dragConfig={{ enabled: isEditing && !isMobile }}
+        resizeConfig={{ enabled: isEditing && !isMobile, handles: ['s', 'w', 'e', 'n', 'sw', 'nw', 'se', 'ne'] }}
+        compactor={verticalCompactor}
+        onBreakpointChange={(bp: string) => setCurrentBreakpoint(bp)}
+        onDragStop={(newLayout: Layout) => {
           onPushHistory()
           onLayoutChange(applyLayout(widgets, newLayout))
         }}
-        onResizeStop={(newLayout) => {
+        onResizeStop={(newLayout: Layout) => {
           onPushHistory()
           onLayoutChange(applyLayout(widgets, newLayout))
         }}
@@ -158,7 +177,7 @@ export function DashboardGrid({
               exchangeRate={exchangeRate}
               custoTotal={custoTotal}
               customRange={customRange}
-              editMode={isEditing}
+              editMode={isEditing && !isMobile}
               loading={loading}
               selected={selectedWidgetIds.has(w.id)}
               onSelect={onSelect}
@@ -173,7 +192,7 @@ export function DashboardGrid({
             />
           </div>
         ))}
-      </GridLayout>
+      </ResponsiveGridLayout>
     </div>
   )
 }

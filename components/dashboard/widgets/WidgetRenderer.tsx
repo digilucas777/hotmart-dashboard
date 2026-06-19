@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useRef, useState } from 'react'
+import { memo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Copy, Pencil, Trash2 } from 'lucide-react'
 import { computeComparableMetric, computeWidgetData, formatPeriodComparisonLabel, getValueFormat } from '@/lib/utils'
@@ -187,7 +187,7 @@ function WidgetRendererBase({
               <button
                 key={label}
                 onClick={e => { e.stopPropagation(); onResize(config.id, w, h) }}
-                className="flex h-6 w-6 items-center justify-center rounded-md bg-black/60 text-[10px] font-black text-white/70 backdrop-blur-sm transition-colors hover:bg-cyan-500/80 hover:text-white"
+                className="rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-bold leading-4 text-white transition-colors hover:bg-cyan-500/80"
               >
                 {label}
               </button>
