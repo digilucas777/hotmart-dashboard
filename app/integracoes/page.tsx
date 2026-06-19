@@ -13,11 +13,13 @@ import {
   Link2,
   Loader2,
   MousePointerClick,
+  Pencil,
   Plug,
   RefreshCw,
   ShieldCheck,
   Target,
   TrendingUp,
+  Trash2,
   Unlink,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -27,6 +29,8 @@ type Connection = {
   id: string
   meta_user_id: string | null
   meta_user_name: string | null
+  nome: string | null
+  is_active: boolean
   status: string
 }
 
@@ -77,20 +81,22 @@ function IntegracoesContent() {
   const metaError = metaParam === 'error' ? 'Falha na conexão com Meta Ads.' : searchParams.get('meta_error')
   const metaJustConnected = metaParam === 'success' || metaParam === 'connected'
 
-  const [connection, setConnection] = useState<Connection | null | undefined>(undefined)
+  const [connections, setConnections] = useState<Connection[] | undefined>(undefined)
   const [businesses, setBusinesses] = useState<BizManager[]>([])
   const [selectedBmId, setSelectedBmId] = useState<string | null>(null)
   const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(new Set())
   const [projectAccounts, setProjectAccounts] = useState<ProjectAccount[]>([])
   const [dashboards, setDashboards] = useState<Projeto[]>([])
   const [selectedDashboardId, setSelectedDashboardId] = useState('')
+  const [selectedConnectionId, setSelectedConnectionId] = useState('')
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [disconnecting, setDisconnecting] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [unlinkConfirm, setUnlinkConfirm] = useState(false)
   const [unlinking, setUnlinking] = useState(false)
+  const [removingId, setRemovingId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState<{ id: string; value: string } | null>(null)
 
   const loadProjectAccounts = useCallback(async (projetoId: string) => {
     if (!projetoId) { setProjectAccounts([]); setSelectedAccountIds(new Set()); return }
@@ -116,15 +122,17 @@ function IntegracoesContent() {
 
     const user = authData.user
     if (user) {
-      const { data: conn } = await supabase
+      const { data: conns } = await supabase
         .from('meta_connections')
-        .select('id, meta_user_id, meta_user_name, status')
+        .select('id, meta_user_id, meta_user_name, nome, is_active, status')
         .eq('user_id', user.id)
         .eq('status', 'connected')
-        .maybeSingle()
-      setConnection((conn as Connection | null) ?? null)
+        .order('created_at', { ascending: false })
+      const connList = (conns ?? []) as Connection[]
+      setConnections(connList)
+      if (connList[0]) setSelectedConnectionId(connList[0].id)
     } else {
-      setConnection(null)
+      setConnections([])
     }
 
     const firstProjectId = dashboardList[0]?.id ?? ''
@@ -157,13 +165,11 @@ function IntegracoesContent() {
   }
 
   async function syncAccounts() {
-    console.log('[SYNC] iniciando...')
+    if (!selectedConnectionId) return
     setSyncing(true)
     try {
-      const res = await fetch('/api/meta/accounts', { cache: 'no-store' })
-      console.log('[SYNC] status:', res.status)
+      const res = await fetch(`/api/meta/accounts?connection_id=${encodeURIComponent(selectedConnectionId)}`, { cache: 'no-store' })
       const data = await res.json()
-      console.log('[SYNC] data:', data)
       if (res.ok) {
         setBusinesses(data.businesses ?? [])
         if (data.businesses?.[0]) setSelectedBmId(data.businesses[0].id)
@@ -174,20 +180,25 @@ function IntegracoesContent() {
     setSyncing(false)
   }
 
-  async function disconnect() {
-    if (!connection) return
-    setDisconnecting(true)
-    await supabase.from('meta_connections').delete().eq('id', connection.id)
-    setConnection(null)
-    setBusinesses([])
-    setSelectedBmId(null)
-    setSelectedAccountIds(new Set())
-    setProjectAccounts([])
-    setDisconnecting(false)
+  async function removeConnection(id: string) {
+    setRemovingId(id)
+    await supabase.from('meta_connections').delete().eq('id', id)
+    setConnections(prev => (prev ?? []).filter(c => c.id !== id))
+    if (selectedConnectionId === id) {
+      const remaining = (connections ?? []).filter(c => c.id !== id)
+      setSelectedConnectionId(remaining[0]?.id ?? '')
+    }
+    setRemovingId(null)
+  }
+
+  async function saveConnectionName(id: string, nome: string) {
+    await supabase.from('meta_connections').update({ nome: nome.trim() || null }).eq('id', id)
+    setConnections(prev => (prev ?? []).map(c => c.id === id ? { ...c, nome: nome.trim() || null } : c))
+    setEditingName(null)
   }
 
   async function saveLink() {
-    if (!connection || !selectedDashboardId) return
+    if (!selectedDashboardId) return
     setSaving(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setSaving(false); return }
@@ -212,6 +223,13 @@ function IntegracoesContent() {
       await supabase.from('meta_project_accounts').insert(toInsert)
     }
 
+    // Also save in meta_project_connections (link OAuth connection → project)
+    if (selectedConnectionId) {
+      await supabase
+        .from('meta_project_connections')
+        .upsert({ projeto_id: selectedDashboardId, meta_connection_id: selectedConnectionId }, { onConflict: 'projeto_id,meta_connection_id' })
+    }
+
     setSaveSuccess(true)
     await loadProjectAccounts(selectedDashboardId)
     setSaving(false)
@@ -227,9 +245,10 @@ function IntegracoesContent() {
     setUnlinking(false)
   }
 
-  const connected = connection?.status === 'connected'
+  const connList = connections ?? []
+  const hasAnyConnection = connList.length > 0
   const selectedBm = businesses.find(b => b.id === selectedBmId)
-  const pageLoading = connection === undefined || loading
+  const pageLoading = connections === undefined || loading
 
   return (
     <div className="min-h-screen bg-[var(--dash-bg)] text-[var(--dash-text)]">
@@ -256,7 +275,7 @@ function IntegracoesContent() {
               ? 'border-cyan-300/20 bg-cyan-300/10 text-cyan-100'
               : 'border-red-400/20 bg-red-500/10 text-red-200'
           }`}>
-            {metaJustConnected ? 'Meta conectado. Sincronize as contas e vincule ao dashboard.' : `Falha na conexão Meta: ${metaError}`}
+            {metaJustConnected ? 'Meta conectado! Dê um nome à nova conexão e sincronize as contas.' : `Falha na conexão Meta: ${metaError}`}
           </div>
         )}
         {saveSuccess && (
@@ -301,56 +320,116 @@ function IntegracoesContent() {
           </div>
         </section>
 
-        {/* Connection status */}
+        {/* Contas Meta conectadas */}
         <section className="mt-8">
+          <div className="mb-3 flex items-center justify-between gap-4">
+            <h2 className="text-sm font-black uppercase tracking-wider text-[var(--dash-faint)]">Contas Meta conectadas</h2>
+            <a
+              href="/api/meta/oauth/start"
+              className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-2.5 text-sm font-black text-white"
+            >
+              <Plug size={14} />
+              Conectar nova conta Meta
+            </a>
+          </div>
+
           {pageLoading ? (
             <div className="flex items-center gap-3 rounded-[2rem] border border-[var(--dash-border)] bg-[var(--dash-panel)] p-6">
               <Loader2 size={20} className="animate-spin text-[var(--dash-faint)]" />
-              <span className="text-sm text-[var(--dash-muted)]">Verificando conexão…</span>
+              <span className="text-sm text-[var(--dash-muted)]">Verificando conexões…</span>
             </div>
-          ) : connected ? (
-            <div className="rounded-[2rem] border border-emerald-400/20 bg-emerald-400/[0.06] p-6 shadow-[var(--dash-shadow)]">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300">
-                    <CheckCircle2 size={22} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-400">Meta Ads conectado</p>
-                    <p className="mt-0.5 text-sm font-semibold text-[var(--dash-text)]">
-                      {connection.meta_user_name ?? connection.meta_user_id ?? 'Usuário Meta'}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <a
-                    href="/api/meta/oauth/start"
-                    className="inline-flex items-center gap-2 rounded-xl border border-[var(--dash-border)] bg-white/5 px-4 py-2.5 text-sm font-bold text-[var(--dash-muted)] transition-colors hover:text-[var(--dash-text)]"
-                  >
-                    <RefreshCw size={14} />
-                    Reconectar
-                  </a>
-                  <button
-                    onClick={disconnect}
-                    disabled={disconnecting}
-                    className="inline-flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-sm font-bold text-red-300 transition-colors hover:bg-red-500/20 disabled:opacity-50"
-                  >
-                    {disconnecting ? <Loader2 size={14} className="animate-spin" /> : <Unlink size={14} />}
-                    Desconectar
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : (
+          ) : connList.length === 0 ? (
             <div className="flex flex-wrap items-center justify-between gap-4 rounded-[2rem] border border-dashed border-[var(--dash-border)] bg-[var(--dash-panel)] p-6">
               <p className="text-sm text-[var(--dash-muted)]">Nenhuma conta Meta conectada ainda.</p>
-              <a
-                href="/api/meta/oauth/start"
-                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-5 py-3 text-sm font-black text-white"
-              >
-                <Plug size={16} />
-                Conectar Meta
-              </a>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {connList.map(conn => (
+                <div
+                  key={conn.id}
+                  className={`rounded-[2rem] border p-5 shadow-[var(--dash-shadow)] transition-colors ${
+                    selectedConnectionId === conn.id
+                      ? 'border-cyan-400/30 bg-cyan-400/[0.04]'
+                      : 'border-[var(--dash-border)] bg-[var(--dash-panel)]'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <button
+                      onClick={() => setSelectedConnectionId(conn.id)}
+                      className="flex items-center gap-4 text-left"
+                    >
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300">
+                        <CheckCircle2 size={20} />
+                      </div>
+                      <div>
+                        {editingName?.id === conn.id ? (
+                          <form
+                            onSubmit={e => { e.preventDefault(); void saveConnectionName(conn.id, editingName.value) }}
+                            className="flex items-center gap-2"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <input
+                              autoFocus
+                              value={editingName.value}
+                              onChange={e => setEditingName({ id: conn.id, value: e.target.value })}
+                              className="h-7 rounded-lg border border-white/20 bg-white/10 px-2 text-sm font-bold text-white outline-none focus:border-cyan-400/60"
+                              placeholder="Nome da conexão"
+                            />
+                            <button type="submit" className="text-xs font-bold text-cyan-400 hover:text-cyan-300">Salvar</button>
+                            <button type="button" onClick={() => setEditingName(null)} className="text-xs text-[var(--dash-muted)]">Cancelar</button>
+                          </form>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-black text-[var(--dash-text)]">
+                              {conn.nome ?? conn.meta_user_name ?? conn.meta_user_id ?? 'Meta Ads'}
+                            </p>
+                            <button
+                              onClick={e => { e.stopPropagation(); setEditingName({ id: conn.id, value: conn.nome ?? '' }) }}
+                              className="text-[var(--dash-faint)] hover:text-[var(--dash-muted)]"
+                              title="Renomear"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          </div>
+                        )}
+                        <p className="mt-0.5 text-xs text-[var(--dash-faint)]">
+                          {conn.meta_user_name ?? conn.meta_user_id ?? ''}
+                        </p>
+                      </div>
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                        conn.is_active !== false ? 'bg-emerald-500/15 text-emerald-400' : 'bg-slate-500/15 text-slate-400'
+                      }`}>
+                        {conn.is_active !== false ? 'Ativo' : 'Inativo'}
+                      </span>
+                      <a
+                        href="/api/meta/oauth/start"
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--dash-border)] bg-white/5 px-3 py-2 text-xs font-bold text-[var(--dash-muted)] transition-colors hover:text-[var(--dash-text)]"
+                      >
+                        <RefreshCw size={12} />
+                        Reconectar
+                      </a>
+                      <button
+                        onClick={() => void removeConnection(conn.id)}
+                        disabled={removingId === conn.id}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 transition-colors hover:bg-red-500/20 disabled:opacity-50"
+                      >
+                        {removingId === conn.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                        Remover
+                      </button>
+                    </div>
+                  </div>
+
+                  {selectedConnectionId === conn.id && (
+                    <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-cyan-400">
+                      <Check size={11} />
+                      Conexão selecionada para sincronização
+                    </p>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </section>
@@ -361,10 +440,23 @@ function IntegracoesContent() {
           <div className="rounded-[2rem] border border-[var(--dash-border)] bg-[var(--dash-panel)] p-6 shadow-[var(--dash-shadow)]">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-[var(--dash-faint)]">Etapa 1</p>
             <h2 className="mt-2 text-xl font-black">Business Managers</h2>
+
+            {connList.length > 1 && (
+              <select
+                value={selectedConnectionId}
+                onChange={e => setSelectedConnectionId(e.target.value)}
+                className="mt-4 h-10 w-full rounded-2xl border border-[var(--dash-border)] bg-[#080a12] px-3 text-xs font-bold text-white outline-none focus:border-cyan-300/60"
+              >
+                {connList.map(c => (
+                  <option key={c.id} value={c.id}>{c.nome ?? c.meta_user_name ?? c.meta_user_id ?? 'Conta Meta'}</option>
+                ))}
+              </select>
+            )}
+
             <button
               onClick={syncAccounts}
-              disabled={!connected || syncing}
-              className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 text-sm font-black text-white disabled:opacity-40"
+              disabled={!hasAnyConnection || syncing || !selectedConnectionId}
+              className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 text-sm font-black text-white disabled:opacity-40"
             >
               {syncing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
               Sincronizar contas
@@ -372,7 +464,7 @@ function IntegracoesContent() {
             <div className="mt-4 max-h-72 space-y-2 overflow-y-auto pr-1">
               {businesses.length === 0 ? (
                 <p className="rounded-2xl border border-dashed border-[var(--dash-border)] p-4 text-sm text-[var(--dash-muted)]">
-                  {connected ? 'Clique em "Sincronizar contas" para listar os BMs.' : 'Conecte sua conta Meta primeiro.'}
+                  {hasAnyConnection ? 'Clique em "Sincronizar contas" para listar os BMs.' : 'Conecte sua conta Meta primeiro.'}
                 </p>
               ) : businesses.map(bm => (
                 <button
@@ -394,7 +486,7 @@ function IntegracoesContent() {
             </div>
           </div>
 
-          {/* Step 2 — Ad Accounts (multi-select) */}
+          {/* Step 2 — Ad Accounts */}
           <div className="rounded-[2rem] border border-[var(--dash-border)] bg-[var(--dash-panel)] p-6 shadow-[var(--dash-shadow)]">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-[var(--dash-faint)]">Etapa 2</p>
             <h2 className="mt-2 text-xl font-black">Contas de anúncio</h2>
@@ -457,6 +549,21 @@ function IntegracoesContent() {
               ))}
             </select>
 
+            {connList.length > 1 && (
+              <div className="mt-3">
+                <p className="mb-1 text-xs font-bold text-[var(--dash-faint)]">Conta Meta para este projeto</p>
+                <select
+                  value={selectedConnectionId}
+                  onChange={e => setSelectedConnectionId(e.target.value)}
+                  className="h-10 w-full rounded-2xl border border-[var(--dash-border)] bg-[#080a12] px-3 text-xs font-bold text-white outline-none focus:border-cyan-300/60"
+                >
+                  {connList.map(c => (
+                    <option key={c.id} value={c.id}>{c.nome ?? c.meta_user_name ?? 'Conta Meta'}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="mt-4 rounded-2xl border border-[var(--dash-border)] bg-white/5 p-4">
               <p className="text-xs font-black uppercase tracking-wider text-[var(--dash-faint)]">Contas vinculadas a este projeto</p>
               {projectAccounts.length === 0 ? (
@@ -480,7 +587,7 @@ function IntegracoesContent() {
 
             <button
               onClick={saveLink}
-              disabled={!connected || saving}
+              disabled={saving}
               className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 text-sm font-black text-white disabled:opacity-40"
             >
               {saving && <Loader2 size={16} className="animate-spin" />}
