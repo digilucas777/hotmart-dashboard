@@ -419,14 +419,14 @@ function SortableDashboardOption({
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
       className="relative"
     >
-      {isAdmin && (
+      {(
         <div
           {...attributes}
           {...listeners}
-          className="absolute left-1 top-1/2 z-10 -translate-y-1/2 cursor-grab touch-none p-1 text-slate-600 active:cursor-grabbing"
+          className="absolute left-1 top-1/2 z-10 -translate-y-1/2 cursor-grab touch-none p-1 text-white active:cursor-grabbing"
           onClick={e => e.stopPropagation()}
         >
-          <GripVertical size={13} />
+          <GripVertical size={20} />
         </div>
       )}
       <button
