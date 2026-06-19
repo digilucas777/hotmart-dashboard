@@ -13,6 +13,45 @@ type InvitePermission = {
   is_admin_dashboard?: boolean
 }
 
+function makeAdminClient() {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!serviceKey) return null
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+}
+
+export async function GET(_request: Request) {
+  const { supabase, user } = await getAuthenticatedUser()
+  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (profile?.role !== 'admin') {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  }
+
+  const admin = makeAdminClient()
+  if (!admin) return NextResponse.json({ error: 'service key not configured' }, { status: 500 })
+
+  const { data, error } = await admin.auth.admin.listUsers({ perPage: 1000 })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  const pending = (data?.users ?? [])
+    .filter(u => u.invited_at && !u.email_confirmed_at)
+    .map(u => ({
+      id: u.id,
+      email: u.email ?? '',
+      invited_at: u.invited_at ?? '',
+    }))
+
+  return NextResponse.json({ pending })
+}
+
 export async function POST(request: Request) {
   const { supabase, user } = await getAuthenticatedUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
@@ -33,12 +72,8 @@ export async function POST(request: Request) {
   }
   if (!email?.trim()) return NextResponse.json({ error: 'email required' }, { status: 400 })
 
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!serviceKey) return NextResponse.json({ error: 'service key not configured' }, { status: 500 })
-
-  const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  })
+  const admin = makeAdminClient()
+  if (!admin) return NextResponse.json({ error: 'service key not configured' }, { status: 500 })
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://hotmart-dashboard-woad.vercel.app'
   const { data: inviteData, error } = await admin.auth.admin.inviteUserByEmail(email.trim(), {

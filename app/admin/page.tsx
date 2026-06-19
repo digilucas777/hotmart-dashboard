@@ -51,6 +51,12 @@ const PERM_KEYS: { key: keyof Omit<PermRow, 'is_admin_dashboard'>; label: string
 
 type DashboardEntry = { id: string; nome: string; data_criacao: string }
 
+type PendingUser = {
+  id: string
+  email: string
+  invited_at: string
+}
+
 function PermissionsProjectList({
   projetos,
   perms,
@@ -170,6 +176,9 @@ export default function AdminPage() {
   const [loadingPerms, setLoadingPerms] = useState(false)
   const [savingPerms, setSavingPerms] = useState(false)
 
+  const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([])
+  const [resendingEmail, setResendingEmail] = useState<string | null>(null)
+
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -184,19 +193,21 @@ export default function AdminPage() {
       if (profile?.role !== 'admin') { setIsAdmin(false); return }
       setIsAdmin(true)
 
-      const [{ data: allUsers }, projetosRes] = await Promise.all([
+      const [{ data: allUsers }, projetosRes, pendingRes] = await Promise.all([
         supabase
           .from('user_profiles')
           .select('id, email, nome, created_at')
           .eq('role', 'user')
           .order('created_at', { ascending: false }),
         fetch('/api/admin/dashboards').then(r => r.json() as Promise<{ dashboards?: Projeto[] }>),
+        fetch('/api/admin/invite').then(r => r.json() as Promise<{ pending?: PendingUser[] }>),
       ])
 
       setUsers((allUsers ?? []) as UserProfile[])
       const projetos = projetosRes.dashboards ?? []
       console.log('[ADMIN] projetos carregados:', projetos)
       setAllProjetos(projetos)
+      setPendingUsers(pendingRes.pending ?? [])
     }
     init()
   }, [router])
@@ -306,9 +317,23 @@ export default function AdminPage() {
       setInviteStatus(`Convite enviado para ${inviteEmail}`)
       setInviteEmail('')
       setInvitePerms({})
+      const p = await fetch('/api/admin/invite').then(r => r.json() as Promise<{ pending?: PendingUser[] }>)
+      setPendingUsers(p.pending ?? [])
     } else {
       setInviteStatus(json.error ?? 'Erro ao enviar convite')
     }
+  }
+
+  async function resendInvite(email: string) {
+    setResendingEmail(email)
+    await fetch('/api/admin/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    })
+    const p = await fetch('/api/admin/invite').then(r => r.json() as Promise<{ pending?: PendingUser[] }>)
+    setPendingUsers(p.pending ?? [])
+    setResendingEmail(null)
   }
 
   if (isAdmin === null) {
@@ -355,7 +380,7 @@ export default function AdminPage() {
       <main className="mx-auto max-w-5xl px-6 py-8">
         <div className="mb-6 rounded-2xl border border-white/8 bg-white/[0.03] px-5 py-4">
           <p className="text-sm text-slate-400">
-            {users.length} {users.length === 1 ? 'usuário convidado' : 'usuários convidados'}
+            {users.length} ativo{users.length !== 1 ? 's' : ''} · {pendingUsers.length} pendente{pendingUsers.length !== 1 ? 's' : ''}
           </p>
         </div>
 
@@ -367,7 +392,12 @@ export default function AdminPage() {
                   {(user.nome ?? user.email ?? '?')[0]?.toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-slate-100">{user.nome ?? '—'}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="truncate font-semibold text-slate-100">{user.nome ?? '—'}</p>
+                    <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                      Ativo
+                    </span>
+                  </div>
                   <p className="flex items-center gap-1.5 truncate text-xs text-slate-500">
                     <Mail size={11} />
                     {user.email ?? '—'}
@@ -423,7 +453,38 @@ export default function AdminPage() {
               )}
             </div>
           ))}
-          {users.length === 0 && (
+          {pendingUsers.map(p => (
+            <div key={p.id} className="overflow-hidden rounded-2xl border border-yellow-400/15 bg-yellow-400/[0.03]">
+              <div className="flex items-center gap-4 px-5 py-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-400/10 text-sm font-black text-yellow-300">
+                  {p.email[0]?.toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-yellow-400/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-yellow-400">
+                      Convite pendente
+                    </span>
+                  </div>
+                  <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-slate-400">
+                    <Mail size={11} />
+                    {p.email}
+                  </p>
+                </div>
+                <p className="shrink-0 text-xs text-slate-500">
+                  {new Date(p.invited_at).toLocaleDateString('pt-BR')}
+                </p>
+                <button
+                  onClick={() => resendInvite(p.email)}
+                  disabled={resendingEmail === p.email}
+                  className="flex shrink-0 items-center gap-2 rounded-xl border border-yellow-400/25 bg-yellow-400/10 px-3 py-1.5 text-xs font-semibold text-yellow-300 transition-colors hover:border-yellow-400/50 hover:text-yellow-200 disabled:cursor-wait disabled:opacity-60"
+                >
+                  <Mail size={12} />
+                  {resendingEmail === p.email ? 'Enviando...' : 'Reenviar convite'}
+                </button>
+              </div>
+            </div>
+          ))}
+          {users.length === 0 && pendingUsers.length === 0 && (
             <p className="py-12 text-center text-slate-500">Nenhum usuário convidado ainda.</p>
           )}
         </div>
