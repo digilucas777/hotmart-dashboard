@@ -2021,17 +2021,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 Inserir custo
               </Button>
             )}
-            {!editMode && canDeleteDashboard && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowDeleteDashboard(true)}
-                className="shrink-0 border-red-400/30 bg-red-500/10 text-red-300"
-              >
-                <Trash2 size={13} />
-                Excluir dashboard
-              </Button>
-            )}
           </div>
         </div>
         {widgetError && (
