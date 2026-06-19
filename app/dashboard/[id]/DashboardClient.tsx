@@ -523,7 +523,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     supabase
       .from('projetos')
       .select('*')
-      .order('data_criacao', { ascending: false })
+      .order('ordem', { ascending: true })
+      .order('data_criacao', { ascending: true })
       .then(({ data }) => setDashboardOptions((data ?? []) as Projeto[]))
   }, [])
 
