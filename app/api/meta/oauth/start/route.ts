@@ -30,6 +30,8 @@ export async function GET(request: Request) {
   url.searchParams.set('state', csrfToken)
   url.searchParams.set('response_type', 'code')
   url.searchParams.set('scope', 'ads_read,ads_management,business_management')
+  url.searchParams.set('auth_type', 'rerequest')
+  url.searchParams.set('display', 'popup')
   const configId = process.env.META_CONFIG_ID
   if (configId) url.searchParams.set('config_id', configId)
 
