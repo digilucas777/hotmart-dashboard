@@ -184,21 +184,19 @@ export default function AdminPage() {
       if (profile?.role !== 'admin') { setIsAdmin(false); return }
       setIsAdmin(true)
 
-      const [{ data: allUsers }, { data: projetos }] = await Promise.all([
+      const [{ data: allUsers }, projetosRes] = await Promise.all([
         supabase
           .from('user_profiles')
           .select('id, email, nome, created_at')
           .eq('role', 'user')
           .order('created_at', { ascending: false }),
-        supabase
-          .from('projetos')
-          .select('id, nome')
-          .order('ordem', { ascending: true })
-          .order('data_criacao', { ascending: false }),
+        fetch('/api/admin/dashboards').then(r => r.json() as Promise<{ dashboards?: Projeto[] }>),
       ])
 
       setUsers((allUsers ?? []) as UserProfile[])
-      setAllProjetos((projetos ?? []) as Projeto[])
+      const projetos = projetosRes.dashboards ?? []
+      console.log('[ADMIN] projetos carregados:', projetos)
+      setAllProjetos(projetos)
     }
     init()
   }, [router])
