@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -311,6 +312,7 @@ export default function RelatoriosPage() {
   const [isMetaConnected, setIsMetaConnected] = useState(false)
   const [exchangeRate, setExchangeRate] = useState(5.85)
   const [selectedTemplate, setSelectedTemplate] = useState<'recuperacao' | 'trafego' | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const previewRef = useRef<HTMLDivElement>(null)
   const selectedProject = projetos.find(p => p.id === form.projeto_id)
@@ -610,6 +612,8 @@ export default function RelatoriosPage() {
 
   async function copyToClipboard() {
     await navigator.clipboard.writeText(messageText)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   async function exportImage() {
@@ -924,10 +928,14 @@ export default function RelatoriosPage() {
                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Mensagem</p>
                       <button
                         onClick={copyToClipboard}
-                        className="flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-slate-400 hover:bg-white/10"
+                        className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] transition-colors ${
+                          copied
+                            ? 'border-green-500/40 bg-green-500/10 text-green-400'
+                            : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'
+                        }`}
                       >
-                        <Clipboard size={11} />
-                        Copiar
+                        {copied ? <Check size={11} /> : <Clipboard size={11} />}
+                        {copied ? 'Copiado!' : 'Copiar'}
                       </button>
                     </div>
 
