@@ -10,6 +10,7 @@ import {
   Edit3,
   ExternalLink,
   FileText,
+  GripVertical,
   ImageIcon,
   LayoutDashboard,
   LayoutGrid,
@@ -91,11 +92,13 @@ export function UserAppShell() {
   const [dashboardStatus, setDashboardStatus] = useState('active')
   const [dashboardTemplate, setDashboardTemplate] = useState<'blank' | 'meta-traffic'>('blank')
   const [error, setError] = useState('')
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
 
   async function loadDashboards() {
     const { data, error: projectsError } = await supabase
       .from('projetos')
       .select('*')
+      .order('ordem', { ascending: true })
       .order('data_criacao', { ascending: false })
 
     if (projectsError) {
@@ -468,9 +471,9 @@ export function UserAppShell() {
             </div>
 
             {loading ? (
-              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {[0, 1, 2].map(item => (
-                  <div key={item} className="h-64 animate-pulse rounded-3xl border border-white/10 bg-white/[0.035]" />
+              <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+                {[0, 1, 2, 3].map(item => (
+                  <div key={item} className="h-48 animate-pulse rounded-2xl border border-white/10 bg-white/[0.035]" />
                 ))}
               </div>
             ) : dashboards.length === 0 ? (
@@ -491,46 +494,70 @@ export function UserAppShell() {
                 </button>
               </div>
             ) : (
-              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
                 {dashboards.map((dashboard, index) => (
-                  <div key={dashboard.id} className="rounded-3xl border border-white/10 bg-[#0b0d14] p-5 transition-all hover:-translate-y-1 hover:border-cyan-300/30 hover:shadow-[0_22px_60px_rgba(0,212,255,0.12)]">
-                    <div className="mb-6 h-28 rounded-2xl bg-[linear-gradient(135deg,rgba(0,212,255,0.2),rgba(167,139,250,0.14))] p-4">
+                  <div
+                    key={dashboard.id}
+                    draggable={true}
+                    onDragStart={() => setDragIndex(index)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => {
+                      if (dragIndex === null || dragIndex === index) return
+                      const novo = [...dashboards]
+                      const [item] = novo.splice(dragIndex, 1)
+                      novo.splice(index, 0, item)
+                      setDashboards(novo)
+                      setDragIndex(null)
+                      novo.forEach((d, idx) => supabase.from('projetos').update({ ordem: idx }).eq('id', d.id))
+                    }}
+                    onDragEnd={() => setDragIndex(null)}
+                    style={{ opacity: dragIndex === index ? 0.5 : 1 }}
+                    className="relative rounded-2xl border border-white/10 bg-[#0b0d14] p-4 transition-all hover:border-cyan-300/30"
+                  >
+                    {/* Grip */}
+                    <div className="absolute left-2 top-2 cursor-move p-1 text-white">
+                      <GripVertical size={14} />
+                    </div>
+
+                    <div className="mb-3 mt-3 h-20 rounded-xl bg-[linear-gradient(135deg,rgba(0,212,255,0.2),rgba(167,139,250,0.14))] p-3">
                       <div className="flex h-full items-end justify-between">
-                        <div className="h-10 w-20 rounded-xl bg-white/10" />
+                        <div className="h-7 w-14 rounded-lg bg-white/10" />
                         <div className="flex gap-1">
-                          <div className="h-16 w-3 rounded-full bg-cyan-300/70" />
-                          <div className="h-10 w-3 rounded-full bg-violet-300/70" />
-                          <div className="h-20 w-3 rounded-full bg-cyan-100/80" />
+                          <div className="h-10 w-2 rounded-full bg-cyan-300/70" />
+                          <div className="h-7 w-2 rounded-full bg-violet-300/70" />
+                          <div className="h-12 w-2 rounded-full bg-cyan-100/80" />
                         </div>
                       </div>
                     </div>
-                    <p className="font-black">{dashboard.nome}</p>
-                    <p className="mt-1 line-clamp-2 min-h-10 text-sm text-slate-500">
+
+                    <p className="text-sm font-bold">{dashboard.nome}</p>
+                    <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">
                       {dashboard.descricao || (index === 0 ? 'Dashboard principal da operação' : 'Dashboard pronto para configurar')}
                     </p>
-                    <div className="mt-5 grid gap-2 sm:grid-cols-2">
-                      <Link href={`/dashboard/${dashboard.id}`} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-3 text-sm font-black text-white shadow-[0_0_28px_rgba(0,212,255,0.22)] transition-transform hover:-translate-y-0.5">
-                        Abrir dashboard
-                        <ExternalLink size={14} />
+
+                    <div className="mt-3 grid gap-1.5 grid-cols-2">
+                      <Link href={`/dashboard/${dashboard.id}`} className="col-span-2 inline-flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-400 to-violet-500 px-2 py-1 text-xs font-black text-white">
+                        Abrir
+                        <ExternalLink size={11} />
                       </Link>
-                      <button onClick={() => openEditDashboard(dashboard)} className="inline-flex items-center justify-center rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white">
-                        <Edit3 size={14} />
-                        <span className="ml-2">Editar dashboard</span>
+                      <button onClick={() => openEditDashboard(dashboard)} className="inline-flex items-center justify-center gap-1 rounded-xl border border-white/10 px-2 py-1 text-xs font-bold text-slate-300 hover:border-cyan-300/40 hover:text-white">
+                        <Edit3 size={11} />
+                        Editar
                       </button>
                       <button
                         onClick={() => duplicateDashboard(dashboard)}
                         disabled={duplicatingId === dashboard.id}
-                        className="inline-flex items-center justify-center rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-300 transition-colors hover:border-violet-300/40 hover:text-white disabled:opacity-60"
+                        className="inline-flex items-center justify-center gap-1 rounded-xl border border-white/10 px-2 py-1 text-xs font-bold text-slate-300 hover:border-violet-300/40 hover:text-white disabled:opacity-60"
                       >
-                        {duplicatingId === dashboard.id ? <Loader2 size={14} className="animate-spin" /> : <Copy size={14} />}
-                        <span className="ml-2">Duplicar dashboard</span>
+                        {duplicatingId === dashboard.id ? <Loader2 size={11} className="animate-spin" /> : <Copy size={11} />}
+                        Duplicar
                       </button>
                       <button
                         onClick={() => setDeleteTarget(dashboard)}
-                        className="inline-flex items-center justify-center rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-400 transition-colors hover:border-red-300/35 hover:bg-red-500/10 hover:text-red-200"
+                        className="col-span-2 inline-flex items-center justify-center gap-1 rounded-xl border border-white/10 px-2 py-1 text-xs font-bold text-slate-400 hover:border-red-300/35 hover:bg-red-500/10 hover:text-red-200"
                       >
-                        <Trash2 size={14} />
-                        <span className="ml-2">Excluir dashboard</span>
+                        <Trash2 size={11} />
+                        Excluir
                       </button>
                     </div>
                   </div>
