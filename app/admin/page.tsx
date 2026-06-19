@@ -35,7 +35,7 @@ const DEFAULT_PERM: PermRow = {
   pode_editar_layout: false,
   pode_adicionar_widgets: false,
   pode_configurar_produtos: false,
-  pode_ver_produtos_ofertas: false,
+  pode_ver_produtos_ofertas: true,
   pode_excluir_dashboard: false,
   is_admin_dashboard: false,
 }
