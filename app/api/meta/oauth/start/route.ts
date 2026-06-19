@@ -33,7 +33,7 @@ export async function GET(request: Request) {
   url.searchParams.set('auth_type', 'rerequest')
   url.searchParams.set('display', 'popup')
   const configId = process.env.META_CONFIG_ID
-  if (configId) url.searchParams.set('config_id', configId)
+  // if (configId) url.searchParams.set('config_id', configId)
 
   return NextResponse.redirect(url)
 }
