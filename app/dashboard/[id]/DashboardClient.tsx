@@ -7,6 +7,7 @@ import {
   Camera,
   Check,
   ChevronDown,
+  GripVertical,
   Receipt,
   Settings,
   RefreshCw,
@@ -21,6 +22,21 @@ import {
   Redo2,
   X,
 } from 'lucide-react'
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  useSortable,
+  arrayMove,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { DashboardGrid } from '@/components/dashboard/DashboardGrid'
 import { supabase } from '@/lib/supabase'
 import { formatRelativeTime, getPeriodRange, getPreviousPeriodRange, getOfficialSaleAmount, parseOrigem } from '@/lib/utils'
@@ -385,11 +401,65 @@ function minRowSpanForType(type?: string): number {
   return 9
 }
 
+function SortableDashboardOption({
+  option,
+  active,
+  isAdmin,
+  onClick,
+}: {
+  option: Projeto
+  active: boolean
+  isAdmin: boolean
+  onClick: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: option.id })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
+      className="relative"
+    >
+      {isAdmin && (
+        <div
+          {...attributes}
+          {...listeners}
+          className="absolute left-1 top-1/2 z-10 -translate-y-1/2 cursor-grab touch-none p-1 text-slate-600 active:cursor-grabbing"
+          onClick={e => e.stopPropagation()}
+        >
+          <GripVertical size={13} />
+        </div>
+      )}
+      <button
+        onClick={onClick}
+        className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all ${
+          isAdmin ? 'pl-7' : ''
+        } ${
+          active
+            ? 'bg-gradient-to-r from-cyan-400/15 to-violet-500/15 text-[var(--dash-text)]'
+            : 'text-[var(--dash-muted)] hover:bg-white/5 hover:text-[var(--dash-text)]'
+        }`}
+      >
+        <div className="grid h-11 w-14 shrink-0 grid-cols-3 items-end gap-1 rounded-2xl border border-[var(--dash-border)] bg-gradient-to-br from-cyan-400/15 to-violet-500/15 p-2">
+          <span className="h-4 rounded-full bg-cyan-300/75" />
+          <span className="h-7 rounded-full bg-violet-300/75" />
+          <span className="h-5 rounded-full bg-sky-200/75" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-black">{option.nome}</p>
+          <p className="text-xs text-[var(--dash-faint)]">{active ? 'Dashboard ativo' : 'Pronto para abrir'}</p>
+        </div>
+        {active && <Check size={17} className="text-cyan-300" />}
+      </button>
+    </div>
+  )
+}
+
 export function DashboardClient({ projectId }: { projectId: string }) {
   const router = useRouter()
   const [projeto, setProjeto] = useState<Projeto | null>(null)
   const [dashboardOptions, setDashboardOptions] = useState<Projeto[]>([])
   const [showDashboardSwitcher, setShowDashboardSwitcher] = useState(false)
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
   const [vendas, setVendas] = useState<Venda[]>([])
   const [previousVendas, setPreviousVendas] = useState<Venda[]>([])
   const [recentVendas, setRecentVendas] = useState<Venda[]>([])
@@ -1476,6 +1546,16 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setDeletingCustoId(null)
   }
 
+  const handleDashboardDragEnd = useCallback(async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = dashboardOptions.findIndex(p => p.id === active.id)
+    const newIndex = dashboardOptions.findIndex(p => p.id === over.id)
+    const reordered = arrayMove(dashboardOptions, oldIndex, newIndex)
+    setDashboardOptions(reordered)
+    await Promise.all(reordered.map((p, i) => supabase.from('projetos').update({ ordem: i }).eq('id', p.id)))
+  }, [dashboardOptions])
+
   const isReady = !loadingWidgets && permsLoaded
   const hasUnsavedLayout = !sameLayout(widgets, savedWidgets)
 
@@ -1658,12 +1738,17 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                     <div className="px-3 py-2">
                       <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--dash-faint)]">Trocar dashboard</p>
                     </div>
+                    <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={isAdmin ? handleDashboardDragEnd : () => {}}>
+                    <SortableContext items={dashboardOptions.map(p => p.id)} strategy={verticalListSortingStrategy}>
                     <div className="max-h-80 space-y-1 overflow-y-auto pr-1">
                       {dashboardOptions.map(option => {
                         const active = option.id === projectId
                         return (
-                          <button
+                          <SortableDashboardOption
                             key={option.id}
+                            option={option}
+                            active={active}
+                            isAdmin={isAdmin}
                             onClick={() => {
                               setShowDashboardSwitcher(false)
                               if (!active) {
@@ -1672,26 +1757,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                                 setTimeout(() => setSuccessToast(null), 3000)
                               }
                             }}
-                            className={`group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all ${
-                              active
-                                ? 'bg-gradient-to-r from-cyan-400/15 to-violet-500/15 text-[var(--dash-text)]'
-                                : 'text-[var(--dash-muted)] hover:bg-white/5 hover:text-[var(--dash-text)]'
-                            }`}
-                          >
-                            <div className="grid h-11 w-14 shrink-0 grid-cols-3 items-end gap-1 rounded-2xl border border-[var(--dash-border)] bg-gradient-to-br from-cyan-400/15 to-violet-500/15 p-2">
-                              <span className="h-4 rounded-full bg-cyan-300/75" />
-                              <span className="h-7 rounded-full bg-violet-300/75" />
-                              <span className="h-5 rounded-full bg-sky-200/75" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-black">{option.nome}</p>
-                              <p className="text-xs text-[var(--dash-faint)]">{active ? 'Dashboard ativo' : 'Pronto para abrir'}</p>
-                            </div>
-                            {active && <Check size={17} className="text-cyan-300" />}
-                          </button>
+                          />
                         )
                       })}
                     </div>
+                    </SortableContext>
+                    </DndContext>
                   </div>
                   </>
                 )}
