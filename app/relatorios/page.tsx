@@ -781,104 +781,113 @@ export default function RelatoriosPage() {
                 )}
               </div>
 
-              {/* ── 2-col body ── */}
-              <div className="grid min-h-0 flex-1 gap-4" style={{ gridTemplateColumns: '2fr 3fr' }}>
+              {/* ── 3-col body ── */}
+              <div className="grid min-h-0 flex-1 gap-3" style={{ gridTemplateColumns: '3fr 3fr 4fr' }}>
 
-                {/* ── LEFT COL — Configuração + Métricas ── */}
-                <div className="flex min-h-0 flex-col overflow-y-auto">
-                  <div className="rounded-2xl border border-white/10 bg-[#151525] p-4 shadow-2xl shadow-black/20">
+                {/* ── COL 1 — Agendamento + Métricas ── */}
+                <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
 
-                    {/* Agendamento compacto */}
-                    <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-indigo-400">Agendamento</p>
+                  {/* Bloco Agendamento */}
+                  <div className="rounded-2xl border border-white/10 bg-[#151525] p-4 shadow-xl shadow-black/20">
+                    <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-indigo-400">Agendamento</p>
 
-                    {/* Linha 1: Projeto + Templates + Horário */}
-                    <div className="mb-2 flex items-center gap-2">
+                    <div className="space-y-2">
+                      {/* Projeto */}
                       <select
                         value={form.projeto_id}
                         onChange={e => setForm(prev => ({ ...prev, projeto_id: e.target.value }))}
-                        className={`${fieldClass} min-w-0 flex-1`}
+                        className={`${fieldClass} w-full`}
                       >
                         {projetos.map(p => (
                           <option key={p.id} value={p.id}>{p.nome}</option>
                         ))}
                       </select>
-                      <button
-                        type="button"
-                        onClick={() => applyTemplate('recuperacao')}
-                        className={`shrink-0 rounded-lg border px-2.5 py-2 text-[10px] font-bold transition-colors ${
-                          selectedTemplate === 'recuperacao'
-                            ? 'border-cyan-400/60 text-white'
-                            : 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20'
-                        }`}
-                        style={selectedTemplate === 'recuperacao' ? { background: 'linear-gradient(135deg,#06b6d4,#8b5cf6)' } : undefined}
-                      >
-                        Recuperação
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => applyTemplate('trafego')}
-                        className={`shrink-0 rounded-lg border px-2.5 py-2 text-[10px] font-bold transition-colors ${
-                          selectedTemplate === 'trafego'
-                            ? 'border-violet-400/60 text-white'
-                            : 'border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20'
-                        }`}
-                        style={selectedTemplate === 'trafego' ? { background: 'linear-gradient(135deg,#06b6d4,#8b5cf6)' } : undefined}
-                      >
-                        Tráfego
-                      </button>
-                      <input
-                        type="time"
-                        value={form.horario}
-                        onChange={e => setForm(prev => ({ ...prev, horario: e.target.value }))}
-                        className={`${fieldClass} w-24 shrink-0`}
-                      />
-                    </div>
 
-                    {/* Linha 2: Destinatário + Frequência */}
-                    <div className="mb-2 flex gap-2">
+                      {/* Templates */}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => applyTemplate('recuperacao')}
+                          className={`flex-1 rounded-lg border px-2.5 py-2 text-[10px] font-bold transition-colors ${
+                            selectedTemplate === 'recuperacao'
+                              ? 'border-cyan-400/60 text-white'
+                              : 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20'
+                          }`}
+                          style={selectedTemplate === 'recuperacao' ? { background: 'linear-gradient(135deg,#06b6d4,#8b5cf6)' } : undefined}
+                        >
+                          Recuperação
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => applyTemplate('trafego')}
+                          className={`flex-1 rounded-lg border px-2.5 py-2 text-[10px] font-bold transition-colors ${
+                            selectedTemplate === 'trafego'
+                              ? 'border-violet-400/60 text-white'
+                              : 'border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20'
+                          }`}
+                          style={selectedTemplate === 'trafego' ? { background: 'linear-gradient(135deg,#06b6d4,#8b5cf6)' } : undefined}
+                        >
+                          Tráfego
+                        </button>
+                      </div>
+
+                      {/* Horário + Frequência */}
+                      <div className="flex gap-2">
+                        <input
+                          type="time"
+                          value={form.horario}
+                          onChange={e => setForm(prev => ({ ...prev, horario: e.target.value }))}
+                          className={`${fieldClass} w-24 shrink-0`}
+                        />
+                        <select
+                          value={form.frequencia}
+                          onChange={e => setForm(prev => ({ ...prev, frequencia: e.target.value }))}
+                          className={`${fieldClass} min-w-0 flex-1`}
+                        >
+                          {FREQUENCIES.map(f => (
+                            <option key={f.value} value={f.value}>{f.label}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Destinatário */}
                       <input
                         value={form.destinatario}
                         onChange={e => setForm(prev => ({ ...prev, destinatario: e.target.value }))}
-                        className={`${fieldClass} min-w-0 flex-1`}
+                        className={`${fieldClass} w-full`}
                         placeholder="Destinatários (vírgula ou ;)"
                       />
-                      <select
-                        value={form.frequencia}
-                        onChange={e => setForm(prev => ({ ...prev, frequencia: e.target.value }))}
-                        className={`${fieldClass} w-32 shrink-0`}
-                      >
-                        {FREQUENCIES.map(f => (
-                          <option key={f.value} value={f.value}>{f.label}</option>
+
+                      {/* Período pills */}
+                      <div className="flex flex-wrap gap-1 pt-0.5">
+                        {PERIOD_OPTIONS.map(period => (
+                          <button
+                            key={period.value}
+                            type="button"
+                            onClick={() => setForm(prev => ({ ...prev, periodo: period.value }))}
+                            className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
+                              form.periodo === period.value
+                                ? 'bg-indigo-500 text-white'
+                                : 'border border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'
+                            }`}
+                          >
+                            {period.label}
+                          </button>
                         ))}
-                      </select>
-                    </div>
-
-                    {/* Período pills */}
-                    <div className="mb-2 flex flex-wrap gap-1">
-                      {PERIOD_OPTIONS.map(period => (
-                        <button
-                          key={period.value}
-                          type="button"
-                          onClick={() => setForm(prev => ({ ...prev, periodo: period.value }))}
-                          className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
-                            form.periodo === period.value
-                              ? 'bg-indigo-500 text-white'
-                              : 'border border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'
-                          }`}
-                        >
-                          {period.label}
-                        </button>
-                      ))}
-                    </div>
-                    {form.periodo === 'custom' && (
-                      <div className="mb-2 grid grid-cols-2 gap-2">
-                        <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className={`${fieldClass} w-full`} />
-                        <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className={`${fieldClass} w-full`} />
                       </div>
-                    )}
+                      {form.periodo === 'custom' && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className={`${fieldClass} w-full`} />
+                          <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className={`${fieldClass} w-full`} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-                    {/* Métricas grid compacto */}
-                    <div className="mt-4 space-y-3">
+                  {/* Bloco Métricas */}
+                  <div className="rounded-2xl border border-white/10 bg-[#151525] p-4 shadow-xl shadow-black/20">
+                    <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Métricas</p>
+                    <div className="space-y-3">
                       {[
                         { title: 'Hotmart', items: HOTMART_METRICS, accent: 'text-indigo-400' },
                         { title: 'Meta Ads', items: META_METRICS, accent: 'text-blue-400' },
@@ -905,49 +914,52 @@ export default function RelatoriosPage() {
                         </div>
                       ))}
                     </div>
+                  </div>
+                </div>
 
-                    {/* Mensagem personalizada */}
-                    <div className="mt-4">
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Mensagem</span>
-                        <button
-                          onClick={copyToClipboard}
-                          className="flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-slate-400 hover:bg-white/10"
-                        >
-                          <Clipboard size={11} />
-                          Copiar
-                        </button>
-                      </div>
-                      <textarea
-                        value={messageText}
-                        onChange={e => setMessageText(e.target.value)}
-                        rows={4}
-                        className="w-full rounded-xl border border-white/10 bg-[#121221] p-3 text-sm leading-relaxed text-slate-200 outline-none placeholder:text-slate-600 focus:border-indigo-500/60"
-                        placeholder="Mensagem do WhatsApp"
-                      />
+                {/* ── COL 2 — Mensagem ── */}
+                <div className="flex min-h-0 flex-col overflow-y-auto">
+                  <div className="flex flex-1 flex-col rounded-2xl border border-white/10 bg-[#151525] p-4 shadow-xl shadow-black/20">
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Mensagem</p>
+                      <button
+                        onClick={copyToClipboard}
+                        className="flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-slate-400 hover:bg-white/10"
+                      >
+                        <Clipboard size={11} />
+                        Copiar
+                      </button>
                     </div>
 
-                    {/* Ações + Salvar */}
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <button
-                        onClick={openWhatsApp}
-                        className="flex items-center gap-1.5 rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-1.5 text-xs text-green-400 hover:bg-green-500/20"
-                      >
-                        <MessageCircle size={12} />
-                        Abrir WhatsApp
-                      </button>
-                      <button
-                        onClick={exportImage}
-                        className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/10"
-                      >
-                        <Download size={12} />
-                        Exportar
-                      </button>
-                      <div className="flex-1" />
+                    <textarea
+                      value={messageText}
+                      onChange={e => setMessageText(e.target.value)}
+                      className="mb-3 min-h-0 flex-1 w-full rounded-xl border border-white/10 bg-[#121221] p-3 text-sm leading-relaxed text-slate-200 outline-none placeholder:text-slate-600 focus:border-indigo-500/60"
+                      placeholder="Mensagem do WhatsApp"
+                    />
+
+                    <div className="flex flex-col gap-2">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={openWhatsApp}
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-1.5 text-xs text-green-400 hover:bg-green-500/20"
+                        >
+                          <MessageCircle size={12} />
+                          Abrir WhatsApp
+                        </button>
+                        <button
+                          onClick={exportImage}
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/10"
+                        >
+                          <Download size={12} />
+                          Exportar
+                        </button>
+                      </div>
                       <Button
                         variant="outline"
                         onClick={sendNow}
                         disabled={sending || !form.destinatario.trim() || !form.whatsapp_connection_id}
+                        className="w-full justify-center"
                       >
                         {sending ? <Spinner size={13} /> : <Send size={13} />}
                         Enviar agora
@@ -955,11 +967,13 @@ export default function RelatoriosPage() {
                       <Button
                         onClick={saveSchedule}
                         disabled={saving || !form.projeto_id || !form.destinatario.trim() || metricas.length === 0}
+                        className="w-full justify-center"
                       >
                         {saving ? <Spinner size={13} /> : <Save size={13} />}
                         Salvar relatório
                       </Button>
                     </div>
+
                     {sendResult && (
                       <p className="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">
                         {sendResult}
@@ -968,13 +982,13 @@ export default function RelatoriosPage() {
                   </div>
                 </div>
 
-                {/* ── RIGHT COL — Prévia + Salvos ── */}
-                <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
+                {/* ── COL 3 — Prévia + Salvos ── */}
+                <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
                   {/* Prévia WhatsApp */}
-                  <div className="shrink-0 rounded-2xl border border-white/10 bg-[#151525] p-5 shadow-2xl shadow-black/20">
+                  <div className="shrink-0 rounded-2xl border border-white/10 bg-[#151525] p-4 shadow-xl shadow-black/20">
                     <div className="mb-3 flex items-center justify-between">
-                      <h2 className="text-sm font-bold text-slate-100">Prévia WhatsApp</h2>
-                      <Send size={15} className="text-green-400" />
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Prévia WhatsApp</p>
+                      <Send size={14} className="text-green-400" />
                     </div>
                     <div ref={previewRef} className="rounded-2xl bg-[#0d2018] p-4">
                       <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-green-50">{messageText}</pre>
@@ -985,10 +999,10 @@ export default function RelatoriosPage() {
                   </div>
 
                   {/* Relatórios salvos */}
-                  <div className="min-h-0 flex-1 rounded-2xl border border-white/10 bg-[#151525] p-5 shadow-2xl shadow-black/20">
+                  <div className="min-h-0 flex-1 rounded-2xl border border-white/10 bg-[#151525] p-4 shadow-xl shadow-black/20">
                     <div className="mb-3 flex items-center justify-between">
-                      <h2 className="text-sm font-bold text-slate-100">Relatórios salvos</h2>
-                      <Plus size={15} className="text-slate-500" />
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Relatórios salvos</p>
+                      <Plus size={14} className="text-slate-500" />
                     </div>
                     {schedules.length === 0 ? (
                       <p className="rounded-xl border border-dashed border-white/10 py-8 text-center text-sm text-slate-600">
