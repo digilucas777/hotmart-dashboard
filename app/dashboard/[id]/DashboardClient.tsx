@@ -550,7 +550,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         .eq('projeto_id', projectId)
         .order('created_at', { ascending: true })
       const ids = ((pa ?? []) as { account_id: string }[]).map(r => r.account_id).filter(Boolean)
-      console.log('[META] contas vinculadas ao projeto:', ids)
       if (ids.length > 0) { setLinkedMetaAccountIds(ids); return }
 
       // Fallback: legacy account_id stored in meta_connections
@@ -576,50 +575,18 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
     const preset = presetMap[period]
     if (!preset) { setMetaInsights(null); return }
-    Promise.all(
-      linkedMetaAccountIds.map(accId =>
-        fetch(`/api/meta/insights?account_id=${encodeURIComponent(accId)}&date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' })
-          .then(r => {
-            if (r.ok) {
-              const updatedAt = r.headers.get('X-Cache-Updated-At')
-              if (updatedAt) setMetaCacheUpdatedAt(updatedAt)
-              return r.json() as Promise<Record<string, unknown>>
-            }
-            return null
-          })
-          .catch(() => null)
-      )
-    ).then(results => {
-      const valid = results.filter(Boolean) as Record<string, unknown>[]
-      if (valid.length === 0) { setMetaInsights(null); return }
-      valid.forEach((r, i) => {
-        console.log('[META SPEND] conta:', linkedMetaAccountIds[i], 'spend USD:', r['spend'], 'spend_brl:', r['spend_brl'])
+    // The API consolidates all linked accounts internally when given projeto_id — call once only
+    fetch(`/api/meta/insights?date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' })
+      .then(r => {
+        if (r.ok) {
+          const updatedAt = r.headers.get('X-Cache-Updated-At')
+          if (updatedAt) setMetaCacheUpdatedAt(updatedAt)
+          return r.json() as Promise<Record<string, unknown>>
+        }
+        return null
       })
-      if (valid.length === 1) { setMetaInsights(valid[0]!); return }
-      // Consolidate: sum additive fields, recalculate ratios
-      const SUM_KEYS = ['spend', 'spend_brl', 'impressions', 'reach', 'clicks', 'link_clicks',
-        'cliques_no_link', 'checkouts', 'purchases', 'compras', 'leads', 'video_views',
-        'alcance', 'impressoes']
-      const merged: Record<string, unknown> = { ...valid[0] }
-      for (const key of SUM_KEYS) {
-        merged[key] = valid.reduce((s, r) => s + (Number(r[key] ?? 0)), 0)
-      }
-      const totalSpend = Number(merged['spend'] ?? 0)
-      console.log('[META SPEND] total USD:', totalSpend, 'spend_brl somado:', merged['spend_brl'])
-      const totalImpressions = Number(merged['impressions'] ?? 0)
-      const totalClicks = Number(merged['link_clicks'] ?? merged['cliques_no_link'] ?? 0)
-      const totalPurchases = Number(merged['purchases'] ?? merged['compras'] ?? 0)
-      const totalRevenue = valid.reduce((s, r) => s + (Number(r['purchase_roas'] ?? 0) * Number(r['spend'] ?? 0)), 0)
-      merged['ctr'] = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0
-      merged['cpc'] = totalClicks > 0 ? totalSpend / totalClicks : 0
-      merged['cpm'] = totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0
-      merged['cpm_brl'] = totalImpressions > 0 ? (Number(merged['spend_brl'] ?? 0) / totalImpressions) * 1000 : 0
-      merged['cpc_brl'] = totalClicks > 0 ? Number(merged['spend_brl'] ?? 0) / totalClicks : 0
-      merged['purchase_roas'] = totalSpend > 0 ? totalRevenue / totalSpend : 0
-      merged['roas_meta'] = Number(merged['purchase_roas'])
-      merged['cost_per_purchase'] = totalPurchases > 0 ? totalSpend / totalPurchases : 0
-      setMetaInsights(merged)
-    })
+      .then(data => setMetaInsights(data))
+      .catch(() => setMetaInsights(null))
   }, [linkedMetaAccountIds, period, projectId])
 
   useEffect(() => {
@@ -632,21 +599,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
     const preset = presetMap[period]
     if (!preset) { setMetaAds(null); return }
-    Promise.all(
-      linkedMetaAccountIds.map(accId =>
-        fetch(`/api/meta/ads?account_id=${encodeURIComponent(accId)}&date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' })
-          .then(r => r.ok ? r.json() as Promise<MetaCreativeResult> : null)
-          .catch(() => null)
-      )
-    ).then(results => {
-      const valid = results.filter(Boolean) as MetaCreativeResult[]
-      if (valid.length === 0) { setMetaAds(null); return }
-      const merged: MetaCreativeResult = {
-        ...valid[0]!,
-        creatives: valid.flatMap(r => r.creatives ?? []),
-      }
-      setMetaAds(merged)
-    })
+    fetch(`/api/meta/ads?date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() as Promise<MetaCreativeResult> : null)
+      .then(data => setMetaAds(data))
+      .catch(() => setMetaAds(null))
   }, [linkedMetaAccountIds, period, projectId])
 
   useEffect(() => {
@@ -659,21 +615,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
     const preset = presetMap[period]
     if (!preset) { setMetaCampaigns(null); return }
-    Promise.all(
-      linkedMetaAccountIds.map(accId =>
-        fetch(`/api/meta/campaigns?account_id=${encodeURIComponent(accId)}&date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' })
-          .then(r => r.ok ? r.json() as Promise<MetaCampaignResult> : null)
-          .catch(() => null)
-      )
-    ).then(results => {
-      const valid = results.filter(Boolean) as MetaCampaignResult[]
-      if (valid.length === 0) { setMetaCampaigns(null); return }
-      const merged: MetaCampaignResult = {
-        ...valid[0]!,
-        campaigns: valid.flatMap(r => r.campaigns ?? []),
-      }
-      setMetaCampaigns(merged)
-    })
+    fetch(`/api/meta/campaigns?date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() as Promise<MetaCampaignResult> : null)
+      .then(data => setMetaCampaigns(data))
+      .catch(() => setMetaCampaigns(null))
   }, [linkedMetaAccountIds, period, projectId])
 
   const filterRowsByOfferSelection = useCallback((
@@ -860,56 +805,23 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       supabase.from('meta_insights_cache').delete().eq('projeto_id', projectId).eq('date_preset', preset),
       supabase.from('meta_ads_cache').delete().eq('projeto_id', projectId).eq('date_preset', preset),
     ])
-    const results = await Promise.all(
-      linkedMetaAccountIds.flatMap(accId => [
-        fetch(`/api/meta/insights?account_id=${encodeURIComponent(accId)}&date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' }),
-        fetch(`/api/meta/ads?account_id=${encodeURIComponent(accId)}&date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' }),
-        fetch(`/api/meta/campaigns?account_id=${encodeURIComponent(accId)}&date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' }),
-      ])
-    )
-    const insightsAll: Record<string, unknown>[] = []
-    const adsAll: MetaCreativeResult[] = []
-    const campaignsAll: MetaCampaignResult[] = []
-    for (let i = 0; i < linkedMetaAccountIds.length; i++) {
-      const ins = results[i * 3]!
-      const ads = results[i * 3 + 1]!
-      const cam = results[i * 3 + 2]!
-      if (ins.ok) {
-        const updatedAt = ins.headers.get('X-Cache-Updated-At')
-        if (updatedAt) setMetaCacheUpdatedAt(updatedAt)
-        insightsAll.push(await ins.json() as Record<string, unknown>)
-      }
-      if (ads.ok) adsAll.push(await ads.json() as MetaCreativeResult)
-      if (cam.ok) campaignsAll.push(await cam.json() as MetaCampaignResult)
+    // The API consolidates all linked accounts internally — call once per endpoint with projeto_id
+    const [insightsRes, adsRes, campaignsRes] = await Promise.all([
+      fetch(`/api/meta/insights?date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' }),
+      fetch(`/api/meta/ads?date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' }),
+      fetch(`/api/meta/campaigns?date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' }),
+    ])
+    if (insightsRes.ok) {
+      const updatedAt = insightsRes.headers.get('X-Cache-Updated-At')
+      if (updatedAt) setMetaCacheUpdatedAt(updatedAt)
+      setMetaInsights(await insightsRes.json() as Record<string, unknown>)
+    } else {
+      setMetaInsights(null)
     }
-    if (insightsAll.length === 0) { setMetaInsights(null) }
-    else if (insightsAll.length === 1) { setMetaInsights(insightsAll[0]!) }
-    else {
-      insightsAll.forEach((r, i) => {
-        console.log('[META SPEND] conta:', linkedMetaAccountIds[i], 'spend USD:', r['spend'], 'spend_brl:', r['spend_brl'])
-      })
-      const SUM_KEYS = ['spend', 'spend_brl', 'impressions', 'reach', 'clicks', 'link_clicks',
-        'cliques_no_link', 'checkouts', 'purchases', 'compras', 'leads', 'video_views', 'alcance']
-      const merged: Record<string, unknown> = { ...insightsAll[0] }
-      for (const key of SUM_KEYS) merged[key] = insightsAll.reduce((s, r) => s + (Number(r[key] ?? 0)), 0)
-      const totalSpend = Number(merged['spend'] ?? 0)
-      console.log('[META SPEND] total USD:', totalSpend, 'spend_brl somado:', merged['spend_brl'])
-      const totalImpressions = Number(merged['impressions'] ?? 0)
-      const totalClicks = Number(merged['link_clicks'] ?? merged['cliques_no_link'] ?? 0)
-      const totalRevenue = insightsAll.reduce((s, r) => s + (Number(r['purchase_roas'] ?? 0) * Number(r['spend'] ?? 0)), 0)
-      merged['ctr'] = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0
-      merged['cpc'] = totalClicks > 0 ? totalSpend / totalClicks : 0
-      merged['cpm'] = totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0
-      merged['cpm_brl'] = totalImpressions > 0 ? (Number(merged['spend_brl'] ?? 0) / totalImpressions) * 1000 : 0
-      merged['cpc_brl'] = totalClicks > 0 ? Number(merged['spend_brl'] ?? 0) / totalClicks : 0
-      merged['purchase_roas'] = totalSpend > 0 ? totalRevenue / totalSpend : 0
-      merged['roas_meta'] = Number(merged['purchase_roas'])
-      setMetaInsights(merged)
-    }
-    if (adsAll.length === 0) setMetaAds(null)
-    else setMetaAds({ ...adsAll[0]!, creatives: adsAll.flatMap(r => r.creatives ?? []) })
-    if (campaignsAll.length === 0) setMetaCampaigns(null)
-    else setMetaCampaigns({ ...campaignsAll[0]!, campaigns: campaignsAll.flatMap(r => r.campaigns ?? []) })
+    if (adsRes.ok) setMetaAds(await adsRes.json() as MetaCreativeResult)
+    else setMetaAds(null)
+    if (campaignsRes.ok) setMetaCampaigns(await campaignsRes.json() as MetaCampaignResult)
+    else setMetaCampaigns(null)
   }, [linkedMetaAccountIds, period, projectId])
 
   const fetchHotmartOrigens = useCallback(async () => {
