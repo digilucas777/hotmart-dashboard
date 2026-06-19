@@ -324,13 +324,13 @@ function IntegracoesContent() {
         <section className="mt-8">
           <div className="mb-3 flex items-center justify-between gap-4">
             <h2 className="text-sm font-black uppercase tracking-wider text-[var(--dash-faint)]">Contas Meta conectadas</h2>
-            <a
-              href="/api/meta/oauth/start"
+            <button
+              onClick={() => window.open('/api/meta/oauth/start', 'meta_oauth', 'width=600,height=700,scrollbars=yes')}
               className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-2.5 text-sm font-black text-white"
             >
               <Plug size={14} />
               Conectar nova conta Meta
-            </a>
+            </button>
           </div>
 
           {pageLoading ? (
@@ -404,13 +404,13 @@ function IntegracoesContent() {
                       }`}>
                         {conn.is_active !== false ? 'Ativo' : 'Inativo'}
                       </span>
-                      <a
-                        href="/api/meta/oauth/start"
+                      <button
+                        onClick={() => window.open('/api/meta/oauth/start', 'meta_oauth', 'width=600,height=700,scrollbars=yes')}
                         className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--dash-border)] bg-white/5 px-3 py-2 text-xs font-bold text-[var(--dash-muted)] transition-colors hover:text-[var(--dash-text)]"
                       >
                         <RefreshCw size={12} />
                         Reconectar
-                      </a>
+                      </button>
                       <button
                         onClick={() => void removeConnection(conn.id)}
                         disabled={removingId === conn.id}
