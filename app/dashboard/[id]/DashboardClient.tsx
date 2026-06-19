@@ -1376,7 +1376,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     if (asideEl) asideEl.style.display = 'none'
     try {
       const html2canvas = (await import('html2canvas')).default
-      const canvas = await html2canvas(exportGridRef.current, {
+      const canvas = await (html2canvas as any)(exportGridRef.current, {
         scale: 2,
         useCORS: true,
         backgroundColor: '#0f0f1a',
