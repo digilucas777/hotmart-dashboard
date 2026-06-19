@@ -181,7 +181,7 @@ export default function ProjectsPage() {
               <div
                 key={p.id}
                 draggable={true}
-                onDragStart={() => setDragIndex(i)}
+                onDragStart={() => { console.log('[DRAG] started index:', i, 'projeto:', p.nome); setDragIndex(i) }}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => {
                   if (dragIndex === null || dragIndex === i) return
@@ -202,7 +202,7 @@ export default function ProjectsPage() {
               >
                 {/* Drag handle */}
                 <div
-                  className="absolute left-2 top-2 cursor-grab touch-none p-1 text-white active:cursor-grabbing"
+                  className="absolute left-2 top-2 cursor-move touch-none p-1 text-white"
                   title="Arrastar para reordenar"
                 >
                   <GripVertical size={16} />
@@ -229,20 +229,20 @@ export default function ProjectsPage() {
                 )}
 
                 {/* Icon */}
-                <div className="mb-3 mt-1 flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/15">
-                  <LayoutDashboard size={15} className="text-indigo-400" />
+                <div className="mb-2 mt-1 flex h-20 w-full items-center justify-center rounded-lg bg-indigo-500/15">
+                  <LayoutDashboard size={28} className="text-indigo-400" />
                 </div>
 
                 {/* Info */}
-                <h3 className="text-xs font-semibold text-slate-100">{p.nome}</h3>
+                <h3 className="text-sm font-bold text-slate-100">{p.nome}</h3>
                 {p.descricao && (
-                  <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-500">{p.descricao}</p>
+                  <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{p.descricao}</p>
                 )}
 
                 {/* Open button */}
                 <Link
                   href={`/dashboard/${p.id}`}
-                  className="mt-3 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-[11px] font-medium text-slate-500 transition-all hover:bg-indigo-500/12 hover:text-indigo-400"
+                  className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-slate-500 transition-all hover:bg-indigo-500/12 hover:text-indigo-400"
                   style={{ background: 'rgba(255,255,255,0.04)' }}
                 >
                   Abrir Dashboard
