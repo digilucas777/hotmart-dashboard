@@ -7,6 +7,7 @@ import {
   Camera,
   Check,
   ChevronDown,
+  Receipt,
   Settings,
   RefreshCw,
   Plus,
@@ -50,6 +51,16 @@ function snapToMetricRows(rowSpan: number): number {
 }
 
 type DashboardTheme = 'dark' | 'light'
+
+type CustoManual = {
+  id: string
+  projeto_id: string
+  data: string
+  valor: number
+  moeda: string
+  descricao: string | null
+  created_at: string
+}
 
 type UserPerms = {
   pode_visualizar: boolean
@@ -444,6 +455,13 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [isExporting, setIsExporting] = useState(false)
   const exportGridRef = useRef<HTMLDivElement>(null)
 
+  const [showCustoModal, setShowCustoModal] = useState(false)
+  const [custoManualList, setCustoManualList] = useState<CustoManual[]>([])
+  const [custoManualTotal, setCustoManualTotal] = useState(0)
+  const [custoForm, setCustoForm] = useState({ valor: '', moeda: 'USD', data: '', descricao: '' })
+  const [savingCusto, setSavingCusto] = useState(false)
+  const [deletingCustoId, setDeletingCustoId] = useState<string | null>(null)
+
   const [origensDisponiveis, setOrigensDisponiveis] = useState<string[]>([])
   const [origensFilter, setOrigensFilter] = useState<string[]>([])
   const [showOrigensDropdown, setShowOrigensDropdown] = useState(false)
@@ -792,6 +810,36 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   useEffect(() => {
     void Promise.resolve().then(fetchCustos)
   }, [fetchCustos])
+
+  const fetchCustosManuals = useCallback(async () => {
+    const { from, to } = getPeriodRange(period, customDateRange)
+    const fromDate = from.toISOString().split('T')[0]
+    const toDate = new Date(to.getTime() - 1).toISOString().split('T')[0]
+    const [periodRes, historyRes] = await Promise.all([
+      supabase
+        .from('custos_manuais')
+        .select('valor, moeda')
+        .eq('projeto_id', projectId)
+        .gte('data', fromDate)
+        .lte('data', toDate),
+      supabase
+        .from('custos_manuais')
+        .select('*')
+        .eq('projeto_id', projectId)
+        .order('data', { ascending: false })
+        .limit(10),
+    ])
+    const total = ((periodRes.data ?? []) as { valor: number; moeda: string }[]).reduce((sum, r) => {
+      const brl = r.moeda === 'BRL' ? r.valor : r.valor * exchangeRate
+      return sum + brl
+    }, 0)
+    setCustoManualTotal(total)
+    setCustoManualList((historyRes.data ?? []) as CustoManual[])
+  }, [projectId, period, customDateRange, exchangeRate])
+
+  useEffect(() => {
+    void fetchCustosManuals()
+  }, [fetchCustosManuals])
 
   const fetchMetaAds = useCallback(async () => {
     if (linkedMetaAccountIds.length === 0) return
@@ -1483,6 +1531,29 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
   }
 
+  async function saveCusto() {
+    const valor = parseFloat(custoForm.valor.replace(',', '.'))
+    if (!custoForm.data || isNaN(valor) || valor <= 0) return
+    setSavingCusto(true)
+    await supabase.from('custos_manuais').insert({
+      projeto_id: projectId,
+      data: custoForm.data,
+      valor,
+      moeda: custoForm.moeda,
+      descricao: custoForm.descricao.trim() || null,
+    })
+    setCustoForm({ valor: '', moeda: 'USD', data: '', descricao: '' })
+    await fetchCustosManuals()
+    setSavingCusto(false)
+  }
+
+  async function deleteCusto(id: string) {
+    setDeletingCustoId(id)
+    await supabase.from('custos_manuais').delete().eq('id', id)
+    await fetchCustosManuals()
+    setDeletingCustoId(null)
+  }
+
   const isReady = !loadingWidgets && permsLoaded
   const hasUnsavedLayout = !sameLayout(widgets, savedWidgets)
 
@@ -1511,7 +1582,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     if (afiliadosFilter.length > 0) result = result.filter(v => v.afiliado_nome != null && afiliadosFilter.includes(v.afiliado_nome))
     return result
   }, [combinedVendas, origensFilter, afiliadosFilter])
-  const displayCustoTotal = custoTotal
+  const displayCustoTotal = custoTotal + custoManualTotal
   const approvedRecentVendas = recentVendas.filter(v => v.status === 'approved')
   const latestSale = approvedRecentVendas[0]
   const countryDisplay = (country?: string | null) => {
@@ -1935,6 +2006,21 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 Configurar produtos
               </Button>
             )}
+            {!editMode && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const today = new Date().toISOString().split('T')[0]!
+                  setCustoForm(f => ({ ...f, data: f.data || today }))
+                  setShowCustoModal(true)
+                }}
+                className="shrink-0"
+              >
+                <Receipt size={13} />
+                Inserir custo
+              </Button>
+            )}
             {!editMode && canDeleteDashboard && (
               <Button
                 variant="outline"
@@ -2130,6 +2216,113 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           <span>Edição disponível apenas no desktop</span>
         </div>
       )}
+
+      <Modal
+        open={showCustoModal}
+        onClose={() => setShowCustoModal(false)}
+        title="Inserir custo manual"
+        maxWidth="max-w-lg"
+      >
+        <div className="space-y-4">
+          {/* Form */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-[var(--dash-muted)]">Valor *</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={custoForm.valor}
+                onChange={e => setCustoForm(f => ({ ...f, valor: e.target.value }))}
+                placeholder="0.00"
+                className="h-9 w-full rounded-lg border border-white/10 bg-[#121221] px-3 text-sm text-slate-200 outline-none focus:border-indigo-500/60"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-[var(--dash-muted)]">Moeda</label>
+              <select
+                value={custoForm.moeda}
+                onChange={e => setCustoForm(f => ({ ...f, moeda: e.target.value }))}
+                className="h-9 w-full rounded-lg border border-white/10 bg-[#121221] px-3 text-sm text-slate-200 outline-none focus:border-indigo-500/60"
+              >
+                <option value="USD">USD</option>
+                <option value="BRL">BRL</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-[var(--dash-muted)]">Data *</label>
+            <input
+              type="date"
+              value={custoForm.data}
+              onChange={e => setCustoForm(f => ({ ...f, data: e.target.value }))}
+              className="h-9 w-full rounded-lg border border-white/10 bg-[#121221] px-3 text-sm text-slate-200 outline-none focus:border-indigo-500/60"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-[var(--dash-muted)]">Descrição (opcional)</label>
+            <input
+              type="text"
+              value={custoForm.descricao}
+              onChange={e => setCustoForm(f => ({ ...f, descricao: e.target.value }))}
+              placeholder="Ex: Tráfego pago, ferramenta, influencer..."
+              className="h-9 w-full rounded-lg border border-white/10 bg-[#121221] px-3 text-sm text-slate-200 outline-none focus:border-indigo-500/60"
+            />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button variant="ghost" className="flex-1" onClick={() => setShowCustoModal(false)}>
+              Cancelar
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={saveCusto}
+              disabled={savingCusto || !custoForm.data || !custoForm.valor}
+            >
+              {savingCusto && <Spinner size={13} />}
+              Salvar custo
+            </Button>
+          </div>
+
+          {/* Histórico */}
+          {custoManualList.length > 0 && (
+            <div className="border-t border-white/[0.06] pt-4">
+              <p className="mb-2 text-xs font-black uppercase tracking-wider text-[var(--dash-muted)]">Últimos 10 custos</p>
+              <div className="max-h-56 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-[var(--dash-faint)]">
+                      <th className="pb-1.5 font-semibold">Data</th>
+                      <th className="pb-1.5 font-semibold">Valor</th>
+                      <th className="pb-1.5 font-semibold">Descrição</th>
+                      <th className="pb-1.5" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/[0.04]">
+                    {custoManualList.map(c => (
+                      <tr key={c.id}>
+                        <td className="py-1.5 pr-2 text-slate-300">{c.data}</td>
+                        <td className="py-1.5 pr-2 font-semibold text-slate-200">
+                          {c.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} {c.moeda}
+                        </td>
+                        <td className="py-1.5 pr-2 text-slate-400">{c.descricao ?? '—'}</td>
+                        <td className="py-1.5 text-right">
+                          <button
+                            onClick={() => void deleteCusto(c.id)}
+                            disabled={deletingCustoId === c.id}
+                            className="text-red-400/70 hover:text-red-400 disabled:opacity-40"
+                          >
+                            {deletingCustoId === c.id ? <Spinner size={11} /> : <Trash2 size={11} />}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
 
       <Modal
         open={showClearModal}
