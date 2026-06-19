@@ -417,23 +417,19 @@ function SortableDashboardOption({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
-      className="relative"
+      className="flex items-center rounded-2xl"
     >
-      {(
-        <div
-          {...attributes}
-          {...listeners}
-          className="absolute left-1 top-1/2 z-10 -translate-y-1/2 cursor-grab touch-none p-1 text-white active:cursor-grabbing"
-          onClick={e => e.stopPropagation()}
-        >
-          <GripVertical size={20} />
-        </div>
-      )}
+      <div
+        {...attributes}
+        {...listeners}
+        className="flex shrink-0 cursor-grab touch-none items-center px-2 py-3 text-white active:cursor-grabbing"
+        onClick={e => e.stopPropagation()}
+      >
+        <GripVertical size={16} />
+      </div>
       <button
         onClick={onClick}
-        className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-all ${
-          isAdmin ? 'pl-7' : ''
-        } ${
+        className={`flex flex-1 items-center gap-3 rounded-2xl py-3 pr-3 text-left transition-all ${
           active
             ? 'bg-gradient-to-r from-cyan-400/15 to-violet-500/15 text-[var(--dash-text)]'
             : 'text-[var(--dash-muted)] hover:bg-white/5 hover:text-[var(--dash-text)]'

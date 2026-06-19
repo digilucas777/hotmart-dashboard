@@ -358,17 +358,15 @@ function SortableProjectCard({
       className="group relative rounded-xl border p-3.5 transition-colors duration-150"
     >
 
-      {/* Drag handle — admin only */}
-      {onEdit && (
-        <div
-          {...attributes}
-          {...listeners}
-          className="absolute left-2 top-2 cursor-grab touch-none p-1 text-slate-500 active:cursor-grabbing"
-          title="Arrastar para reordenar"
-        >
-          <GripVertical size={13} />
-        </div>
-      )}
+      {/* Drag handle — always visible for debug */}
+      <div
+        {...attributes}
+        {...listeners}
+        className="absolute left-2 top-2 cursor-grab touch-none p-1 text-slate-400 active:cursor-grabbing"
+        title="Arrastar para reordenar"
+      >
+        <GripVertical size={16} />
+      </div>
 
       {/* Action buttons */}
       {(onEdit || onDelete) && (
