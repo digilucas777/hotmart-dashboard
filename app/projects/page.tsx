@@ -80,6 +80,7 @@ export default function ProjectsPage() {
         .eq('id', user.id)
         .maybeSingle()
       const role = (profile as { role?: string } | null)?.role ?? 'user'
+      console.log('[PROJECTS] profile:', profile, '| role:', role)
       setUserRole(role)
       if (role === 'admin') return
       const { data: perms } = await supabase
