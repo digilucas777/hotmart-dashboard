@@ -363,7 +363,7 @@ function SortableProjectCard({
         <div
           {...attributes}
           {...listeners}
-          className="absolute left-2 top-2 cursor-grab touch-none p-1 text-slate-700 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+          className="absolute left-2 top-2 cursor-grab touch-none p-1 text-slate-500 active:cursor-grabbing"
           title="Arrastar para reordenar"
         >
           <GripVertical size={13} />
