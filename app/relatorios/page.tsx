@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Bell,
   CheckCircle2,
-  Clock,
+  ChevronDown,
+  ChevronUp,
   Clipboard,
   Download,
   FileText,
@@ -128,7 +128,7 @@ const PERIOD_INFORMAL: Record<string, string> = {
 }
 
 const fieldClass =
-  'h-10 rounded-lg border border-white/10 bg-[#121221] px-3 text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-600 focus:border-indigo-500/60'
+  'h-9 rounded-lg border border-white/10 bg-[#121221] px-3 text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-600 focus:border-indigo-500/60'
 
 function reportRange(period: string, customFrom?: string, customTo?: string) {
   const now = new Date()
@@ -136,7 +136,7 @@ function reportRange(period: string, customFrom?: string, customTo?: string) {
   const day = 86_400_000
   if (period === 'yesterday') return { from: new Date(today.getTime() - day), to: today }
   if (period === 'thisWeek') {
-    const dow = (today.getDay() + 6) % 7 // Mon=0
+    const dow = (today.getDay() + 6) % 7
     return { from: new Date(today.getTime() - dow * day), to: new Date(today.getTime() + day) }
   }
   if (period === 'lastWeek') {
@@ -275,6 +275,7 @@ export default function RelatoriosPage() {
   const [saving, setSaving] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendResult, setSendResult] = useState<string | null>(null)
+  const [whatsappOpen, setWhatsappOpen] = useState(true)
   const [connectionName, setConnectionName] = useState('WhatsApp principal')
   const [connectionPhone, setConnectionPhone] = useState('')
   const [phoneNumberId, setPhoneNumberId] = useState('')
@@ -327,6 +328,7 @@ export default function RelatoriosPage() {
       setProjetos(projectRows)
       setConnections(connectionRows)
       setSchedules((schedulesRes.data ?? []) as ReportSchedule[])
+      setWhatsappOpen(connectionRows.length === 0)
       setForm(prev => ({
         ...prev,
         projeto_id: prev.projeto_id || projectRows[0]?.id || '',
@@ -337,9 +339,7 @@ export default function RelatoriosPage() {
     }
   }, [])
 
-  useEffect(() => {
-    loadBase()
-  }, [loadBase])
+  useEffect(() => { loadBase() }, [loadBase])
 
   useEffect(() => {
     fetch('/api/exchange-rate')
@@ -350,43 +350,30 @@ export default function RelatoriosPage() {
 
   useEffect(() => {
     async function loadProjectSales() {
-      if (!form.projeto_id) {
-        setVendas([])
-        return
-      }
+      if (!form.projeto_id) { setVendas([]); return }
 
-      // 1. produto_id + todas_ofertas para saber o modo de cada produto
       const { data: links } = await supabase
         .from('projeto_produtos')
         .select('produto_id, todas_ofertas')
         .eq('projeto_id', form.projeto_id)
       const productLinks = (links ?? []) as { produto_id: string; todas_ofertas: boolean | null }[]
       const produtoIds = productLinks.map(r => r.produto_id)
-      if (produtoIds.length === 0) {
-        setVendas([])
-        return
-      }
+      if (produtoIds.length === 0) { setVendas([]); return }
 
-      // 2. id + hotmart_id para o mapa de conversão usado no filtro
       const { data: produtos } = await supabase
         .from('produtos')
         .select('id, hotmart_id')
         .in('id', produtoIds)
       const produtoRows = (produtos ?? []) as { id: string; hotmart_id: string }[]
       const hotmartIds = produtoRows.map(r => r.hotmart_id)
-      if (hotmartIds.length === 0) {
-        setVendas([])
-        return
-      }
+      if (hotmartIds.length === 0) { setVendas([]); return }
 
-      // 3. ofertas selecionadas quando todas_ofertas = false
       const { data: selectedOffers } = await supabase
         .from('projeto_produto_ofertas')
         .select('produto_id, oferta_codigo')
         .eq('projeto_id', form.projeto_id)
       const offerLinks = (selectedOffers ?? []) as { produto_id: string; oferta_codigo: string }[]
 
-      // 4. vendas no período
       const { from, to } = reportRange(form.periodo, customFrom, customTo)
       const { data } = await supabase
         .from('vendas')
@@ -396,7 +383,6 @@ export default function RelatoriosPage() {
         .lt('data_venda', to.toISOString())
       const allVendas = (data ?? []) as Venda[]
 
-      // 5. filtro de ofertas — mesma lógica do DashboardClient.filterRowsByOfferSelection
       const productIdByHotmartId = new Map(produtoRows.map(p => [p.hotmart_id, p.id]))
       const allOfferProductIds = new Set(
         productLinks.filter(l => l.todas_ofertas !== false).map(l => l.produto_id),
@@ -420,7 +406,6 @@ export default function RelatoriosPage() {
 
       setVendas(filtered)
     }
-
     loadProjectSales()
   }, [form.periodo, form.projeto_id, customFrom, customTo])
 
@@ -431,7 +416,6 @@ export default function RelatoriosPage() {
       setIsMetaConnected(false)
       if (!form.projeto_id) return
 
-      // Prefer new meta_project_accounts table
       const { data: pa } = await supabase
         .from('meta_project_accounts')
         .select('account_id')
@@ -445,7 +429,6 @@ export default function RelatoriosPage() {
         return
       }
 
-      // Fallback: legacy account_id in meta_connections
       const { data: mc } = await supabase
         .from('meta_connections')
         .select('account_id')
@@ -492,7 +475,6 @@ export default function RelatoriosPage() {
       '',
       `*${projectName}*`,
     ]
-
     metricas.forEach(metric => {
       if (metric === 'top_produtos') {
         lines.push('', buildTopProdutos(vendas))
@@ -503,14 +485,11 @@ export default function RelatoriosPage() {
         lines.push(`• ${option?.label ?? metric}: ${buildMetricValue(vendas, metric, metaInsights, isMetaConnected, exchangeRate)}`)
       }
     })
-
     lines.push('', `Período: ${buildPeriodoLabel(form.periodo, customFrom, customTo)}`)
     return lines.join('\n')
   }, [form.mensagem, form.periodo, metricas, selectedProject?.nome, vendas, metaInsights, isMetaConnected, exchangeRate, customFrom, customTo])
 
-  useEffect(() => {
-    setMessageText(generatedMessage)
-  }, [generatedMessage])
+  useEffect(() => { setMessageText(generatedMessage) }, [generatedMessage])
 
   async function connectWhatsApp() {
     if (!connectionPhone.trim()) return
@@ -535,6 +514,7 @@ export default function RelatoriosPage() {
         setConnectionPhone('')
         setPhoneNumberId('')
         setAccessToken('')
+        setWhatsappOpen(false)
       }
     } finally {
       setSaving(false)
@@ -560,7 +540,6 @@ export default function RelatoriosPage() {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Não foi possível gerar o QR Code.')
-
       setQrImage(json.base64 ?? null)
       setPairingCode(json.pairingCode ?? null)
 
@@ -590,10 +569,7 @@ export default function RelatoriosPage() {
   }
 
   async function saveSchedule() {
-    const destinatarios = form.destinatario
-      .split(/[\n,;]/)
-      .map(v => v.trim())
-      .filter(Boolean)
+    const destinatarios = form.destinatario.split(/[\n,;]/).map(v => v.trim()).filter(Boolean)
     if (!form.projeto_id || destinatarios.length === 0 || metricas.length === 0) return
     setSaving(true)
     try {
@@ -666,10 +642,7 @@ export default function RelatoriosPage() {
   }
 
   async function sendNow() {
-    const recipients = form.destinatario
-      .split(/[\n,;]/)
-      .map(v => v.trim())
-      .filter(Boolean)
+    const recipients = form.destinatario.split(/[\n,;]/).map(v => v.trim()).filter(Boolean)
     if (recipients.length === 0) return
     setSending(true)
     setSendResult(null)
@@ -693,14 +666,14 @@ export default function RelatoriosPage() {
     }
   }
 
+  const isConnected = connections.length > 0
+
   return (
-    <div className="min-h-screen bg-[#090912] text-slate-100">
+    <div className="flex h-screen flex-col bg-[#090912] text-slate-100">
+      {/* ── Header ── */}
       <header
-        className="border-b"
-        style={{
-          borderColor: 'rgba(255,255,255,0.07)',
-          background: 'rgba(11,11,20,0.95)',
-        }}
+        className="shrink-0 border-b"
+        style={{ borderColor: 'rgba(255,255,255,0.07)', background: 'rgba(11,11,20,0.95)' }}
       >
         <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-2.5 px-6">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20">
@@ -710,376 +683,342 @@ export default function RelatoriosPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1400px] px-6 py-8">
-        {loading ? (
-          <div className="flex h-72 items-center justify-center">
-            <Spinner size={28} />
-          </div>
-        ) : (
-          <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
-            <section className="space-y-6">
-              <div className="rounded-2xl border border-white/10 bg-[#151525] p-5 shadow-2xl shadow-black/20">
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-green-500/12 text-green-400">
-                    <MessageCircle size={18} />
+      {/* ── Content ── */}
+      <div className="flex flex-1 overflow-hidden">
+        <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col overflow-hidden px-6 py-4">
+          {loading ? (
+            <div className="flex flex-1 items-center justify-center">
+              <Spinner size={28} />
+            </div>
+          ) : (
+            <>
+              {/* ── Accordion WhatsApp ── */}
+              <div className="mb-3 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-[#151525] shadow-2xl shadow-black/20">
+                <button
+                  onClick={() => setWhatsappOpen(o => !o)}
+                  className="flex w-full items-center gap-3 px-5 py-3"
+                >
+                  <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${isConnected ? 'bg-green-500/12 text-green-400' : 'bg-red-500/12 text-red-400'}`}>
+                    <MessageCircle size={15} />
                   </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-slate-100">Conectar via QR Code</h2>
-                    <p className="text-xs text-slate-500">Use Evolution API para escanear pelo WhatsApp.</p>
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <input
-                    value={connectionName}
-                    onChange={e => setConnectionName(e.target.value)}
-                    className={`${fieldClass} w-full`}
-                    placeholder="Nome da conexão"
-                  />
-                  <div className="flex gap-2">
-                    <input
-                      value={connectionPhone}
-                      onChange={e => setConnectionPhone(e.target.value)}
-                      className={`${fieldClass} min-w-0 flex-1`}
-                      placeholder="Número do WhatsApp"
-                    />
-                  </div>
-                  <input
-                    value={evolutionUrl}
-                    onChange={e => setEvolutionUrl(e.target.value)}
-                    className={`${fieldClass} w-full`}
-                    placeholder="URL Evolution API. Ex: https://evo.seudominio.com"
-                  />
-                  <input
-                    value={evolutionApiKey}
-                    onChange={e => setEvolutionApiKey(e.target.value)}
-                    className={`${fieldClass} w-full`}
-                    placeholder="API key da Evolution"
-                    type="password"
-                  />
-                  <input
-                    value={evolutionInstance}
-                    onChange={e => setEvolutionInstance(e.target.value)}
-                    className={`${fieldClass} w-full`}
-                    placeholder="Nome da instância"
-                  />
-                  <Button onClick={generateQrCode} disabled={saving || !evolutionUrl.trim() || !evolutionApiKey.trim() || !evolutionInstance.trim()}>
-                    <MessageCircle size={14} />
-                    Gerar QR Code
-                  </Button>
-                  {(qrImage || pairingCode || qrError) && (
-                    <div className="rounded-xl border border-white/10 bg-[#10101d] p-3">
-                      {qrImage && (
-                        <img src={qrImage} alt="QR Code WhatsApp" className="mx-auto h-48 w-48 rounded-lg bg-white p-2" />
-                      )}
-                      {pairingCode && (
-                        <p className="mt-2 text-center text-sm font-bold text-slate-100">Código: {pairingCode}</p>
-                      )}
-                      {qrError && <p className="text-xs font-semibold text-red-300">{qrError}</p>}
-                      <p className="mt-2 text-center text-xs text-slate-500">
-                        Abra WhatsApp &gt; Aparelhos conectados &gt; Conectar aparelho.
-                      </p>
-                    </div>
+                  <span className="text-sm font-bold text-slate-100">WhatsApp</span>
+                  <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${isConnected ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
+                    {isConnected ? 'Conectado' : 'Desconectado'}
+                  </span>
+                  {isConnected && (
+                    <span className="text-xs text-slate-500">{connections[0]?.nome}</span>
                   )}
-                  <div className="border-t border-white/10 pt-3">
-                    <p className="mb-2 text-xs font-semibold text-slate-500">Ou conectar pela Cloud API oficial</p>
-                  </div>
-                  <input
-                    value={phoneNumberId}
-                    onChange={e => setPhoneNumberId(e.target.value)}
-                    className={`${fieldClass} w-full`}
-                    placeholder="Phone Number ID da Meta"
-                  />
-                  <input
-                    value={accessToken}
-                    onChange={e => setAccessToken(e.target.value)}
-                    className={`${fieldClass} w-full`}
-                    placeholder="Access Token WhatsApp Cloud API"
-                    type="password"
-                  />
-                  <Button onClick={connectWhatsApp} disabled={saving || !connectionPhone.trim() || !phoneNumberId.trim() || !accessToken.trim()}>
-                    <Phone size={14} />
-                    Conectar
-                  </Button>
-                  {connections.length > 0 && (
-                    <div className="space-y-2 pt-1">
-                      {connections.map(connection => (
-                        <button
-                          key={connection.id}
-                          onClick={() => setForm(prev => ({ ...prev, whatsapp_connection_id: connection.id }))}
-                          className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left transition-colors ${
-                            form.whatsapp_connection_id === connection.id
-                              ? 'border-green-500/40 bg-green-500/10'
-                              : 'border-white/8 bg-white/4 hover:bg-white/7'
-                          }`}
-                        >
-                          <span>
-                            <span className="block text-xs font-semibold text-slate-200">{connection.nome}</span>
-                            <span className="block text-xs text-slate-500">{connection.telefone}</span>
-                          </span>
-                          <CheckCircle2 size={15} className="text-green-400" />
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+                  <span className="flex-1" />
+                  {whatsappOpen
+                    ? <ChevronUp size={14} className="text-slate-500" />
+                    : <ChevronDown size={14} className="text-slate-500" />
+                  }
+                </button>
 
-              <div className="rounded-2xl border border-white/10 bg-[#151525] p-5 shadow-2xl shadow-black/20">
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/12 text-indigo-400">
-                    <Clock size={18} />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-slate-100">Agendamento</h2>
-                    <p className="text-xs text-slate-500">Defina projeto, horário e destino.</p>
-                  </div>
-                </div>
+                {whatsappOpen && (
+                  <div className="border-t border-white/10 px-5 pb-5 pt-4">
+                    <div className="grid gap-5 lg:grid-cols-2">
+                      {/* QR Code / Evolution */}
+                      <div>
+                        <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-green-400">Via QR Code (Evolution API)</p>
+                        <div className="space-y-2">
+                          <input value={connectionName} onChange={e => setConnectionName(e.target.value)} className={`${fieldClass} w-full`} placeholder="Nome da conexão" />
+                          <input value={connectionPhone} onChange={e => setConnectionPhone(e.target.value)} className={`${fieldClass} w-full`} placeholder="Número do WhatsApp" />
+                          <input value={evolutionUrl} onChange={e => setEvolutionUrl(e.target.value)} className={`${fieldClass} w-full`} placeholder="URL Evolution API" />
+                          <input value={evolutionApiKey} onChange={e => setEvolutionApiKey(e.target.value)} className={`${fieldClass} w-full`} placeholder="API key da Evolution" type="password" />
+                          <input value={evolutionInstance} onChange={e => setEvolutionInstance(e.target.value)} className={`${fieldClass} w-full`} placeholder="Nome da instância" />
+                          <Button onClick={generateQrCode} disabled={saving || !evolutionUrl.trim() || !evolutionApiKey.trim() || !evolutionInstance.trim()}>
+                            <MessageCircle size={14} />
+                            Gerar QR Code
+                          </Button>
+                          {(qrImage || pairingCode || qrError) && (
+                            <div className="rounded-xl border border-white/10 bg-[#10101d] p-3">
+                              {qrImage && <img src={qrImage} alt="QR Code WhatsApp" className="mx-auto h-40 w-40 rounded-lg bg-white p-2" />}
+                              {pairingCode && <p className="mt-2 text-center text-sm font-bold text-slate-100">Código: {pairingCode}</p>}
+                              {qrError && <p className="text-xs font-semibold text-red-300">{qrError}</p>}
+                              <p className="mt-2 text-center text-xs text-slate-500">Abra WhatsApp → Aparelhos conectados → Conectar aparelho.</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
 
-                <div className="space-y-3">
-                  <input
-                    value={form.nome}
-                    onChange={e => setForm(prev => ({ ...prev, nome: e.target.value }))}
-                    className={`${fieldClass} w-full`}
-                    placeholder="Nome do relatório"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => applyTemplate('recuperacao')}
-                      className={`flex-1 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
-                        selectedTemplate === 'recuperacao'
-                          ? 'border-cyan-400/60 text-white'
-                          : 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20'
-                      }`}
-                      style={selectedTemplate === 'recuperacao' ? { background: 'linear-gradient(135deg, #06b6d4 0%, #8b5cf6 100%)' } : undefined}
-                    >
-                      Template Recuperação
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyTemplate('trafego')}
-                      className={`flex-1 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
-                        selectedTemplate === 'trafego'
-                          ? 'border-violet-400/60 text-white'
-                          : 'border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20'
-                      }`}
-                      style={selectedTemplate === 'trafego' ? { background: 'linear-gradient(135deg, #06b6d4 0%, #8b5cf6 100%)' } : undefined}
-                    >
-                      Template Tráfego
-                    </button>
-                  </div>
-                  <select
-                    value={form.projeto_id}
-                    onChange={e => setForm(prev => ({ ...prev, projeto_id: e.target.value }))}
-                    className={`${fieldClass} w-full`}
-                  >
-                    {projetos.map(projeto => (
-                      <option key={projeto.id} value={projeto.id}>{projeto.nome}</option>
-                    ))}
-                  </select>
-                  <input
-                    value={form.destinatario}
-                    onChange={e => setForm(prev => ({ ...prev, destinatario: e.target.value }))}
-                    className={`${fieldClass} w-full`}
-                    placeholder="Destinatários: um por linha, vírgula ou ;"
-                  />
-                  <div className="flex flex-wrap gap-1.5">
-                    {PERIOD_OPTIONS.map(period => (
-                      <button
-                        key={period.value}
-                        type="button"
-                        onClick={() => setForm(prev => ({ ...prev, periodo: period.value }))}
-                        className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                          form.periodo === period.value
-                            ? 'bg-indigo-500 text-white'
-                            : 'border border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'
-                        }`}
-                      >
-                        {period.label}
-                      </button>
-                    ))}
-                  </div>
-                  {form.periodo === 'custom' && (
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="date"
-                        value={customFrom}
-                        onChange={e => setCustomFrom(e.target.value)}
-                        className={`${fieldClass} w-full`}
-                      />
-                      <input
-                        type="date"
-                        value={customTo}
-                        onChange={e => setCustomTo(e.target.value)}
-                        className={`${fieldClass} w-full`}
-                      />
-                    </div>
-                  )}
-                  <div className="grid grid-cols-2 gap-2">
-                    <select
-                      value={form.frequencia}
-                      onChange={e => setForm(prev => ({ ...prev, frequencia: e.target.value }))}
-                      className={`${fieldClass} w-full`}
-                    >
-                      {FREQUENCIES.map(freq => (
-                        <option key={freq.value} value={freq.value}>{freq.label}</option>
-                      ))}
-                    </select>
-                    <input
-                      type="time"
-                      value={form.horario}
-                      onChange={e => setForm(prev => ({ ...prev, horario: e.target.value }))}
-                      className={`${fieldClass} w-full`}
-                    />
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
-              <div className="rounded-2xl border border-white/10 bg-[#151525] p-5 shadow-2xl shadow-black/20">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-sm font-bold text-slate-100">Métricas e mensagem</h2>
-                    <p className="text-xs text-slate-500">Escolha o que entra no relatório do WhatsApp.</p>
-                  </div>
-                  <Bell size={18} className="text-indigo-400" />
-                </div>
-
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs text-slate-500">Mensagem</span>
-                  <button
-                    onClick={copyToClipboard}
-                    className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/10"
-                  >
-                    <Clipboard size={13} />
-                    Copiar
-                  </button>
-                </div>
-
-                <textarea
-                  value={messageText}
-                  onChange={e => setMessageText(e.target.value)}
-                  className="mb-5 min-h-72 w-full rounded-xl border border-white/10 bg-[#121221] p-3 text-sm leading-relaxed text-slate-200 outline-none placeholder:text-slate-600 focus:border-indigo-500/60"
-                  placeholder="Mensagem do WhatsApp"
-                />
-
-                <div className="space-y-4">
-                  {[
-                    { title: 'Hotmart', items: HOTMART_METRICS, accent: 'text-indigo-400' },
-                    { title: 'Meta Ads', items: META_METRICS, accent: 'text-blue-400' },
-                    { title: 'Personalizado', items: PERSONALIZADO_METRICS, accent: 'text-violet-400' },
-                  ].map(({ title, items, accent }) => (
-                    <div key={title}>
-                      <p className={`mb-2 text-[10px] font-black uppercase tracking-widest ${accent}`}>{title}</p>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {items.map(metric => (
-                          <label
-                            key={metric.value}
-                            className="flex cursor-pointer items-center gap-2 rounded-xl border border-white/8 bg-white/4 px-3 py-2.5 text-sm text-slate-300 transition-colors hover:bg-white/7"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={metricas.includes(metric.value)}
-                              onChange={() => toggleMetric(metric.value)}
-                              className="h-4 w-4 rounded accent-indigo-500"
-                            />
-                            {metric.label}
-                          </label>
-                        ))}
+                      {/* Cloud API */}
+                      <div>
+                        <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-blue-400">Via Cloud API Oficial (Meta)</p>
+                        <div className="space-y-2">
+                          <input value={phoneNumberId} onChange={e => setPhoneNumberId(e.target.value)} className={`${fieldClass} w-full`} placeholder="Phone Number ID da Meta" />
+                          <input value={accessToken} onChange={e => setAccessToken(e.target.value)} className={`${fieldClass} w-full`} placeholder="Access Token WhatsApp Cloud API" type="password" />
+                          <Button onClick={connectWhatsApp} disabled={saving || !connectionPhone.trim() || !phoneNumberId.trim() || !accessToken.trim()}>
+                            <Phone size={14} />
+                            Conectar
+                          </Button>
+                        </div>
+                        {connections.length > 0 && (
+                          <div className="mt-3 space-y-1.5">
+                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Conexões ativas</p>
+                            {connections.map(conn => (
+                              <button
+                                key={conn.id}
+                                onClick={() => setForm(prev => ({ ...prev, whatsapp_connection_id: conn.id }))}
+                                className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left transition-colors ${
+                                  form.whatsapp_connection_id === conn.id
+                                    ? 'border-green-500/40 bg-green-500/10'
+                                    : 'border-white/8 bg-white/4 hover:bg-white/7'
+                                }`}
+                              >
+                                <span>
+                                  <span className="block text-xs font-semibold text-slate-200">{conn.nome}</span>
+                                  <span className="block text-xs text-slate-500">{conn.telefone}</span>
+                                </span>
+                                <CheckCircle2 size={14} className="text-green-400" />
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    onClick={exportImage}
-                    className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/10"
-                  >
-                    <Download size={13} />
-                    Exportar Imagem
-                  </button>
-                  <button
-                    onClick={openWhatsApp}
-                    className="flex items-center gap-1.5 rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-1.5 text-xs text-green-400 transition-colors hover:bg-green-500/20"
-                  >
-                    <MessageCircle size={13} />
-                    Abrir WhatsApp
-                  </button>
-                </div>
-
-                <div className="mt-4 flex justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={sendNow}
-                    disabled={sending || !form.destinatario.trim() || !form.whatsapp_connection_id}
-                    className="mr-2"
-                  >
-                    {sending ? <Spinner size={14} /> : <Send size={14} />}
-                    Enviar agora
-                  </Button>
-                  <Button
-                    onClick={saveSchedule}
-                    disabled={saving || !form.projeto_id || !form.destinatario.trim() || metricas.length === 0}
-                  >
-                    {saving ? <Spinner size={14} /> : <Save size={14} />}
-                    Programar
-                  </Button>
-                </div>
-                {sendResult && (
-                  <p className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">
-                    {sendResult}
-                  </p>
+                  </div>
                 )}
               </div>
 
-              <div className="space-y-6">
-                <div className="rounded-2xl border border-white/10 bg-[#151525] p-5 shadow-2xl shadow-black/20">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-sm font-bold text-slate-100">Prévia WhatsApp</h2>
-                    <Send size={17} className="text-green-400" />
-                  </div>
-                  <div ref={previewRef} className="rounded-2xl bg-[#0d2018] p-4">
-                    <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-green-50">{messageText}</pre>
-                  </div>
-                  <p className="mt-2 px-1 text-xs text-slate-500">
-                    Envio: {FREQUENCIES.find(f => f.value === form.frequencia)?.label ?? form.frequencia} às {form.horario}
-                  </p>
-                </div>
+              {/* ── 2-col body ── */}
+              <div className="grid min-h-0 flex-1 gap-4" style={{ gridTemplateColumns: '2fr 3fr' }}>
 
-                <div className="rounded-2xl border border-white/10 bg-[#151525] p-5 shadow-2xl shadow-black/20">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-sm font-bold text-slate-100">Relatórios salvos</h2>
-                    <Plus size={17} className="text-slate-500" />
-                  </div>
-                  {schedules.length === 0 ? (
-                    <p className="rounded-xl border border-dashed border-white/10 py-8 text-center text-sm text-slate-600">
-                      Nenhum relatório agendado ainda.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {schedules.map(schedule => (
-                        <div key={schedule.id} className="rounded-xl border border-white/8 bg-white/4 p-3">
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="text-sm font-semibold text-slate-200">{schedule.nome}</p>
-                            <span className="rounded-full bg-green-500/12 px-2 py-0.5 text-xs font-medium text-green-400">
-                              {schedule.ativo ? 'Ativo' : 'Pausado'}
-                            </span>
+                {/* ── LEFT COL — Configuração + Métricas ── */}
+                <div className="flex min-h-0 flex-col overflow-y-auto">
+                  <div className="rounded-2xl border border-white/10 bg-[#151525] p-4 shadow-2xl shadow-black/20">
+
+                    {/* Agendamento compacto */}
+                    <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-indigo-400">Agendamento</p>
+
+                    {/* Linha 1: Projeto + Templates + Horário */}
+                    <div className="mb-2 flex items-center gap-2">
+                      <select
+                        value={form.projeto_id}
+                        onChange={e => setForm(prev => ({ ...prev, projeto_id: e.target.value }))}
+                        className={`${fieldClass} min-w-0 flex-1`}
+                      >
+                        {projetos.map(p => (
+                          <option key={p.id} value={p.id}>{p.nome}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => applyTemplate('recuperacao')}
+                        className={`shrink-0 rounded-lg border px-2.5 py-2 text-[10px] font-bold transition-colors ${
+                          selectedTemplate === 'recuperacao'
+                            ? 'border-cyan-400/60 text-white'
+                            : 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20'
+                        }`}
+                        style={selectedTemplate === 'recuperacao' ? { background: 'linear-gradient(135deg,#06b6d4,#8b5cf6)' } : undefined}
+                      >
+                        Recuperação
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyTemplate('trafego')}
+                        className={`shrink-0 rounded-lg border px-2.5 py-2 text-[10px] font-bold transition-colors ${
+                          selectedTemplate === 'trafego'
+                            ? 'border-violet-400/60 text-white'
+                            : 'border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20'
+                        }`}
+                        style={selectedTemplate === 'trafego' ? { background: 'linear-gradient(135deg,#06b6d4,#8b5cf6)' } : undefined}
+                      >
+                        Tráfego
+                      </button>
+                      <input
+                        type="time"
+                        value={form.horario}
+                        onChange={e => setForm(prev => ({ ...prev, horario: e.target.value }))}
+                        className={`${fieldClass} w-24 shrink-0`}
+                      />
+                    </div>
+
+                    {/* Linha 2: Destinatário + Frequência */}
+                    <div className="mb-2 flex gap-2">
+                      <input
+                        value={form.destinatario}
+                        onChange={e => setForm(prev => ({ ...prev, destinatario: e.target.value }))}
+                        className={`${fieldClass} min-w-0 flex-1`}
+                        placeholder="Destinatários (vírgula ou ;)"
+                      />
+                      <select
+                        value={form.frequencia}
+                        onChange={e => setForm(prev => ({ ...prev, frequencia: e.target.value }))}
+                        className={`${fieldClass} w-32 shrink-0`}
+                      >
+                        {FREQUENCIES.map(f => (
+                          <option key={f.value} value={f.value}>{f.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Período pills */}
+                    <div className="mb-2 flex flex-wrap gap-1">
+                      {PERIOD_OPTIONS.map(period => (
+                        <button
+                          key={period.value}
+                          type="button"
+                          onClick={() => setForm(prev => ({ ...prev, periodo: period.value }))}
+                          className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
+                            form.periodo === period.value
+                              ? 'bg-indigo-500 text-white'
+                              : 'border border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'
+                          }`}
+                        >
+                          {period.label}
+                        </button>
+                      ))}
+                    </div>
+                    {form.periodo === 'custom' && (
+                      <div className="mb-2 grid grid-cols-2 gap-2">
+                        <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className={`${fieldClass} w-full`} />
+                        <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className={`${fieldClass} w-full`} />
+                      </div>
+                    )}
+
+                    {/* Métricas grid compacto */}
+                    <div className="mt-4 space-y-3">
+                      {[
+                        { title: 'Hotmart', items: HOTMART_METRICS, accent: 'text-indigo-400' },
+                        { title: 'Meta Ads', items: META_METRICS, accent: 'text-blue-400' },
+                        { title: 'Personalizado', items: PERSONALIZADO_METRICS, accent: 'text-violet-400' },
+                      ].map(({ title, items, accent }) => (
+                        <div key={title}>
+                          <p className={`mb-1.5 text-[10px] font-black uppercase tracking-widest ${accent}`}>{title}</p>
+                          <div className="grid grid-cols-2 gap-1">
+                            {items.map(metric => (
+                              <label
+                                key={metric.value}
+                                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/8 bg-white/4 px-2.5 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/7"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={metricas.includes(metric.value)}
+                                  onChange={() => toggleMetric(metric.value)}
+                                  className="h-3 w-3 shrink-0 rounded accent-indigo-500"
+                                />
+                                <span className="truncate">{metric.label}</span>
+                              </label>
+                            ))}
                           </div>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {FREQUENCIES.find(f => f.value === schedule.frequencia)?.label ?? schedule.frequencia} às {schedule.horario.slice(0, 5)}
-                          </p>
                         </div>
                       ))}
                     </div>
-                  )}
+
+                    {/* Mensagem personalizada */}
+                    <div className="mt-4">
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Mensagem</span>
+                        <button
+                          onClick={copyToClipboard}
+                          className="flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-slate-400 hover:bg-white/10"
+                        >
+                          <Clipboard size={11} />
+                          Copiar
+                        </button>
+                      </div>
+                      <textarea
+                        value={messageText}
+                        onChange={e => setMessageText(e.target.value)}
+                        rows={4}
+                        className="w-full rounded-xl border border-white/10 bg-[#121221] p-3 text-sm leading-relaxed text-slate-200 outline-none placeholder:text-slate-600 focus:border-indigo-500/60"
+                        placeholder="Mensagem do WhatsApp"
+                      />
+                    </div>
+
+                    {/* Ações + Salvar */}
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={openWhatsApp}
+                        className="flex items-center gap-1.5 rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-1.5 text-xs text-green-400 hover:bg-green-500/20"
+                      >
+                        <MessageCircle size={12} />
+                        Abrir WhatsApp
+                      </button>
+                      <button
+                        onClick={exportImage}
+                        className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/10"
+                      >
+                        <Download size={12} />
+                        Exportar
+                      </button>
+                      <div className="flex-1" />
+                      <Button
+                        variant="outline"
+                        onClick={sendNow}
+                        disabled={sending || !form.destinatario.trim() || !form.whatsapp_connection_id}
+                      >
+                        {sending ? <Spinner size={13} /> : <Send size={13} />}
+                        Enviar agora
+                      </Button>
+                      <Button
+                        onClick={saveSchedule}
+                        disabled={saving || !form.projeto_id || !form.destinatario.trim() || metricas.length === 0}
+                      >
+                        {saving ? <Spinner size={13} /> : <Save size={13} />}
+                        Salvar relatório
+                      </Button>
+                    </div>
+                    {sendResult && (
+                      <p className="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">
+                        {sendResult}
+                      </p>
+                    )}
+                  </div>
                 </div>
+
+                {/* ── RIGHT COL — Prévia + Salvos ── */}
+                <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
+                  {/* Prévia WhatsApp */}
+                  <div className="shrink-0 rounded-2xl border border-white/10 bg-[#151525] p-5 shadow-2xl shadow-black/20">
+                    <div className="mb-3 flex items-center justify-between">
+                      <h2 className="text-sm font-bold text-slate-100">Prévia WhatsApp</h2>
+                      <Send size={15} className="text-green-400" />
+                    </div>
+                    <div ref={previewRef} className="rounded-2xl bg-[#0d2018] p-4">
+                      <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-green-50">{messageText}</pre>
+                    </div>
+                    <p className="mt-2 px-1 text-xs text-slate-500">
+                      Envio: {FREQUENCIES.find(f => f.value === form.frequencia)?.label ?? form.frequencia} às {form.horario}
+                    </p>
+                  </div>
+
+                  {/* Relatórios salvos */}
+                  <div className="min-h-0 flex-1 rounded-2xl border border-white/10 bg-[#151525] p-5 shadow-2xl shadow-black/20">
+                    <div className="mb-3 flex items-center justify-between">
+                      <h2 className="text-sm font-bold text-slate-100">Relatórios salvos</h2>
+                      <Plus size={15} className="text-slate-500" />
+                    </div>
+                    {schedules.length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-white/10 py-8 text-center text-sm text-slate-600">
+                        Nenhum relatório agendado ainda.
+                      </p>
+                    ) : (
+                      <div className="space-y-2 overflow-y-auto">
+                        {schedules.map(schedule => (
+                          <div key={schedule.id} className="rounded-xl border border-white/8 bg-white/4 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-sm font-semibold text-slate-200">{schedule.nome}</p>
+                              <span className="rounded-full bg-green-500/12 px-2 py-0.5 text-xs font-medium text-green-400">
+                                {schedule.ativo ? 'Ativo' : 'Pausado'}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {FREQUENCIES.find(f => f.value === schedule.frequencia)?.label ?? schedule.frequencia} às {schedule.horario.slice(0, 5)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
               </div>
-            </section>
-          </div>
-        )}
-      </main>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
