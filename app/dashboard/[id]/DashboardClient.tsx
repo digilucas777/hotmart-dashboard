@@ -550,6 +550,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         .eq('projeto_id', projectId)
         .order('created_at', { ascending: true })
       const ids = ((pa ?? []) as { account_id: string }[]).map(r => r.account_id).filter(Boolean)
+      console.log('[META] contas vinculadas ao projeto:', ids)
       if (ids.length > 0) { setLinkedMetaAccountIds(ids); return }
 
       // Fallback: legacy account_id stored in meta_connections
