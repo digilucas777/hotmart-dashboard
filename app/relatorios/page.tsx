@@ -716,7 +716,7 @@ export default function RelatoriosPage() {
                 </button>
 
                 {whatsappOpen && (
-                  <div className="border-t border-white/10 px-5 pb-5 pt-4">
+                  <div className="border-t border-white/10 px-5 pb-5 pt-4" style={{ maxHeight: '220px', overflowY: 'auto' }}>
                     <div className="grid gap-5 lg:grid-cols-2">
                       {/* QR Code / Evolution */}
                       <div>
