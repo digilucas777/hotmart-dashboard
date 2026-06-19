@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import {
   Plus,
@@ -9,7 +9,23 @@ import {
   FolderOpen,
   LayoutDashboard,
   ArrowRight,
+  GripVertical,
 } from 'lucide-react'
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  useSortable,
+  arrayMove,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '@/lib/supabase'
 import type { Projeto } from '@/lib/types'
 import { Modal } from '@/components/ui/Modal'
@@ -33,11 +49,16 @@ export default function ProjectsPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  )
+
   const fetchProjetos = async () => {
     setLoading(true)
     const { data } = await supabase
       .from('projetos')
       .select('*')
+      .order('ordem', { ascending: true })
       .order('data_criacao', { ascending: false })
     setProjetos((data ?? []) as Projeto[])
     setLoading(false)
@@ -51,6 +72,7 @@ export default function ProjectsPage() {
     await supabase.from('projetos').insert({
       nome: createNome.trim(),
       descricao: createDesc.trim() || null,
+      ordem: projetos.length,
     })
     setCreating(false)
     setShowCreate(false)
@@ -80,34 +102,39 @@ export default function ProjectsPage() {
   const handleDelete = async () => {
     if (!deleteId) return
     setDeleting(true)
-    await supabase
-      .from('projeto_produtos')
-      .delete()
-      .eq('projeto_id', deleteId)
+    await supabase.from('projeto_produtos').delete().eq('projeto_id', deleteId)
     await supabase.from('projetos').delete().eq('id', deleteId)
     setDeleting(false)
     setDeleteId(null)
     fetchProjetos()
   }
 
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = projetos.findIndex(p => p.id === active.id)
+    const newIndex = projetos.findIndex(p => p.id === over.id)
+    const reordered = arrayMove(projetos, oldIndex, newIndex)
+    setProjetos(reordered)
+    await Promise.all(
+      reordered.map((p, i) =>
+        supabase.from('projetos').update({ ordem: i }).eq('id', p.id),
+      ),
+    )
+  }, [projetos])
+
   return (
     <div className="min-h-screen" style={{ background: '#0b0b14' }}>
-      {/* Header */}
       <header
         className="border-b"
-        style={{
-          borderColor: 'rgba(255,255,255,0.07)',
-          background: 'rgba(11,11,20,0.95)',
-        }}
+        style={{ borderColor: 'rgba(255,255,255,0.07)', background: 'rgba(11,11,20,0.95)' }}
       >
         <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between px-6">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20">
               <LayoutDashboard size={16} className="text-indigo-400" />
             </div>
-            <span className="text-sm font-bold text-slate-100">
-              Hotmart Dashboard
-            </span>
+            <span className="text-sm font-bold text-slate-100">Hotmart Dashboard</span>
           </div>
           <Button onClick={() => setShowCreate(true)} size="sm">
             <Plus size={14} />
@@ -116,11 +143,11 @@ export default function ProjectsPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1400px] px-6 py-10">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-slate-100">Projetos</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Gerencie seus projetos e visualize dados de vendas Hotmart
+      <main className="mx-auto max-w-[1400px] px-6 py-8">
+        <div className="mb-6">
+          <h1 className="text-xl font-bold text-slate-100">Projetos</h1>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Arraste para reordenar. Clique para abrir o dashboard.
           </p>
         </div>
 
@@ -134,9 +161,7 @@ export default function ProjectsPage() {
             style={{ borderColor: 'rgba(255,255,255,0.12)' }}
           >
             <FolderOpen size={40} className="mb-3 text-slate-700" />
-            <p className="text-sm font-medium text-slate-500">
-              Nenhum projeto criado
-            </p>
+            <p className="text-sm font-medium text-slate-500">Nenhum projeto criado</p>
             <p className="mt-1 text-xs text-slate-700">
               Clique em &ldquo;Novo Projeto&rdquo; para começar
             </p>
@@ -149,42 +174,40 @@ export default function ProjectsPage() {
             </button>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {projetos.map(p => (
-              <ProjectCard
-                key={p.id}
-                projeto={p}
-                onEdit={() => openEdit(p)}
-                onDelete={() => setDeleteId(p.id)}
-              />
-            ))}
-            <button
-              onClick={() => setShowCreate(true)}
-              className="flex min-h-[160px] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed text-slate-600 transition-all hover:border-indigo-500/40 hover:text-indigo-400"
-              style={{ borderColor: 'rgba(255,255,255,0.1)' }}
-            >
-              <Plus size={24} />
-              <span className="text-sm font-medium">Novo Projeto</span>
-            </button>
-          </div>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={projetos.map(p => p.id)} strategy={rectSortingStrategy}>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                {projetos.map(p => (
+                  <SortableProjectCard
+                    key={p.id}
+                    projeto={p}
+                    onEdit={() => openEdit(p)}
+                    onDelete={() => setDeleteId(p.id)}
+                  />
+                ))}
+                <button
+                  onClick={() => setShowCreate(true)}
+                  className="flex min-h-[120px] flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed text-slate-600 transition-all hover:border-indigo-500/40 hover:text-indigo-400"
+                  style={{ borderColor: 'rgba(255,255,255,0.1)' }}
+                >
+                  <Plus size={20} />
+                  <span className="text-xs font-medium">Novo Projeto</span>
+                </button>
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
       </main>
 
       {/* Create Modal */}
       <Modal
         open={showCreate}
-        onClose={() => {
-          setShowCreate(false)
-          setCreateNome('')
-          setCreateDesc('')
-        }}
+        onClose={() => { setShowCreate(false); setCreateNome(''); setCreateDesc('') }}
         title="Novo Projeto"
       >
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-500">
-              Nome *
-            </label>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">Nome *</label>
             <input
               autoFocus
               type="text"
@@ -197,9 +220,7 @@ export default function ProjectsPage() {
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-500">
-              Descrição
-            </label>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">Descrição</label>
             <textarea
               placeholder="Descrição opcional..."
               value={createDesc}
@@ -210,22 +231,10 @@ export default function ProjectsPage() {
             />
           </div>
           <div className="flex gap-2 pt-1">
-            <Button
-              variant="ghost"
-              className="flex-1"
-              onClick={() => {
-                setShowCreate(false)
-                setCreateNome('')
-                setCreateDesc('')
-              }}
-            >
+            <Button variant="ghost" className="flex-1" onClick={() => { setShowCreate(false); setCreateNome(''); setCreateDesc('') }}>
               Cancelar
             </Button>
-            <Button
-              className="flex-1"
-              onClick={handleCreate}
-              disabled={!createNome.trim() || creating}
-            >
+            <Button className="flex-1" onClick={handleCreate} disabled={!createNome.trim() || creating}>
               {creating && <Spinner size={14} />}
               Criar Projeto
             </Button>
@@ -234,16 +243,10 @@ export default function ProjectsPage() {
       </Modal>
 
       {/* Edit Modal */}
-      <Modal
-        open={!!editProjeto}
-        onClose={() => setEditProjeto(null)}
-        title="Editar Projeto"
-      >
+      <Modal open={!!editProjeto} onClose={() => setEditProjeto(null)} title="Editar Projeto">
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-500">
-              Nome *
-            </label>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">Nome *</label>
             <input
               autoFocus
               type="text"
@@ -255,9 +258,7 @@ export default function ProjectsPage() {
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-500">
-              Descrição
-            </label>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">Descrição</label>
             <textarea
               value={editDesc}
               onChange={e => setEditDesc(e.target.value)}
@@ -267,18 +268,8 @@ export default function ProjectsPage() {
             />
           </div>
           <div className="flex gap-2 pt-1">
-            <Button
-              variant="ghost"
-              className="flex-1"
-              onClick={() => setEditProjeto(null)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              className="flex-1"
-              onClick={handleEdit}
-              disabled={!editNome.trim() || saving}
-            >
+            <Button variant="ghost" className="flex-1" onClick={() => setEditProjeto(null)}>Cancelar</Button>
+            <Button className="flex-1" onClick={handleEdit} disabled={!editNome.trim() || saving}>
               {saving && <Spinner size={14} />}
               Salvar
             </Button>
@@ -287,30 +278,14 @@ export default function ProjectsPage() {
       </Modal>
 
       {/* Delete Modal */}
-      <Modal
-        open={!!deleteId}
-        onClose={() => setDeleteId(null)}
-        title="Excluir Projeto"
-      >
+      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Excluir Projeto">
         <div className="space-y-4">
           <p className="text-sm text-slate-400">
-            Tem certeza que deseja excluir este projeto? Os dados de vendas e
-            produtos não serão afetados.
+            Tem certeza que deseja excluir este projeto? Os dados de vendas e produtos não serão afetados.
           </p>
           <div className="flex gap-2 pt-1">
-            <Button
-              variant="ghost"
-              className="flex-1"
-              onClick={() => setDeleteId(null)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              variant="danger"
-              className="flex-1"
-              onClick={handleDelete}
-              disabled={deleting}
-            >
+            <Button variant="ghost" className="flex-1" onClick={() => setDeleteId(null)}>Cancelar</Button>
+            <Button variant="danger" className="flex-1" onClick={handleDelete} disabled={deleting}>
               {deleting && <Spinner size={14} />}
               Excluir
             </Button>
@@ -321,7 +296,7 @@ export default function ProjectsPage() {
   )
 }
 
-function ProjectCard({
+function SortableProjectCard({
   projeto,
   onEdit,
   onDelete,
@@ -330,53 +305,71 @@ function ProjectCard({
   onEdit: () => void
   onDelete: () => void
 }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: projeto.id,
+  })
+
   return (
     <div
-      className="group relative rounded-2xl border p-5 transition-all duration-200"
+      ref={setNodeRef}
       style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.45 : 1,
+        zIndex: isDragging ? 50 : undefined,
         background: '#191929',
         borderColor: 'rgba(255,255,255,0.07)',
       }}
+      className="group relative rounded-xl border p-3.5 transition-colors duration-150"
     >
+
+      {/* Drag handle */}
+      <div
+        {...attributes}
+        {...listeners}
+        className="absolute left-2 top-2 cursor-grab touch-none p-1 text-slate-700 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+        title="Arrastar para reordenar"
+      >
+        <GripVertical size={13} />
+      </div>
+
       {/* Action buttons */}
-      <div className="absolute right-3 top-3 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+      <div className="absolute right-2 top-2 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
         <button
           onClick={onEdit}
           title="Editar"
           className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-white/10 hover:text-slate-300"
         >
-          <Pencil size={12} />
+          <Pencil size={11} />
         </button>
         <button
           onClick={onDelete}
           title="Excluir"
           className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-red-500/15 hover:text-red-400"
         >
-          <Trash2 size={12} />
+          <Trash2 size={11} />
         </button>
       </div>
 
       {/* Icon */}
-      <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/15">
-        <LayoutDashboard size={18} className="text-indigo-400" />
+      <div className="mb-3 mt-1 flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/15">
+        <LayoutDashboard size={15} className="text-indigo-400" />
       </div>
 
       {/* Info */}
-      <h3 className="text-sm font-semibold text-slate-100">{projeto.nome}</h3>
+      <h3 className="text-xs font-semibold text-slate-100">{projeto.nome}</h3>
       {projeto.descricao && (
-        <p className="mt-1 line-clamp-2 text-xs text-slate-500">
-          {projeto.descricao}
-        </p>
+        <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-500">{projeto.descricao}</p>
       )}
 
       {/* Open button */}
       <Link
         href={`/dashboard/${projeto.id}`}
-        className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium text-slate-500 transition-all hover:bg-indigo-500/12 hover:text-indigo-400"
+        className="mt-3 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-[11px] font-medium text-slate-500 transition-all hover:bg-indigo-500/12 hover:text-indigo-400"
         style={{ background: 'rgba(255,255,255,0.04)' }}
       >
         Abrir Dashboard
-        <ArrowRight size={12} />
+        <ArrowRight size={11} />
       </Link>
     </div>
   )

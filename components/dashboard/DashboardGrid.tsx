@@ -11,6 +11,11 @@ import type { MetaCreativeResult, MetaCampaignResult } from '@/lib/meta-ads-mock
 
 type MetaInsightsRaw = Record<string, unknown>
 
+function widgetMinSize(type: WidgetConfig['type']): Pick<LayoutItem, 'minW' | 'minH'> {
+  const isLarge = ['bar', 'pie', 'line', 'meta-chart', 'meta-funnel', 'combined', 'table', 'meta-campaign', 'meta-creative'].includes(type as string)
+  return isLarge ? { minW: 3, minH: 3 } : { minW: 2, minH: 2 }
+}
+
 function widgetToLayout(w: WidgetConfig): LayoutItem {
   return {
     i: w.id,
@@ -18,6 +23,7 @@ function widgetToLayout(w: WidgetConfig): LayoutItem {
     y: (w.row_start ?? 1) - 1,
     w: w.col_span ?? 6,
     h: w.row_span ?? 12,
+    ...widgetMinSize(w.type),
   }
 }
 

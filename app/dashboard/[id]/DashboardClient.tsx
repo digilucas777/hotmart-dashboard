@@ -412,6 +412,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [productSearch, setProductSearch] = useState('')
   const [showOnlySelected, setShowOnlySelected] = useState(false)
   const [savingProducts, setSavingProducts] = useState(false)
+  const [loadingProducts, setLoadingProducts] = useState(false)
 
   const [linkedMetaAccountId, setLinkedMetaAccountId] = useState<string | null>(null)
   const [metaCacheUpdatedAt, setMetaCacheUpdatedAt] = useState<string | null>(null)
@@ -1123,6 +1124,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   }, [widgets])
 
   const openProductsModal = async () => {
+    setLoadingProducts(true)
+    setShowProducts(true)
+    try {
     const [
       { data: all },
       { data: linked },
@@ -1226,7 +1230,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setSelectedOfferCodes(offerCodesByProduct)
     setProductSearch('')
     setShowOnlySelected(false)
-    setShowProducts(true)
+    } finally {
+      setLoadingProducts(false)
+    }
   }
 
   const saveProducts = async () => {
@@ -1946,6 +1952,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         title="Configurar Produtos"
         maxWidth="max-w-2xl"
       >
+        {loadingProducts ? (
+          <div className="flex flex-col items-center gap-4 py-12">
+            <Spinner size={28} />
+            <p className="text-sm text-slate-400">Carregando produtos...</p>
+          </div>
+        ) : (
         <div className="space-y-4">
           {/* Header info */}
           <div className="flex items-center justify-between rounded-xl border border-white/8 bg-white/3 px-4 py-3">
@@ -2170,6 +2182,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             </Button>
           </div>
         </div>
+        )}
       </Modal>
     </div>
   )

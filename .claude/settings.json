@@ -37,7 +37,11 @@
       "Bash(node -e \"const rgl = require\\('./node_modules/react-grid-layout'\\); console.log\\(Object.keys\\(rgl.ResponsiveGridLayout\\)\\)\")",
       "Bash(node -e \"const {GridLayout} = require\\('./node_modules/react-grid-layout'\\); const c = GridLayout; console.log\\(c.propTypes ? Object.keys\\(c.propTypes\\) : 'no propTypes'\\)\")",
       "Bash(node -e \"const rgl = require\\('./node_modules/react-grid-layout'\\); console.log\\(typeof rgl.WidthProvider\\)\")",
-      "Bash(node -e \"const pkg = require\\('./node_modules/react-grid-layout/package.json'\\); console.log\\(JSON.stringify\\(pkg.exports, null, 2\\)\\)\")"
+      "Bash(node -e \"const pkg = require\\('./node_modules/react-grid-layout/package.json'\\); console.log\\(JSON.stringify\\(pkg.exports, null, 2\\)\\)\")",
+      "Bash(node -e \"const pkg = require\\('./node_modules/@dnd-kit/core/package.json'\\); console.log\\(pkg.name, pkg.version\\)\")",
+      "Bash(node -e \"const pkg = require\\('./node_modules/@dnd-kit/sortable/package.json'\\); console.log\\(pkg.name, pkg.version\\)\")",
+      "Bash(node -e \"const pkg = require\\('./node_modules/@dnd-kit/utilities/package.json'\\); console.log\\(pkg.name, pkg.version\\)\")",
+      "Bash(node -e \"console.log\\(Object.keys\\(require\\('./node_modules/@dnd-kit/sortable'\\)\\)\\)\")"
     ]
   }
 }

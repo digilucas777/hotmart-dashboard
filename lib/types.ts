@@ -41,6 +41,7 @@ export type Projeto = {
   imagem_url?: string | null
   status?: string | null
   data_criacao?: string | null
+  ordem?: number | null
 }
 
 export type Produto = {
