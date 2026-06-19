@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   Plus,
   Pencil,
@@ -33,8 +34,11 @@ import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 
 export default function ProjectsPage() {
+  const router = useRouter()
   const [projetos, setProjetos] = useState<Projeto[]>([])
   const [loading, setLoading] = useState(true)
+  const [userRole, setUserRole] = useState<string | null>(null)
+  const [allowedProjetoIds, setAllowedProjetoIds] = useState<Set<string> | null>(null)
 
   const [showCreate, setShowCreate] = useState(false)
   const [createNome, setCreateNome] = useState('')
@@ -65,6 +69,28 @@ export default function ProjectsPage() {
   }
 
   useEffect(() => { fetchProjetos() }, [])
+
+  useEffect(() => {
+    async function loadUserPerms() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/login'); return }
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle()
+      const role = (profile as { role?: string } | null)?.role ?? 'user'
+      setUserRole(role)
+      if (role === 'admin') return
+      const { data: perms } = await supabase
+        .from('user_dashboard_permissions')
+        .select('projeto_id')
+        .eq('user_id', user.id)
+        .eq('pode_visualizar', true)
+      setAllowedProjetoIds(new Set(((perms ?? []) as { projeto_id: string }[]).map(p => p.projeto_id)))
+    }
+    void loadUserPerms()
+  }, [router])
 
   const handleCreate = async () => {
     if (!createNome.trim()) return
@@ -123,6 +149,11 @@ export default function ProjectsPage() {
     )
   }, [projetos])
 
+  const isAdmin = userRole === 'admin'
+  const visibleProjetos = isAdmin || allowedProjetoIds === null
+    ? projetos
+    : projetos.filter(p => allowedProjetoIds.has(p.id))
+
   return (
     <div className="min-h-screen" style={{ background: '#0b0b14' }}>
       <header
@@ -136,10 +167,12 @@ export default function ProjectsPage() {
             </div>
             <span className="text-sm font-bold text-slate-100">Hotmart Dashboard</span>
           </div>
-          <Button onClick={() => setShowCreate(true)} size="sm">
-            <Plus size={14} />
-            Novo Projeto
-          </Button>
+          {isAdmin && (
+            <Button onClick={() => setShowCreate(true)} size="sm">
+              <Plus size={14} />
+              Novo Projeto
+            </Button>
+          )}
         </div>
       </header>
 
@@ -174,25 +207,27 @@ export default function ProjectsPage() {
             </button>
           </div>
         ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={projetos.map(p => p.id)} strategy={rectSortingStrategy}>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={isAdmin ? handleDragEnd : () => {}}>
+            <SortableContext items={visibleProjetos.map(p => p.id)} strategy={rectSortingStrategy}>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                {projetos.map(p => (
+                {visibleProjetos.map(p => (
                   <SortableProjectCard
                     key={p.id}
                     projeto={p}
-                    onEdit={() => openEdit(p)}
-                    onDelete={() => setDeleteId(p.id)}
+                    onEdit={isAdmin ? () => openEdit(p) : undefined}
+                    onDelete={isAdmin ? () => setDeleteId(p.id) : undefined}
                   />
                 ))}
-                <button
-                  onClick={() => setShowCreate(true)}
-                  className="flex min-h-[120px] flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed text-slate-600 transition-all hover:border-indigo-500/40 hover:text-indigo-400"
-                  style={{ borderColor: 'rgba(255,255,255,0.1)' }}
-                >
-                  <Plus size={20} />
-                  <span className="text-xs font-medium">Novo Projeto</span>
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => setShowCreate(true)}
+                    className="flex min-h-[120px] flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed text-slate-600 transition-all hover:border-indigo-500/40 hover:text-indigo-400"
+                    style={{ borderColor: 'rgba(255,255,255,0.1)' }}
+                  >
+                    <Plus size={20} />
+                    <span className="text-xs font-medium">Novo Projeto</span>
+                  </button>
+                )}
               </div>
             </SortableContext>
           </DndContext>
@@ -302,8 +337,8 @@ function SortableProjectCard({
   onDelete,
 }: {
   projeto: Projeto
-  onEdit: () => void
-  onDelete: () => void
+  onEdit?: () => void
+  onDelete?: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: projeto.id,
@@ -323,33 +358,41 @@ function SortableProjectCard({
       className="group relative rounded-xl border p-3.5 transition-colors duration-150"
     >
 
-      {/* Drag handle */}
-      <div
-        {...attributes}
-        {...listeners}
-        className="absolute left-2 top-2 cursor-grab touch-none p-1 text-slate-700 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
-        title="Arrastar para reordenar"
-      >
-        <GripVertical size={13} />
-      </div>
+      {/* Drag handle — admin only */}
+      {onEdit && (
+        <div
+          {...attributes}
+          {...listeners}
+          className="absolute left-2 top-2 cursor-grab touch-none p-1 text-slate-700 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+          title="Arrastar para reordenar"
+        >
+          <GripVertical size={13} />
+        </div>
+      )}
 
       {/* Action buttons */}
-      <div className="absolute right-2 top-2 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-        <button
-          onClick={onEdit}
-          title="Editar"
-          className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-white/10 hover:text-slate-300"
-        >
-          <Pencil size={11} />
-        </button>
-        <button
-          onClick={onDelete}
-          title="Excluir"
-          className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-red-500/15 hover:text-red-400"
-        >
-          <Trash2 size={11} />
-        </button>
-      </div>
+      {(onEdit || onDelete) && (
+        <div className="absolute right-2 top-2 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+          {onEdit && (
+            <button
+              onClick={onEdit}
+              title="Editar"
+              className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-white/10 hover:text-slate-300"
+            >
+              <Pencil size={11} />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              title="Excluir"
+              className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-red-500/15 hover:text-red-400"
+            >
+              <Trash2 size={11} />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Icon */}
       <div className="mb-3 mt-1 flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/15">

@@ -2,6 +2,17 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedUser } from '../../meta/_utils'
 
+type InvitePermission = {
+  projeto_id: string
+  pode_visualizar?: boolean
+  pode_editar_layout?: boolean
+  pode_adicionar_widgets?: boolean
+  pode_configurar_produtos?: boolean
+  pode_ver_produtos_ofertas?: boolean
+  pode_excluir_dashboard?: boolean
+  is_admin_dashboard?: boolean
+}
+
 export async function POST(request: Request) {
   const { supabase, user } = await getAuthenticatedUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
@@ -16,7 +27,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
-  const { email } = await request.json() as { email?: string }
+  const { email, permissoes } = await request.json() as {
+    email?: string
+    permissoes?: InvitePermission[]
+  }
   if (!email?.trim()) return NextResponse.json({ error: 'email required' }, { status: 400 })
 
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -27,10 +41,25 @@ export async function POST(request: Request) {
   })
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://hotmart-dashboard-woad.vercel.app'
-  const { error } = await admin.auth.admin.inviteUserByEmail(email.trim(), {
+  const { data: inviteData, error } = await admin.auth.admin.inviteUserByEmail(email.trim(), {
     redirectTo: `${siteUrl}/auth/confirm`,
   })
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+  if (permissoes && permissoes.length > 0 && inviteData?.user?.id) {
+    const rows = permissoes.map(p => ({
+      user_id: inviteData.user.id,
+      projeto_id: p.projeto_id,
+      pode_visualizar: p.pode_visualizar ?? true,
+      pode_editar_layout: p.pode_editar_layout ?? false,
+      pode_adicionar_widgets: p.pode_adicionar_widgets ?? false,
+      pode_configurar_produtos: p.pode_configurar_produtos ?? false,
+      pode_ver_produtos_ofertas: p.pode_ver_produtos_ofertas ?? false,
+      pode_excluir_dashboard: p.pode_excluir_dashboard ?? false,
+      is_admin_dashboard: p.is_admin_dashboard ?? false,
+    }))
+    await admin.from('user_dashboard_permissions').insert(rows)
+  }
 
   return NextResponse.json({ ok: true })
 }

@@ -50,6 +50,16 @@ function snapToMetricRows(rowSpan: number): number {
 
 type DashboardTheme = 'dark' | 'light'
 
+type UserPerms = {
+  pode_visualizar: boolean
+  pode_editar_layout: boolean
+  pode_adicionar_widgets: boolean
+  pode_configurar_produtos: boolean
+  pode_ver_produtos_ofertas: boolean
+  pode_excluir_dashboard: boolean
+  is_admin_dashboard: boolean
+} | null
+
 type GridPlacement = {
   id: string
   col_start: number
@@ -424,6 +434,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [successToast, setSuccessToast] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
   const [mobileEditWarning, setMobileEditWarning] = useState(false)
+
+  const [userRole, setUserRole] = useState<string | null>(null)
+  const [userPerms, setUserPerms] = useState<UserPerms>(null)
+  const [permsLoaded, setPermsLoaded] = useState(false)
+  const [showDeleteDashboard, setShowDeleteDashboard] = useState(false)
 
   const [origensDisponiveis, setOrigensDisponiveis] = useState<string[]>([])
   const [origensFilter, setOrigensFilter] = useState<string[]>([])
@@ -897,6 +912,34 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     return () => window.removeEventListener('resize', check)
   }, [])
 
+  useEffect(() => {
+    async function loadPerms() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/login'); return }
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle()
+      const role = (profile as { role?: string } | null)?.role ?? 'user'
+      setUserRole(role)
+      if (role === 'admin') { setPermsLoaded(true); return }
+      const { data: perms } = await supabase
+        .from('user_dashboard_permissions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('projeto_id', projectId)
+        .maybeSingle()
+      if (!perms || !(perms as { pode_visualizar: boolean }).pode_visualizar) {
+        router.push('/projects')
+        return
+      }
+      setUserPerms(perms as UserPerms)
+      setPermsLoaded(true)
+    }
+    void loadPerms()
+  }, [projectId, router])
+
   const pushHistory = useCallback(() => {
     setUndoStack(prev => [...prev, widgets])
     setRedoStack([])
@@ -1058,6 +1101,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setEditMode(false)
     setSelectedWidgetIds(new Set())
   }, [savedWidgets])
+
+  const handleDeleteDashboard = useCallback(async () => {
+    await supabase.from('projeto_produtos').delete().eq('projeto_id', projectId)
+    await supabase.from('projetos').delete().eq('id', projectId)
+    router.push('/projects')
+  }, [projectId, router])
 
   const saveLayout = useCallback(async () => {
     setSavingLayout(true)
@@ -1313,8 +1362,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [editMode, widgets])
 
-  const isReady = !loadingWidgets
+  const isReady = !loadingWidgets && permsLoaded
   const hasUnsavedLayout = !sameLayout(widgets, savedWidgets)
+
+  const isAdmin = userRole === 'admin'
+  const canEditLayout = isAdmin || userPerms?.is_admin_dashboard || userPerms?.pode_editar_layout || false
+  const canAddWidgets = isAdmin || userPerms?.is_admin_dashboard || userPerms?.pode_adicionar_widgets || false
+  const canConfigureProducts = isAdmin || userPerms?.is_admin_dashboard || userPerms?.pode_configurar_produtos || false
+  const canDeleteDashboard = isAdmin || userPerms?.is_admin_dashboard || userPerms?.pode_excluir_dashboard || false
   const displayVendas = useMemo(() => {
     let result = vendas
     if (origensFilter.length > 0) {
@@ -1656,23 +1711,25 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               {isRefreshing ? 'Atualizando...' : 'Atualizar'}
             </button>
             {!editMode ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (isMobile) {
-                    setMobileEditWarning(true)
-                    setTimeout(() => setMobileEditWarning(false), 3000)
-                    return
-                  }
-                  setEditMode(true)
-                  setSelectedWidgetIds(new Set())
-                }}
-                className="shrink-0"
-              >
-                <Pencil size={13} />
-                Editar layout
-              </Button>
+              canEditLayout && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (isMobile) {
+                      setMobileEditWarning(true)
+                      setTimeout(() => setMobileEditWarning(false), 3000)
+                      return
+                    }
+                    setEditMode(true)
+                    setSelectedWidgetIds(new Set())
+                  }}
+                  className="shrink-0"
+                >
+                  <Pencil size={13} />
+                  Editar layout
+                </Button>
+              )
             ) : (
               <>
                 <Button
@@ -1734,16 +1791,29 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                   <X size={13} />
                   Cancelar
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setShowAddWidget(true)} className="shrink-0">
-                  <Plus size={13} />
-                  Adicionar Widget
-                </Button>
+                {canAddWidgets && (
+                  <Button variant="outline" size="sm" onClick={() => setShowAddWidget(true)} className="shrink-0">
+                    <Plus size={13} />
+                    Adicionar Widget
+                  </Button>
+                )}
               </>
             )}
-            {!editMode && (
+            {!editMode && canConfigureProducts && (
               <Button variant="outline" size="sm" onClick={openProductsModal} className="shrink-0">
                 <Settings size={13} />
                 Configurar produtos
+              </Button>
+            )}
+            {!editMode && canDeleteDashboard && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowDeleteDashboard(true)}
+                className="shrink-0 border-red-400/30 bg-red-500/10 text-red-300"
+              >
+                <Trash2 size={13} />
+                Excluir dashboard
               </Button>
             )}
           </div>
@@ -1768,13 +1838,15 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 Clique em &quot;+ Widget&quot; para criar seu primeiro gráfico ou card.
               </p>
             </div>
-            <Button onClick={() => {
-              setEditMode(true)
-              setShowAddWidget(true)
-            }}>
-              <Plus size={14} />
-              Criar primeiro widget
-            </Button>
+            {(canEditLayout || canAddWidgets) && (
+              <Button onClick={() => {
+                setEditMode(true)
+                setShowAddWidget(true)
+              }}>
+                <Plus size={14} />
+                Criar primeiro widget
+              </Button>
+            )}
           </div>
         ) : (
           <div className="relative">
@@ -1941,6 +2013,32 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             >
               <Trash2 size={14} />
               Remover tudo
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={showDeleteDashboard}
+        onClose={() => setShowDeleteDashboard(false)}
+        title="Excluir dashboard"
+        maxWidth="max-w-sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--dash-muted)]">
+            Tem certeza? O dashboard &ldquo;{projeto?.nome}&rdquo; será excluído permanentemente. Os dados de vendas não serão afetados.
+          </p>
+          <div className="flex gap-2 pt-1">
+            <Button variant="ghost" className="flex-1" onClick={() => setShowDeleteDashboard(false)}>
+              Cancelar
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={handleDeleteDashboard}
+              style={{ background: 'rgba(239,68,68,0.2)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.3)' }}
+            >
+              <Trash2 size={14} />
+              Excluir
             </Button>
           </div>
         </div>
