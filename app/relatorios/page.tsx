@@ -231,8 +231,8 @@ function buildMetricValue(vendas: Venda[], metric: WidgetDataSource, insights?: 
   const totalUSD = approved.filter(v => v.moeda === 'USD').reduce((sum, v) => sum + getOfficialSaleAmount(v), 0)
   const totalConverted = totalBRL + totalUSD * exchangeRate
 
-  const gastoMetaBRL = isMetaConnected && insights ? insights.spend_brl : 0
-  const custoTotalBRL = gastoMetaBRL + custoManualBRL
+  // Custo manual só é usado quando não há Meta Ads conectado ao projeto
+  const custoTotalBRL = isMetaConnected && insights ? insights.spend_brl : custoManualBRL
 
   if (metric === 'total_converted') return formatBRL(totalConverted)
   if (metric === 'lucro') return formatBRL(totalConverted - custoTotalBRL)

@@ -105,8 +105,13 @@ function WidgetRendererBase({
 
   const isMetaLinked = !!linkedMetaAccountId
 
-  // custoTotal prop já é displayCustoTotal (Meta + custoManualTotal) vindo de DashboardClient
-  const effectiveCusto = custoTotal
+  // Para widgets de custo: Meta spend (live) tem precedência; sem Meta, usa custoManualTotal ou custoTotal
+  const costWidgets = ['lucro', 'margem_lucro', 'roas', 'cpa']
+  const effectiveCusto = costWidgets.includes(config.data_source)
+    ? isMetaLinked && metaInsights?.spend_brl !== undefined
+      ? parseFloat(String(metaInsights.spend_brl)) || 0
+      : custoTotal  // inclui custoManualTotal via displayCustoTotal
+    : custoTotal
 
   const hasManualCost = custoManualTotal > 0
 
