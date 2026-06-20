@@ -103,12 +103,8 @@ function WidgetRendererBase({
 
   const isMetaLinked = !!linkedMetaAccountId
 
-  const effectiveCusto = (() => {
-    if (config.data_source !== 'lucro' && config.data_source !== 'margem_lucro') return custoTotal
-    if (!isMetaLinked) return 0
-    if (metaInsights?.spend_brl !== undefined) return parseFloat(String(metaInsights.spend_brl)) || 0
-    return custoTotal
-  })()
+  // custoTotal prop já é displayCustoTotal (Meta + custoManualTotal) vindo de DashboardClient
+  const effectiveCusto = custoTotal
 
   const data = isMetaWidget
     ? (() => {
