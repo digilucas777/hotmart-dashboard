@@ -41,7 +41,11 @@
       "Bash(node -e \"const pkg = require\\('./node_modules/@dnd-kit/core/package.json'\\); console.log\\(pkg.name, pkg.version\\)\")",
       "Bash(node -e \"const pkg = require\\('./node_modules/@dnd-kit/sortable/package.json'\\); console.log\\(pkg.name, pkg.version\\)\")",
       "Bash(node -e \"const pkg = require\\('./node_modules/@dnd-kit/utilities/package.json'\\); console.log\\(pkg.name, pkg.version\\)\")",
-      "Bash(node -e \"console.log\\(Object.keys\\(require\\('./node_modules/@dnd-kit/sortable'\\)\\)\\)\")"
+      "Bash(node -e \"console.log\\(Object.keys\\(require\\('./node_modules/@dnd-kit/sortable'\\)\\)\\)\")",
+      "mcp__adspower-local-api__get-browser-list",
+      "mcp__adspower-local-api__open-browser",
+      "mcp__adspower-local-api__navigate",
+      "mcp__adspower-local-api__connect-browser-with-ws"
     ]
   }
 }
