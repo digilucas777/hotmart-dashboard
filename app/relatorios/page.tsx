@@ -222,7 +222,7 @@ function buildPeriodoLabel(period: string, customFrom?: string, customTo?: strin
   return `de ${fmt(from)} a ${fmt(new Date(to.getTime() - day))}`
 }
 
-function buildMetricValue(vendas: Venda[], metric: WidgetDataSource, insights?: MetaInsights | null, isMetaConnected?: boolean, exchangeRate = 5.85) {
+function buildMetricValue(vendas: Venda[], metric: WidgetDataSource, insights?: MetaInsights | null, isMetaConnected?: boolean, exchangeRate = 5.85, custoManualBRL = 0) {
   const approved = vendas.filter(v => v.status === 'approved')
   const refunded = vendas.filter(v => v.status === 'refunded')
   const pending = vendas.filter(v => v.status === 'pending')
@@ -231,8 +231,11 @@ function buildMetricValue(vendas: Venda[], metric: WidgetDataSource, insights?: 
   const totalUSD = approved.filter(v => v.moeda === 'USD').reduce((sum, v) => sum + getOfficialSaleAmount(v), 0)
   const totalConverted = totalBRL + totalUSD * exchangeRate
 
+  const gastoMetaBRL = isMetaConnected && insights ? insights.spend_brl : 0
+  const custoTotalBRL = gastoMetaBRL + custoManualBRL
+
   if (metric === 'total_converted') return formatBRL(totalConverted)
-  if (metric === 'lucro') return formatBRL(totalConverted - (isMetaConnected && insights ? insights.spend_brl : 0))
+  if (metric === 'lucro') return formatBRL(totalConverted - custoTotalBRL)
   if (metric === 'total_brl') return formatBRL(totalBRL)
   if (metric === 'total_usd') return formatUSD(totalUSD)
   if (metric === 'sales_count') return String(approved.length)
@@ -248,9 +251,19 @@ function buildMetricValue(vendas: Venda[], metric: WidgetDataSource, insights?: 
     'meta_purchases', 'meta_hook_rate', 'meta_connect_rate', 'meta_roas_geral',
   ]
   if (metaKeys.includes(metric)) {
+    // meta_spend e meta_roas_geral podem usar custo manual quando sem Meta conectado
+    if (metric === 'meta_spend') {
+      if (isMetaConnected && insights) return formatBRL(insights.spend_brl)
+      if (custoManualBRL > 0) return formatBRL(custoManualBRL)
+      return 'Não conectado'
+    }
+    if (metric === 'meta_roas_geral') {
+      if (isMetaConnected && insights) return `${insights.roas_geral.toFixed(2)}x`
+      if (custoTotalBRL > 0) return `${(totalConverted / custoTotalBRL).toFixed(2)}x`
+      return 'Não conectado'
+    }
     if (!isMetaConnected) return 'Não conectado'
     if (!insights) return 'Carregando...'
-    if (metric === 'meta_spend') return formatBRL(insights.spend_brl)
     if (metric === 'meta_roas') return `${insights.roas_meta.toFixed(2)}x`
     if (metric === 'meta_ctr') return `${insights.ctr.toFixed(2)}%`
     if (metric === 'meta_cpm') return formatBRL(insights.cpm_brl)
@@ -262,7 +275,6 @@ function buildMetricValue(vendas: Venda[], metric: WidgetDataSource, insights?: 
     if (metric === 'meta_purchases') return String(insights.compras)
     if (metric === 'meta_hook_rate') return `${insights.hook_rate.toFixed(1)}%`
     if (metric === 'meta_connect_rate') return `${insights.connect_rate.toFixed(1)}%`
-    if (metric === 'meta_roas_geral') return `${insights.roas_geral.toFixed(2)}x`
   }
   return ''
 }
@@ -310,6 +322,7 @@ export default function RelatoriosPage() {
   const [metaAccountId, setMetaAccountId] = useState<string | null>(null)
   const [metaInsights, setMetaInsights] = useState<MetaInsights | null>(null)
   const [isMetaConnected, setIsMetaConnected] = useState(false)
+  const [custoManualBRL, setCustoManualBRL] = useState(0)
   const [exchangeRate, setExchangeRate] = useState(5.85)
   const [selectedTemplate, setSelectedTemplate] = useState<'recuperacao' | 'trafego' | null>(null)
   const [copied, setCopied] = useState(false)
@@ -469,6 +482,27 @@ export default function RelatoriosPage() {
     loadMetaInsights()
   }, [metaAccountId, form.periodo, form.projeto_id])
 
+  useEffect(() => {
+    async function loadCustosManuals() {
+      setCustoManualBRL(0)
+      if (!form.projeto_id) return
+      const { from, to } = reportRange(form.periodo, customFrom, customTo)
+      const fromStr = from.toISOString().split('T')[0]!
+      const toStr = new Date(to.getTime() - 1).toISOString().split('T')[0]!
+      const { data: custosManuals } = await supabase
+        .from('custos_manuais')
+        .select('valor, moeda')
+        .eq('projeto_id', form.projeto_id)
+        .gte('data', fromStr)
+        .lte('data', toStr)
+      const total = ((custosManuals ?? []) as { valor: number; moeda: string }[]).reduce((sum, c) => {
+        return sum + (c.moeda === 'USD' ? c.valor * exchangeRate : c.valor)
+      }, 0)
+      setCustoManualBRL(total)
+    }
+    loadCustosManuals()
+  }, [form.projeto_id, form.periodo, customFrom, customTo, exchangeRate])
+
   const generatedMessage = useMemo(() => {
     const projectName = selectedProject?.nome ?? 'Projeto'
     const periodoInformal = PERIOD_INFORMAL[form.periodo] ?? PERIOD_OPTIONS.find(p => p.value === form.periodo)?.label?.toLowerCase() ?? form.periodo
@@ -484,12 +518,12 @@ export default function RelatoriosPage() {
         lines.push('', buildTodosProdutos(vendas))
       } else {
         const option = ALL_METRICS.find(o => o.value === metric)
-        lines.push(`• ${option?.label ?? metric}: ${buildMetricValue(vendas, metric, metaInsights, isMetaConnected, exchangeRate)}`)
+        lines.push(`• ${option?.label ?? metric}: ${buildMetricValue(vendas, metric, metaInsights, isMetaConnected, exchangeRate, custoManualBRL)}`)
       }
     })
     lines.push('', `Período: ${buildPeriodoLabel(form.periodo, customFrom, customTo)}`)
     return lines.join('\n')
-  }, [form.mensagem, form.periodo, metricas, selectedProject?.nome, vendas, metaInsights, isMetaConnected, exchangeRate, customFrom, customTo])
+  }, [form.mensagem, form.periodo, metricas, selectedProject?.nome, vendas, metaInsights, isMetaConnected, exchangeRate, customFrom, customTo, custoManualBRL])
 
   useEffect(() => { setMessageText(generatedMessage) }, [generatedMessage])
 
