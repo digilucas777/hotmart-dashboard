@@ -60,6 +60,7 @@ function WidgetRendererBase({
   period,
   exchangeRate,
   custoTotal = 0,
+  custoManualTotal = 0,
   customRange,
   editMode,
   loading,
@@ -80,6 +81,7 @@ function WidgetRendererBase({
   period: Period
   exchangeRate: number
   custoTotal?: number
+  custoManualTotal?: number
   customRange?: { from: Date; to: Date }
   editMode: boolean
   loading?: boolean
@@ -106,12 +108,26 @@ function WidgetRendererBase({
   // custoTotal prop já é displayCustoTotal (Meta + custoManualTotal) vindo de DashboardClient
   const effectiveCusto = custoTotal
 
+  const hasManualCost = custoManualTotal > 0
+
   const data = isMetaWidget
     ? (() => {
         const mock = computeMetaWidgetData(config.data_source, effectivePeriod)
         if (isMetaLinked && metaInsights && mock.kind === 'meta-metric') {
           const real = getInsightsValue(config.data_source, metaInsights)
           if (real !== null) return { ...mock, value: real.value, valueUsd: real.valueUsd, change: 0 }
+        }
+        // Sem Meta vinculado mas com custo manual: usa dados reais
+        if (!isMetaLinked && hasManualCost && mock.kind === 'meta-metric') {
+          if (config.data_source === 'meta_spend') {
+            return { ...mock, value: custoManualTotal, valueUsd: custoManualTotal / exchangeRate, change: 0 }
+          }
+          if (config.data_source === 'meta_roas_geral') {
+            const totalBRL = vendas
+              .filter(v => v.status === 'approved')
+              .reduce((sum, v) => sum + (v.moeda === 'BRL' ? (v.valor_operacional_final ?? 0) : (v.valor_operacional_final ?? 0) * exchangeRate), 0)
+            return { ...mock, value: custoManualTotal > 0 ? totalBRL / custoManualTotal : 0, change: 0 }
+          }
         }
         return mock
       })()
@@ -271,7 +287,7 @@ function WidgetRendererBase({
         <MetaMetricWidget
           title={config.title}
           data={data}
-          isDemo={!isMetaLinked}
+          isDemo={!isMetaLinked && !(hasManualCost && (config.data_source === 'meta_spend' || config.data_source === 'meta_roas_geral'))}
           isPersonalizado={config.data_source === 'meta_roas_geral'}
         />
       )}

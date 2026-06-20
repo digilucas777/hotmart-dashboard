@@ -2055,6 +2055,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             period={period}
             exchangeRate={exchangeRate}
             custoTotal={displayCustoTotal}
+            custoManualTotal={custoManualTotal}
             customRange={customDateRange}
             loading={false}
             selectedWidgetIds={selectedWidgetIds}
