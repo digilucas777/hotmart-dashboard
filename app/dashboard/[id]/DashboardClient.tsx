@@ -850,6 +850,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       const brl = r.moeda === 'BRL' ? r.valor : r.valor * exchangeRate
       return sum + brl
     }, 0)
+    const custos = periodRes.data ?? []
+    console.log('[CUSTO MANUAL]', { custos, custoManualTotal: total, exchangeRate })
     setCustoManualTotal(total)
     setCustoManualList((historyRes.data ?? []) as CustoManual[])
   }, [projectId, period, customDateRange, exchangeRate])
