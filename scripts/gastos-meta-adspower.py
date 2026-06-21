@@ -117,6 +117,7 @@ def save_screenshot(sock, filename, msg_id):
 
 def aguardar_carregamento(sock, msg_id, timeout=30):
     inicio = time.time()
+    ultimo_texto = ""
     while time.time() - inicio < timeout:
         resp = send_command(sock, "WebDriver:ExecuteScript", {
             "script": "return document.body.innerText.substring(0, 8000);",
@@ -125,6 +126,7 @@ def aguardar_carregamento(sock, msg_id, timeout=30):
         idx = resp.find('"value":"')
         if idx >= 0:
             texto = resp[idx+9:].rsplit('"', 1)[0].replace('\\n', '\n')
+            ultimo_texto = texto
             if re.search(r'\$\s*[\d\.]+,\d+\nDiário', texto):
                 fechar_popups(sock, msg_id+1)
                 fechar_popups(sock, msg_id+2)
@@ -138,7 +140,10 @@ def aguardar_carregamento(sock, msg_id, timeout=30):
                     return resp2[idx2+9:].rsplit('"', 1)[0].replace('\\n', '\n')
                 return texto
         time.sleep(3)
-    return ""
+    with open("debug.txt", "w", encoding="utf-8", errors="ignore") as f:
+        f.write(ultimo_texto)
+    print("  Debug salvo em debug.txt")
+    return ultimo_texto
 
 
 def extrair_gasto(texto):
@@ -197,9 +202,9 @@ msg_id = 2
 gastos_detalhados = []
 total_usd = 0.0
 
-for bm_info in BMS:
+for bm_info in BMS[:1]:
     bm_nome = bm_info["bm"]
-    for conta in bm_info["contas"]:
+    for conta in bm_info["contas"][:1]:
         conta_nome = conta["nome"]
         conta_id = conta["id"]
 
