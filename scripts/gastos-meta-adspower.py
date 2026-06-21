@@ -131,16 +131,24 @@ def save_screenshot(sock, filename, msg_id):
         print(f"Screenshot falhou ({filename}):", shot_resp[:200])
 
 
-def extrair_gasto(sock, msg_id):
-    resp = send_command(sock, "WebDriver:ExecuteScript", {
-        "script": "return document.body.innerText.substring(0, 8000);",
-        "args": []
-    }, msg_id=msg_id)
-    idx = resp.find('"value":"')
-    if idx < 0:
-        return "0"
-    texto = resp[idx+9:]
-    texto = texto.rsplit('"', 1)[0].replace('\\n', '\n').replace('\\t', '\t')
+def aguardar_carregamento(sock, msg_id, timeout=30):
+    inicio = time.time()
+    while time.time() - inicio < timeout:
+        resp = send_command(sock, "WebDriver:ExecuteScript", {
+            "script": "return document.body.innerText.substring(0, 8000);",
+            "args": []
+        }, msg_id=msg_id)
+        idx = resp.find('"value":"')
+        if idx >= 0:
+            texto = resp[idx+9:].rsplit('"', 1)[0].replace('\\n', '\n')
+            if re.search(r'\$\s*[\d\.]+,\d+\nDiário', texto):
+                return texto
+        time.sleep(3)
+    return ""
+
+
+def extrair_gasto(texto):
+    texto = texto.replace('\\t', '\t')
     with open("debug_last.txt", "w", encoding="utf-8", errors="ignore") as f:
         f.write(texto)
     valores = re.findall(r'\$\s*[\d\.]+,\d+\nDiário\n(\$\s*[\d\.]+,\d+)', texto)
@@ -205,7 +213,6 @@ for bm_info in BMS:
         msg_id += 1
 
         print(f"\n[{bm_nome} | {conta_nome}] Aguardando carregar...")
-        time.sleep(12)
 
         fechar_popups(sock, msg_id)
         msg_id += 1
@@ -214,8 +221,10 @@ for bm_info in BMS:
         fechar_popups(sock, msg_id)
         msg_id += 1
 
-        raw = extrair_gasto(sock, msg_id)
+        texto = aguardar_carregamento(sock, msg_id, timeout=30)
         msg_id += 1
+
+        raw = extrair_gasto(texto)
 
         gasto = parse_valor(raw)
         total_usd += gasto
@@ -233,6 +242,13 @@ for bm_info in BMS:
     print(f"  {bm_nome}: ${subtotal:.2f}")
 
 print(f"\nTotal USD: ${total_usd:.2f}")
+
+print("\nDeseja inserir esses gastos no dashboard? (s/n): ", end="")
+confirmacao = input().strip().lower()
+if confirmacao != 's':
+    print("Inserção cancelada.")
+    sock.close()
+    exit(0)
 
 # --- Taxa de câmbio ---
 try:
