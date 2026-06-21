@@ -196,6 +196,8 @@ for bm_info in BMS:
 
         print(f"\n[{bm_nome} | {conta_nome}] Aguardando carregar...")
 
+        time.sleep(12)
+
         fechar_popups(sock, msg_id)
         msg_id += 1
         fechar_popups(sock, msg_id)
@@ -203,7 +205,7 @@ for bm_info in BMS:
         fechar_popups(sock, msg_id)
         msg_id += 1
 
-        time.sleep(12)
+        time.sleep(3)
 
         raw = extrair_gasto(sock, msg_id)
         msg_id += 1
