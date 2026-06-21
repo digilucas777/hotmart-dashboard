@@ -142,19 +142,6 @@ def extrair_gasto(texto):
     return "NAO_ENCONTROU"
 
 
-def fechar_abas_extras(sock, msg_id):
-    windows_resp = send_command(sock, "WebDriver:GetWindowHandles", {}, msg_id=msg_id)
-    handles = re.findall(r'"([0-9a-fA-F\-]{8,})"', windows_resp)
-    if len(handles) > 1:
-        for h in handles[1:]:
-            try:
-                send_command(sock, "WebDriver:SwitchToWindow", {"name": h}, msg_id=msg_id+1)
-                send_command(sock, "WebDriver:CloseWindow", {}, msg_id=msg_id+2)
-            except:
-                pass
-        send_command(sock, "WebDriver:SwitchToWindow", {"name": handles[0]}, msg_id=msg_id+3)
-    return len(handles)
-
 
 def parse_valor(raw_str):
     match = re.search(r'\$\s*([\d]+[,\.][\d]+(?:[,\.][\d]+)?)', raw_str)
@@ -170,7 +157,7 @@ def parse_valor(raw_str):
 # --- Abre o perfil AdsPower ---
 
 requests.get(f"{ADSPOWER_API}/api/v1/browser/stop?user_id={PROFILE_ID}")
-time.sleep(2)
+time.sleep(3)
 
 resp = requests.get(f"{ADSPOWER_API}/api/v1/browser/start?user_id={PROFILE_ID}")
 data = resp.json()
@@ -194,24 +181,9 @@ session_resp = send_command(sock, "WebDriver:NewSession", {
 }, msg_id=1)
 print("Sessão criada:", session_resp[:200])
 
-# Fecha abas extras ao iniciar
-print("Fechando abas extras iniciais...")
-windows_resp = send_command(sock, "WebDriver:GetWindowHandles", {}, msg_id=2)
-handles = re.findall(r'"([0-9a-fA-F\-]{8,})"', windows_resp)
-print(f"  {len(handles)} aba(s) encontrada(s)")
-main_handle = handles[0]
-for h in handles[1:]:
-    try:
-        send_command(sock, "WebDriver:SwitchToWindow", {"name": h}, msg_id=3)
-        send_command(sock, "WebDriver:CloseWindow", {}, msg_id=4)
-    except:
-        pass
-send_command(sock, "WebDriver:SwitchToWindow", {"name": main_handle}, msg_id=5)
-print(f"  Abas extras fechadas. Aba principal: {main_handle}")
-
 # --- Coleta gastos por conta ---
 
-msg_id = 6
+msg_id = 2
 gastos_detalhados = []
 total_usd = 0.0
 
