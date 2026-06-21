@@ -86,36 +86,20 @@ def fechar_popups(sock, msg_id):
     resp = send_command(sock, "WebDriver:ExecuteScript", {
         "script": """
             var closed = [];
-            var seletores = [
-                'div[role="dialog"] button',
-                'div[aria-modal="true"] button',
-                'div[role="alertdialog"] button',
-                'button[aria-label="Fechar"]',
-                'button[aria-label="Close"]'
-            ];
-            seletores.forEach(function(sel) {
-                document.querySelectorAll(sel).forEach(function(btn) {
-                    var txt = btn.innerText.trim();
-                    if (['OK', 'Fechar', 'Close', 'X', 'Entendi', 'Got it'].includes(txt) || btn.getAttribute('aria-label') === 'Fechar') {
-                        btn.click();
-                        closed.push(txt || 'X');
-                    }
-                });
-            });
-            // Fecha popup de Taiwan e outros banners
-            document.querySelectorAll('button').forEach(function(btn) {
-                var txt = btn.innerText.trim();
-                if (['OK', 'Fechar', 'Close', 'Entendi', 'Got it', 'Começar'].indexOf(txt) >= 0 ||
-                    btn.getAttribute('aria-label') === 'Fechar') {
+            var modais = document.querySelectorAll('[role="dialog"] button, [aria-modal="true"] button, [role="alertdialog"] button');
+            modais.forEach(function(btn) {
+                var txt = (btn.innerText || '').trim().toLowerCase();
+                var label = (btn.getAttribute('aria-label') || '').toLowerCase();
+                if (['ok','fechar','close','entendi','got it','dismiss'].indexOf(txt) >= 0
+                    || label.includes('fechar') || label.includes('close')) {
                     btn.click();
-                    closed.push(txt || 'X');
+                    closed.push(txt || label);
                 }
             });
             return closed.length > 0 ? 'Fechou: ' + closed.join(', ') : 'Sem popup';
         """,
         "args": []
     }, msg_id=msg_id)
-    print("Popup:", resp)
     return resp
 
 
