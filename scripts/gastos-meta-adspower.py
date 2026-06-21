@@ -150,15 +150,51 @@ def aguardar_carregamento(sock, msg_id, timeout=45):
     return ultimo_texto
 
 
-def extrair_gasto(texto):
-    texto = texto.replace('\\t', '\t')
-    with open("debug_last.txt", "w", encoding="utf-8", errors="ignore") as f:
-        f.write(texto)
-    valores = re.findall(r'\$\s*[\d\.]+,\d+\nDiário\n(\$\s*[\d\.]+,\d+)', texto)
-    if valores:
-        total = sum(parse_valor(v) for v in valores)
-        return f"${total:.2f}"
-    return "NAO_ENCONTROU"
+def extrair_gasto(sock, msg_id):
+    resp = send_command(sock, "WebDriver:ExecuteScript", {
+        "script": """
+            var total = 0;
+            var found = false;
+            var headers = document.querySelectorAll('th, [role="columnheader"]');
+
+            var valorUsadoIdx = -1;
+            headers.forEach(function(h, i) {
+                if (h.innerText && h.innerText.includes('Valor usado')) {
+                    valorUsadoIdx = i;
+                }
+            });
+
+            if (valorUsadoIdx >= 0) {
+                var rows = document.querySelectorAll('tr, [role="row"]');
+                rows.forEach(function(row) {
+                    var cells = row.querySelectorAll('td, [role="cell"], [role="gridcell"]');
+                    if (cells.length > valorUsadoIdx) {
+                        var txt = cells[valorUsadoIdx].innerText.trim();
+                        var m = txt.match(/\\$\\s*([\\d\\.]+),(\\d{2})/);
+                        if (m) {
+                            var val = parseFloat(m[1].replace('.','') + '.' + m[2]);
+                            total += val;
+                            found = true;
+                        }
+                    }
+                });
+                return found ? '$' + total.toFixed(2) + ' (via DOM)' : 'NAO_ENCONTROU';
+            }
+
+            var texto = document.body.innerText;
+            var matches = texto.match(/\\$\\s*[\\d\\.]+,\\d+\\nDiário/g);
+            if (matches) {
+                return 'FALLBACK:' + matches.join('|');
+            }
+            return 'NAO_ENCONTROU';
+        """,
+        "args": []
+    }, msg_id=msg_id)
+    idx = resp.find('"value":"')
+    if idx < 0:
+        return "0"
+    raw = resp[idx+9:].rsplit('"', 1)[0]
+    return raw
 
 
 
@@ -234,7 +270,8 @@ for bm_info in BMS[:1]:
             texto = aguardar_carregamento(sock, msg_id, timeout=30)
             msg_id += 1
 
-        raw = extrair_gasto(texto)
+        raw = extrair_gasto(sock, msg_id)
+        msg_id += 1
 
         gasto = parse_valor(raw)
         total_usd += gasto
