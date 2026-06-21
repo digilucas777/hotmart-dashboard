@@ -115,86 +115,28 @@ def save_screenshot(sock, filename, msg_id):
         print(f"Screenshot falhou ({filename}):", shot_resp[:200])
 
 
-def aguardar_carregamento(sock, msg_id, timeout=45):
-    inicio = time.time()
-    ultimo_texto = ""
-    tabela_carregou = False
-    while time.time() - inicio < timeout:
-        resp = send_command(sock, "WebDriver:ExecuteScript", {
-            "script": "return document.body.innerText.substring(0, 8000);",
-            "args": []
-        }, msg_id=msg_id)
-        idx = resp.find('"value":"')
-        if idx >= 0:
-            texto = resp[idx+9:].rsplit('"', 1)[0].replace('\\n', '\n')
-            ultimo_texto = texto
-            if not tabela_carregou and 'Resultados de' in texto:
-                tabela_carregou = True
-                print("  Tabela carregou, aguardando valores...")
-            if tabela_carregou and re.search(r'\$\s*[\d\.]+,\d+\nDiário', texto):
-                fechar_popups(sock, msg_id+1)
-                fechar_popups(sock, msg_id+2)
-                time.sleep(1)
-                resp2 = send_command(sock, "WebDriver:ExecuteScript", {
-                    "script": "return document.body.innerText.substring(0, 8000);",
-                    "args": []
-                }, msg_id=msg_id+3)
-                idx2 = resp2.find('"value":"')
-                if idx2 >= 0:
-                    return resp2[idx2+9:].rsplit('"', 1)[0].replace('\\n', '\n')
-                return texto
-        time.sleep(2)
-    with open("debug.txt", "w", encoding="utf-8", errors="ignore") as f:
-        f.write(ultimo_texto)
-    print("  Debug salvo em debug.txt")
-    return ultimo_texto
-
-
 def extrair_gasto(sock, msg_id):
     resp = send_command(sock, "WebDriver:ExecuteScript", {
-        "script": """
-            var total = 0;
-            var found = false;
-            var headers = document.querySelectorAll('th, [role="columnheader"]');
-
-            var valorUsadoIdx = -1;
-            headers.forEach(function(h, i) {
-                if (h.innerText && h.innerText.includes('Valor usado')) {
-                    valorUsadoIdx = i;
-                }
-            });
-
-            if (valorUsadoIdx >= 0) {
-                var rows = document.querySelectorAll('tr, [role="row"]');
-                rows.forEach(function(row) {
-                    var cells = row.querySelectorAll('td, [role="cell"], [role="gridcell"]');
-                    if (cells.length > valorUsadoIdx) {
-                        var txt = cells[valorUsadoIdx].innerText.trim();
-                        var m = txt.match(/\\$\\s*([\\d\\.]+),(\\d{2})/);
-                        if (m) {
-                            var val = parseFloat(m[1].replace('.','') + '.' + m[2]);
-                            total += val;
-                            found = true;
-                        }
-                    }
-                });
-                return found ? '$' + total.toFixed(2) + ' (via DOM)' : 'NAO_ENCONTROU';
-            }
-
-            var texto = document.body.innerText;
-            var matches = texto.match(/\\$\\s*[\\d\\.]+,\\d+\\nDiário/g);
-            if (matches) {
-                return 'FALLBACK:' + matches.join('|');
-            }
-            return 'NAO_ENCONTROU';
-        """,
+        "script": "return document.body.innerText.substring(0, 8000);",
         "args": []
     }, msg_id=msg_id)
     idx = resp.find('"value":"')
     if idx < 0:
         return "0"
-    raw = resp[idx+9:].rsplit('"', 1)[0]
-    return raw
+    texto = resp[idx+9:]
+    texto = texto.rsplit('"', 1)[0].replace('\\n', '\n').replace('\\t', '\t')
+    with open("debug_last.txt", "w", encoding="utf-8", errors="ignore") as f:
+        f.write(texto)
+    m = re.search(r'(\$\s*[\d\.]+,\d+)\s*\nTotal usado', texto)
+    if not m:
+        m = re.search(r'Total usado\s*\n(\$\s*[\d\.]+,\d+)', texto)
+    if m:
+        return m.group(1).strip()
+    valores = re.findall(r'\$\s*[\d\.]+,\d+\nDiário\n(\$\s*[\d\.]+,\d+)', texto)
+    if valores:
+        total = sum(parse_valor(v) for v in valores)
+        return f"${total:.2f}"
+    return "NAO_ENCONTROU"
 
 
 
@@ -242,9 +184,9 @@ msg_id = 2
 gastos_detalhados = []
 total_usd = 0.0
 
-for bm_info in BMS[:1]:
+for bm_info in BMS:
     bm_nome = bm_info["bm"]
-    for conta in bm_info["contas"][:1]:
+    for conta in bm_info["contas"]:
         conta_nome = conta["nome"]
         conta_id = conta["id"]
 
@@ -261,14 +203,7 @@ for bm_info in BMS[:1]:
         fechar_popups(sock, msg_id)
         msg_id += 1
 
-        texto = aguardar_carregamento(sock, msg_id, timeout=30)
-        msg_id += 1
-        if not texto:
-            print(f"  Timeout — recarregando...")
-            send_command(sock, "WebDriver:Navigate", {"url": url}, msg_id=msg_id)
-            msg_id += 1
-            texto = aguardar_carregamento(sock, msg_id, timeout=30)
-            msg_id += 1
+        time.sleep(12)
 
         raw = extrair_gasto(sock, msg_id)
         msg_id += 1
