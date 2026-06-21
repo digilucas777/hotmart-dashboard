@@ -126,6 +126,16 @@ def aguardar_carregamento(sock, msg_id, timeout=30):
         if idx >= 0:
             texto = resp[idx+9:].rsplit('"', 1)[0].replace('\\n', '\n')
             if re.search(r'\$\s*[\d\.]+,\d+\nDiário', texto):
+                fechar_popups(sock, msg_id+1)
+                fechar_popups(sock, msg_id+2)
+                time.sleep(1)
+                resp2 = send_command(sock, "WebDriver:ExecuteScript", {
+                    "script": "return document.body.innerText.substring(0, 8000);",
+                    "args": []
+                }, msg_id=msg_id+3)
+                idx2 = resp2.find('"value":"')
+                if idx2 >= 0:
+                    return resp2[idx2+9:].rsplit('"', 1)[0].replace('\\n', '\n')
                 return texto
         time.sleep(3)
     return ""
