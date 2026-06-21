@@ -194,9 +194,24 @@ session_resp = send_command(sock, "WebDriver:NewSession", {
 }, msg_id=1)
 print("Sessão criada:", session_resp[:200])
 
+# Fecha abas extras ao iniciar
+print("Fechando abas extras iniciais...")
+windows_resp = send_command(sock, "WebDriver:GetWindowHandles", {}, msg_id=2)
+handles = re.findall(r'"([0-9a-fA-F\-]{8,})"', windows_resp)
+print(f"  {len(handles)} aba(s) encontrada(s)")
+main_handle = handles[0]
+for h in handles[1:]:
+    try:
+        send_command(sock, "WebDriver:SwitchToWindow", {"name": h}, msg_id=3)
+        send_command(sock, "WebDriver:CloseWindow", {}, msg_id=4)
+    except:
+        pass
+send_command(sock, "WebDriver:SwitchToWindow", {"name": main_handle}, msg_id=5)
+print(f"  Abas extras fechadas. Aba principal: {main_handle}")
+
 # --- Coleta gastos por conta ---
 
-msg_id = 2
+msg_id = 6
 gastos_detalhados = []
 total_usd = 0.0
 
@@ -229,11 +244,6 @@ for bm_info in BMS:
             msg_id += 1
 
         raw = extrair_gasto(texto)
-
-        n_abas = fechar_abas_extras(sock, msg_id)
-        msg_id += 4
-        if n_abas > 1:
-            print(f"  Fechou {n_abas - 1} aba(s) extra(s)")
 
         gasto = parse_valor(raw)
         total_usd += gasto
