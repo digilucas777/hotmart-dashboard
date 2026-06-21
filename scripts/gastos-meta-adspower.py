@@ -115,9 +115,10 @@ def save_screenshot(sock, filename, msg_id):
         print(f"Screenshot falhou ({filename}):", shot_resp[:200])
 
 
-def aguardar_carregamento(sock, msg_id, timeout=30):
+def aguardar_carregamento(sock, msg_id, timeout=45):
     inicio = time.time()
     ultimo_texto = ""
+    tabela_carregou = False
     while time.time() - inicio < timeout:
         resp = send_command(sock, "WebDriver:ExecuteScript", {
             "script": "return document.body.innerText.substring(0, 8000);",
@@ -127,7 +128,10 @@ def aguardar_carregamento(sock, msg_id, timeout=30):
         if idx >= 0:
             texto = resp[idx+9:].rsplit('"', 1)[0].replace('\\n', '\n')
             ultimo_texto = texto
-            if re.search(r'\$\s*[\d\.]+,\d+\nDiário', texto):
+            if not tabela_carregou and 'Resultados de' in texto:
+                tabela_carregou = True
+                print("  Tabela carregou, aguardando valores...")
+            if tabela_carregou and re.search(r'\$\s*[\d\.]+,\d+\nDiário', texto):
                 fechar_popups(sock, msg_id+1)
                 fechar_popups(sock, msg_id+2)
                 time.sleep(1)
@@ -139,7 +143,7 @@ def aguardar_carregamento(sock, msg_id, timeout=30):
                 if idx2 >= 0:
                     return resp2[idx2+9:].rsplit('"', 1)[0].replace('\\n', '\n')
                 return texto
-        time.sleep(3)
+        time.sleep(2)
     with open("debug.txt", "w", encoding="utf-8", errors="ignore") as f:
         f.write(ultimo_texto)
     print("  Debug salvo em debug.txt")
