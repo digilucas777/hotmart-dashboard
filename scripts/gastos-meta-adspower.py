@@ -240,6 +240,7 @@ for bm_info in BMS:
         conta['gasto'] = gasto
         gastos_detalhados.append({"bm": bm_nome, "conta": conta_nome, "id": conta_id, "gasto": gasto})
         print(f"{bm_nome} | {conta_nome} | ${gasto:.2f}  (raw: {raw[:100]})")
+        print(f"  → Total acumulado: ${total_usd:.2f}")
 
 sock.close()
 
