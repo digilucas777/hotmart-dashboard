@@ -142,6 +142,20 @@ def extrair_gasto(texto):
     return "NAO_ENCONTROU"
 
 
+def fechar_abas_extras(sock, msg_id):
+    windows_resp = send_command(sock, "WebDriver:GetWindowHandles", {}, msg_id=msg_id)
+    handles = re.findall(r'"([0-9a-fA-F\-]{8,})"', windows_resp)
+    if len(handles) > 1:
+        for h in handles[1:]:
+            try:
+                send_command(sock, "WebDriver:SwitchToWindow", {"name": h}, msg_id=msg_id+1)
+                send_command(sock, "WebDriver:CloseWindow", {}, msg_id=msg_id+2)
+            except:
+                pass
+        send_command(sock, "WebDriver:SwitchToWindow", {"name": handles[0]}, msg_id=msg_id+3)
+    return len(handles)
+
+
 def parse_valor(raw_str):
     match = re.search(r'\$\s*([\d]+[,\.][\d]+(?:[,\.][\d]+)?)', raw_str)
     if match:
@@ -207,8 +221,19 @@ for bm_info in BMS:
 
         texto = aguardar_carregamento(sock, msg_id, timeout=30)
         msg_id += 1
+        if not texto:
+            print(f"  Timeout — recarregando...")
+            send_command(sock, "WebDriver:Navigate", {"url": url}, msg_id=msg_id)
+            msg_id += 1
+            texto = aguardar_carregamento(sock, msg_id, timeout=30)
+            msg_id += 1
 
         raw = extrair_gasto(texto)
+
+        n_abas = fechar_abas_extras(sock, msg_id)
+        msg_id += 4
+        if n_abas > 1:
+            print(f"  Fechou {n_abas - 1} aba(s) extra(s)")
 
         gasto = parse_valor(raw)
         total_usd += gasto
