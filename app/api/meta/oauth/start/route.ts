@@ -27,7 +27,7 @@ export async function GET(request: Request) {
   const url = new URL('https://www.facebook.com/dialog/oauth')
   url.searchParams.set('client_id', appId)
   url.searchParams.set('redirect_uri', metaRedirectUri(request))
-  url.searchParams.set('state', csrfToken)
+  url.searchParams.set('state', state) // state = csrfToken|userId
   url.searchParams.set('response_type', 'code')
   url.searchParams.set('scope', 'ads_read,ads_management,business_management')
   url.searchParams.set('auth_type', 'rerequest')

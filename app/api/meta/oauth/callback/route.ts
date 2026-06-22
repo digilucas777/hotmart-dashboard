@@ -17,13 +17,14 @@ export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   console.log('[META CALLBACK] params:', { code: !!searchParams.get('code'), state: searchParams.get('state'), error: searchParams.get('error') })
   const code = searchParams.get('code')
-  const state = searchParams.get('state')
+  const state = searchParams.get('state') ?? ''
   const cookieStore = await cookies()
-  const storedState = cookieStore.get('dash_speed_meta_state')?.value
   cookieStore.delete('dash_speed_meta_state')
 
-  const [csrfToken, userId] = (storedState ?? '').split('|')
-  if (!code || !state || state !== csrfToken || !userId) {
+  // userId vem no próprio state (csrfToken|userId) — não depende de cookie
+  const [, userId] = state.split('|')
+  if (!code || !userId) {
+    console.log('[META CALLBACK] falha validação:', { hasCode: !!code, hasUserId: !!userId, state })
     return NextResponse.redirect(`${origin}/integracoes?meta=error`)
   }
   console.log('[META CB] state ok, code:', code?.slice(0, 10))
