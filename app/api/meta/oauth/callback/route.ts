@@ -76,7 +76,15 @@ export async function GET(request: Request) {
       return NextResponse.redirect(`${origin}/integracoes?meta=error&meta_error=${encodeURIComponent(upsertError.message)}`)
     }
 
-    return NextResponse.redirect(`${origin}/integracoes?meta=success`)
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><script>
+      if (window.opener) {
+        window.opener.postMessage('meta_oauth_success', '${origin}');
+        window.close();
+      } else {
+        window.location.href = '${origin}/integracoes?meta=success';
+      }
+    </script></body></html>`
+    return new Response(html, { headers: { 'Content-Type': 'text/html' } })
   } catch (err) {
     console.error('[META CB] catch:', err)
     return NextResponse.redirect(`${origin}/integracoes?meta=error`)

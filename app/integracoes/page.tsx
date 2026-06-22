@@ -143,6 +143,14 @@ function IntegracoesContent() {
   useEffect(() => { void loadData() }, [loadData])
 
   useEffect(() => {
+    function onMessage(e: MessageEvent) {
+      if (e.data === 'meta_oauth_success') void loadData()
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [loadData])
+
+  useEffect(() => {
     if (selectedDashboardId) void loadProjectAccounts(selectedDashboardId)
   }, [selectedDashboardId, loadProjectAccounts])
 
