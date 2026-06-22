@@ -15,6 +15,7 @@ type MeResponse = {
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
+  console.log('[META CALLBACK] params:', { code: !!searchParams.get('code'), state: searchParams.get('state'), error: searchParams.get('error') })
   const code = searchParams.get('code')
   const state = searchParams.get('state')
   const cookieStore = await cookies()
@@ -43,8 +44,10 @@ export async function GET(request: Request) {
 
     const tokenResponse = await fetch(tokenUrl, { cache: 'no-store' })
     if (!tokenResponse.ok) throw new Error(await tokenResponse.text())
-    const token = await tokenResponse.json() as TokenResponse
+    const tokenData = await tokenResponse.json() as TokenResponse & { error?: unknown }
+    const token = tokenData
     console.log('[META CB] token ok:', !!token.access_token)
+    console.log('[META CALLBACK] token response:', { hasToken: !!tokenData.access_token, error: tokenData.error })
 
     const meRes = await fetch(
       `https://graph.facebook.com/${META_API_VERSION}/me?fields=id,name&access_token=${encodeURIComponent(token.access_token)}`,
@@ -56,13 +59,15 @@ export async function GET(request: Request) {
     console.log('[META CB] userId from state:', userId)
     const supabase = await createRouteSupabase()
 
-    const { error: upsertError } = await supabase.from('meta_connections').upsert({
+    console.log('[META CALLBACK] inserindo no banco...', { user_id: userId })
+    const { data, error: upsertError } = await supabase.from('meta_connections').upsert({
       user_id: userId,
       access_token: token.access_token,
       meta_user_id: me.id || null,
       meta_user_name: me.name ?? null,
       status: 'connected',
-    }, { onConflict: 'user_id' })
+    }, { onConflict: 'user_id' }).select()
+    console.log('[META CALLBACK] resultado insert:', { data, error: upsertError })
     console.log('[META CB] upsert error:', upsertError)
 
     if (upsertError) {
