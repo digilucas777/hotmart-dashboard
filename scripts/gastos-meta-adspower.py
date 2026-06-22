@@ -117,7 +117,7 @@ def save_screenshot(sock, filename, msg_id):
 
 def extrair_gasto(sock, msg_id):
     resp = send_command(sock, "WebDriver:ExecuteScript", {
-        "script": "return document.body.innerText.substring(0, 8000);",
+        "script": "return document.body.innerText.substring(0, 20000);",
         "args": []
     }, msg_id=msg_id)
     idx = resp.find('"value":"')
@@ -132,7 +132,13 @@ def extrair_gasto(sock, msg_id):
         m = re.search(r'Total usado\s*\n(\$\s*[\d\.]+,\d+)', texto)
     if m:
         return m.group(1).strip()
+    # Colunas: Desempenho — ordem: $ORÇAMENTO\nDiário\n$GASTO
     valores = re.findall(r'\$\s*[\d\.]+,\d+\nDiário\n(\$\s*[\d\.]+,\d+)', texto)
+    if valores:
+        total = sum(parse_valor(v) for v in valores)
+        return f"${total:.2f}"
+    # Colunas: Vendas — ordem: $GASTO\n$ORÇAMENTO\nDiário
+    valores = re.findall(r'(\$\s*[\d\.]+,\d+)\n\$\s*[\d\.]+,\d+\nDiário', texto)
     if valores:
         total = sum(parse_valor(v) for v in valores)
         return f"${total:.2f}"

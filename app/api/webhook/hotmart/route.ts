@@ -31,14 +31,29 @@ async function getTokenHotmart(): Promise<string> {
 }
 
 async function fetchOrigemViaApi(hotmartId: string, token: string): Promise<string | null> {
-  const res = await fetch(
-    `https://developers.hotmart.com/payments/api/v1/sales/history?transaction=${encodeURIComponent(hotmartId)}`,
-    { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(10000) },
-  )
-  if (!res.ok) return null
-  const data = await res.json()
-  const purchase = (data?.items ?? [])[0]
-  return purchase?.tracking?.source ?? null
+  const buscar = async () => {
+    const res = await fetch(
+      `https://developers.hotmart.com/payments/api/v1/sales/history?transaction=${encodeURIComponent(hotmartId)}`,
+      { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(10000) },
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    const purchase = (data?.items ?? [])[0]
+    return purchase?.tracking?.source ?? null
+  }
+
+  // Primeira tentativa
+  let origem = await buscar()
+  if (origem) return origem
+
+  // Segunda tentativa após 5 segundos
+  await new Promise(r => setTimeout(r, 5000))
+  origem = await buscar()
+  if (origem) return origem
+
+  // Terceira tentativa após mais 10 segundos
+  await new Promise(r => setTimeout(r, 10000))
+  return await buscar()
 }
 
 const supabase = createClient(

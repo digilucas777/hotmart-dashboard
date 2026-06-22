@@ -45,7 +45,9 @@
       "mcp__adspower-local-api__get-browser-list",
       "mcp__adspower-local-api__open-browser",
       "mcp__adspower-local-api__navigate",
-      "mcp__adspower-local-api__connect-browser-with-ws"
+      "mcp__adspower-local-api__connect-browser-with-ws",
+      "PowerShell(py \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-User-hotmart-dashboard\\\\f6e7ce72-bce5-4fba-8f9d-3a415ed3c1ef\\\\scratchpad\\\\inserir_corrigido.py\")",
+      "Bash(npx vercel *)"
     ]
   }
 }

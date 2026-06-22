@@ -48,7 +48,7 @@ Pesquise para filtrar por: nome, identificação ou métrica
 Campanhas
 Conjuntos de anúncios
 Anúncios
-Ontem: 19 de jun de 2026
+Ontem: 21 de jun de 2026
 Criar
 Duplicar
 Editar
