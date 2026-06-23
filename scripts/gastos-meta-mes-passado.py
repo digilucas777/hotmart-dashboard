@@ -145,18 +145,18 @@ def extrair_gasto(sock, msg_id, debug_label="last"):
         return "0"
     texto = resp[idx+9:]
     texto = texto.rsplit('"', 1)[0].replace('\\n', '\n').replace('\\t', '\t')
-    m = re.search(r'(\$\s*[\d\.]+,\d+)\s*\nTotal usado', texto)
+    m = re.search(r'([$€]\s*[\d\.]+,\d+)\s*\nTotal usado', texto)
     if not m:
-        m = re.search(r'Total usado\s*\n(\$\s*[\d\.]+,\d+)', texto)
+        m = re.search(r'Total usado\s*\n([$€]\s*[\d\.]+,\d+)', texto)
     if m:
         return m.group(1).strip()
     # Colunas: Desempenho — ordem: $ORÇAMENTO\nDiário\n$GASTO
-    valores = re.findall(r'\$\s*[\d\.]+,\d+\nDiário\n(\$\s*[\d\.]+,\d+)', texto)
+    valores = re.findall(r'[$€]\s*[\d\.]+,\d+\nDiário\n([$€]\s*[\d\.]+,\d+)', texto)
     if valores:
         total = sum(parse_valor(v) for v in valores)
         return f"${total:.2f}"
     # Colunas: Vendas — ordem: $GASTO\n$ORÇAMENTO\nDiário
-    valores = re.findall(r'(\$\s*[\d\.]+,\d+)\n\$\s*[\d\.]+,\d+\nDiário', texto)
+    valores = re.findall(r'([$€]\s*[\d\.]+,\d+)\n[$€]\s*[\d\.]+,\d+\nDiário', texto)
     if valores:
         total = sum(parse_valor(v) for v in valores)
         return f"${total:.2f}"
@@ -169,13 +169,11 @@ def extrair_gasto(sock, msg_id, debug_label="last"):
 
 
 def parse_valor(raw_str):
-    match = re.search(r'\$\s*([\d]+[,\.][\d]+(?:[,\.][\d]+)?)', raw_str)
-    if match:
-        valor_str = match.group(1).replace(',', '.')
-        partes = valor_str.split('.')
-        if len(partes) > 2:
-            valor_str = ''.join(partes[:-1]) + '.' + partes[-1]
-        return float(valor_str)
+    if not raw_str or raw_str in ("NAO_ENCONTROU", "0"):
+        return 0.0
+    m = re.search(r'[\d\.]+,\d+', raw_str.replace(' ', ''))
+    if m:
+        return float(m.group().replace('.', '').replace(',', '.'))
     return 0.0
 
 
