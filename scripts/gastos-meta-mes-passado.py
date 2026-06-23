@@ -11,8 +11,9 @@ ADSPOWER_API = "http://127.0.0.1:50325"
 PROFILE_ID = "k1dpdc9g"
 
 SUPABASE_URL = "https://czuyzjlqliotwnzfllbe.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6dXl6amxxbGlvdHduemZsbGJlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODY4MTQ1MSwiZXhwIjoyMDk0MjU3NDUxfQ.dWkAVbyUm7I-PO4M_WBPENidrA4ewjrwHm-PM5LArZ8"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVEJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6dXl6amxxbGlvdHduemZsbGJlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODY4MTQ1MSwiZXhwIjoyMDk0MjU3NDUxfQ.dWkAVbyUm7I-PO4M_WBPENidrA4ewjrwHm-PM5LArZ8"
 
+# Lista fixa de BMs e contas conhecidas (usada como fallback e para nomes)
 BMS = [
     {"bm": "Libelula Sas", "bm_id": "354990903032853", "contas": [
         {"nome": "AN01", "id": "892566873700978"},
@@ -70,11 +71,14 @@ BMS = [
     ]},
 ]
 
-ontem = (date.today() - timedelta(days=1))
-ontem_str = ontem.strftime('%Y-%m-%d')
-hoje_str = date.today().strftime('%Y-%m-%d')
-date_param = f"{ontem_str}_{hoje_str}%2Cyesterday"
-print(f"Coletando gastos de: {ontem_str}")
+# --- Datas: mês anterior completo ---
+hoje = date.today()
+mes_ant_ultimo = hoje.replace(day=1) - timedelta(days=1)
+mes_ant_primeiro = mes_ant_ultimo.replace(day=1)
+data_inicio_str = mes_ant_primeiro.strftime('%Y-%m-%d')
+data_fim_str = mes_ant_ultimo.strftime('%Y-%m-%d')
+date_param = f"{data_inicio_str}_{data_fim_str}%2Clast_month"
+print(f"Coletando gastos de: {data_inicio_str} a {data_fim_str}")
 
 # --- Marionette helpers ---
 
@@ -131,7 +135,7 @@ def save_screenshot(sock, filename, msg_id):
         print(f"Screenshot falhou ({filename}):", shot_resp[:200])
 
 
-def extrair_gasto(sock, msg_id):
+def extrair_gasto(sock, msg_id, debug_label="last"):
     resp = send_command(sock, "WebDriver:ExecuteScript", {
         "script": "return document.body.innerText.substring(0, 20000);",
         "args": []
@@ -141,8 +145,6 @@ def extrair_gasto(sock, msg_id):
         return "0"
     texto = resp[idx+9:]
     texto = texto.rsplit('"', 1)[0].replace('\\n', '\n').replace('\\t', '\t')
-    with open("debug_last.txt", "w", encoding="utf-8", errors="ignore") as f:
-        f.write(texto)
     m = re.search(r'(\$\s*[\d\.]+,\d+)\s*\nTotal usado', texto)
     if not m:
         m = re.search(r'Total usado\s*\n(\$\s*[\d\.]+,\d+)', texto)
@@ -158,8 +160,12 @@ def extrair_gasto(sock, msg_id):
     if valores:
         total = sum(parse_valor(v) for v in valores)
         return f"${total:.2f}"
+    # Salva debug quando não encontra
+    safe = re.sub(r'[^A-Za-z0-9_-]', '_', debug_label)
+    with open(f"debug_{safe}.txt", "w", encoding="utf-8", errors="ignore") as f:
+        f.write(texto)
+    print(f"  ⚠ NAO_ENCONTROU — debug salvo em debug_{safe}.txt")
     return "NAO_ENCONTROU"
-
 
 
 def parse_valor(raw_str):
@@ -171,6 +177,40 @@ def parse_valor(raw_str):
             valor_str = ''.join(partes[:-1]) + '.' + partes[-1]
         return float(valor_str)
     return 0.0
+
+
+def descobrir_contas_bm(sock, bm_id, bm_nome, msg_id):
+    """Navega no Ads Manager do BM e extrai todos os IDs de contas via links."""
+    url = f"https://adsmanager.facebook.com/adsmanager/manage/campaigns?business_id={bm_id}&global_scope_id={bm_id}"
+    send_command(sock, "WebDriver:Navigate", {"url": url}, msg_id=msg_id)
+    msg_id += 1
+    for _ in range(15):
+        time.sleep(2)
+        check = send_command(sock, "WebDriver:ExecuteScript", {
+            "script": "return document.body.innerText.substring(0, 3000);",
+            "args": []
+        }, msg_id=msg_id)
+        msg_id += 1
+        if '"value":"' in check and len(check) > 400:
+            break
+    resp = send_command(sock, "WebDriver:ExecuteScript", {
+        "script": """
+            var ids = [];
+            document.querySelectorAll('a[href]').forEach(function(a) {
+                var m = a.href.match(/[?&]act=(\\d+)/);
+                if (m && ids.indexOf(m[1]) === -1) ids.push(m[1]);
+            });
+            return ids.join(',');
+        """,
+        "args": []
+    }, msg_id=msg_id)
+    msg_id += 1
+    idx = resp.find('"value":"')
+    if idx < 0:
+        return None, msg_id
+    raw = resp[idx+9:].rsplit('"', 1)[0]
+    ids = [x.strip() for x in raw.split(',') if x.strip() and x.strip().isdigit()]
+    return (ids if ids else None), msg_id
 
 
 # --- Abre o perfil AdsPower ---
@@ -200,13 +240,34 @@ session_resp = send_command(sock, "WebDriver:NewSession", {
 }, msg_id=1)
 print("Sessão criada:", session_resp[:200])
 
-# --- Coleta gastos por conta ---
+# --- Descobre todas as contas de cada BM ---
 
 msg_id = 2
+print("\nDescobindo contas em todos os BMs...")
+BMS_ATIVO = []
+for bm_info in BMS:
+    ids_encontrados, msg_id = descobrir_contas_bm(sock, bm_info["bm_id"], bm_info["bm"], msg_id)
+    hardcoded_por_id = {c["id"]: c["nome"] for c in bm_info["contas"]}
+    if ids_encontrados:
+        novos = [x for x in ids_encontrados if x not in hardcoded_por_id]
+        if novos:
+            print(f"  {bm_info['bm']}: +{len(novos)} contas novas → {novos}")
+        todos_ids = list(hardcoded_por_id.keys()) + novos
+        contas = [{"nome": hardcoded_por_id.get(cid, cid), "id": cid} for cid in todos_ids]
+    else:
+        print(f"  {bm_info['bm']}: usando lista fixa ({len(bm_info['contas'])} contas)")
+        contas = bm_info["contas"]
+    BMS_ATIVO.append({"bm": bm_info["bm"], "bm_id": bm_info["bm_id"], "contas": contas})
+
+total_contas = sum(len(b["contas"]) for b in BMS_ATIVO)
+print(f"Total: {len(BMS_ATIVO)} BMs, {total_contas} contas\n")
+
+# --- Coleta gastos por conta ---
+
 gastos_detalhados = []
 total_usd = 0.0
 
-for bm_info in BMS:
+for bm_info in BMS_ATIVO:
     bm_nome = bm_info["bm"]
     for conta in bm_info["contas"]:
         conta_nome = conta["nome"]
@@ -218,7 +279,16 @@ for bm_info in BMS:
 
         print(f"\n[{bm_nome} | {conta_nome}] Aguardando carregar...")
 
-        time.sleep(12)
+        # Aguarda a tabela carregar (até 30s), verificando a cada 2s
+        for _ in range(15):
+            time.sleep(2)
+            check = send_command(sock, "WebDriver:ExecuteScript", {
+                "script": "return document.body.innerText.substring(0, 5000);",
+                "args": []
+            }, msg_id=msg_id)
+            msg_id += 1
+            if '$' in check and 'Carregando' not in check:
+                break
 
         fechar_popups(sock, msg_id)
         msg_id += 1
@@ -227,9 +297,7 @@ for bm_info in BMS:
         fechar_popups(sock, msg_id)
         msg_id += 1
 
-        time.sleep(3)
-
-        raw = extrair_gasto(sock, msg_id)
+        raw = extrair_gasto(sock, msg_id, debug_label=f"{bm_nome}_{conta_nome}")
         msg_id += 1
 
         gasto = parse_valor(raw)
@@ -243,21 +311,14 @@ sock.close()
 
 # --- Resumo por BM ---
 print("\n=== RESUMO POR BM ===")
-for bm_info in BMS:
+for bm_info in BMS_ATIVO:
     bm_nome = bm_info["bm"]
     subtotal = sum(g["gasto"] for g in gastos_detalhados if g["bm"] == bm_nome)
     print(f"  {bm_nome}: ${subtotal:.2f}")
 
 print(f"\nTotal USD: ${total_usd:.2f}")
 
-print("\nDeseja inserir esses gastos no dashboard? (s/n): ", end="")
-confirmacao = input().strip().lower()
-if confirmacao != 's':
-    print("Inserção cancelada.")
-    sock.close()
-    exit(0)
-
-# --- Taxa de câmbio ---
+# --- Taxa de câmbio (para exibir BRL no resumo) ---
 try:
     rate_resp = requests.get("https://hotmart-dashboard-woad.vercel.app/api/exchange-rate", timeout=10).json()
     rate = rate_resp.get("rate", 5.85)
@@ -266,66 +327,12 @@ except Exception as e:
     rate = 5.85
 
 total_brl = total_usd * rate
-print(f"Taxa: R$ {rate:.2f}")
-print(f"Total BRL: R$ {total_brl:.2f}")
-
-# --- Supabase: busca projeto ---
-headers = {
-    "apikey": SUPABASE_KEY,
-    "Authorization": f"Bearer {SUPABASE_KEY}",
-    "Content-Type": "application/json",
-}
-
-projeto_id = "1e173ac3-0754-4967-8294-81afefb7a045"
-projeto_nome = "Tráfego Pedro Inglês"
-
-# --- Monta descrição detalhada ---
-linhas = [f"Gastos Meta Ads - {ontem}"]
-for bm_info in BMS:
-    bm_nome = bm_info["bm"]
-    contas_bm = [g for g in gastos_detalhados if g["bm"] == bm_nome]
-    subtotal = sum(g["gasto"] for g in contas_bm)
-    linhas.append(f"\n{bm_nome} (${subtotal:.2f}):")
-    for g in contas_bm:
-        if g["gasto"] > 0:
-            linhas.append(f"  {g['conta']}: ${g['gasto']:.2f}")
-linhas.append(f"\nTotal: ${total_usd:.2f} × {rate:.2f} = R${total_brl:.2f}")
-descricao = "\n".join(linhas)
-
-# --- INSERT no Supabase ---
-payload = {
-    "data": ontem_str,
-    "valor": round(total_usd, 2),
-    "moeda": "USD",
-    "descricao": descricao,
-}
-if projeto_id:
-    payload["projeto_id"] = projeto_id
-
-insert_resp = requests.post(
-    f"{SUPABASE_URL}/rest/v1/custos_manuais",
-    headers={**headers, "Prefer": "return=representation"},
-    json=payload,
-    timeout=10,
-)
-
-if insert_resp.status_code in (200, 201):
-    print(f"\nInserido no projeto: {projeto_nome}")
-    print(insert_resp.json())
-else:
-    print(f"\nErro ao inserir no Supabase: {insert_resp.status_code}")
-    print(insert_resp.text[:500])
-
-print(f"\n=== FINAL ===")
-print(f"Total USD: ${total_usd:.2f}")
-print(f"Taxa: R$ {rate:.2f}")
-print(f"Total BRL: R$ {total_brl:.2f}")
-print(f"Inserido no projeto: {projeto_nome}")
+print(f"Taxa: R$ {rate:.2f} | Total BRL: R$ {total_brl:.2f}")
 
 
-def gerar_resumo_whatsapp(bms, total_usd, rate, ontem_str):
+def gerar_resumo_whatsapp(bms, total_usd, rate, data_str):
     total_brl = total_usd * rate
-    data_fmt = datetime.strptime(ontem_str, '%Y-%m-%d').strftime('%d/%m/%Y')
+    data_fmt = datetime.strptime(data_str, '%Y-%m-%d').strftime('%m/%Y')
     linhas = []
     linhas.append(f"📊 *Tráfego Pedro — {data_fmt}*")
     linhas.append(f"💰 *Total: ${total_usd:,.2f} × {rate:.2f} = R$ {total_brl:,.2f}*")
@@ -343,7 +350,7 @@ def gerar_resumo_whatsapp(bms, total_usd, rate, ontem_str):
     return '\n'.join(linhas)
 
 
-resumo = gerar_resumo_whatsapp(BMS, total_usd, rate, ontem_str)
+resumo = gerar_resumo_whatsapp(BMS_ATIVO, total_usd, rate, data_inicio_str)
 print("\n" + "="*50)
 print("RESUMO WHATSAPP (copiado para clipboard):")
 print("="*50)
