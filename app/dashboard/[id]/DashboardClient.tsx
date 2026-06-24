@@ -515,7 +515,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
   const [showCustoModal, setShowCustoModal] = useState(false)
   const [custoManualList, setCustoManualList] = useState<CustoManual[]>([])
-  const [custoManualTotal, setCustoManualTotal] = useState(0)
+  const [custoManualRaw, setCustoManualRaw] = useState<{ valor: number; moeda: string }[]>([])
   const [custoForm, setCustoForm] = useState({ valor: '', moeda: 'USD', data: '', descricao: '' })
   const [savingCusto, setSavingCusto] = useState(false)
   const [deletingCustoId, setDeletingCustoId] = useState<string | null>(null)
@@ -746,13 +746,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         .order('data', { ascending: false })
         .limit(10),
     ])
-    const total = ((periodRes.data ?? []) as { valor: number; moeda: string }[]).reduce((sum, r) => {
-      const brl = r.moeda === 'BRL' ? r.valor : r.valor * exchangeRate
-      return sum + brl
-    }, 0)
-    setCustoManualTotal(total)
+    setCustoManualRaw((periodRes.data ?? []) as { valor: number; moeda: string }[])
     setCustoManualList((historyRes.data ?? []) as CustoManual[])
-  }, [projectId, period, customDateRange, exchangeRate])
+  }, [projectId, period, customDateRange])
 
   useEffect(() => {
     void fetchCustosManuals()
@@ -1456,6 +1452,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     if (afiliadosFilter.length > 0) result = result.filter(v => v.afiliado_nome != null && afiliadosFilter.includes(v.afiliado_nome))
     return result
   }, [combinedVendas, origensFilter, afiliadosFilter])
+  const custoManualTotal = useMemo(
+    () => custoManualRaw.reduce((sum, r) => sum + (r.moeda === 'BRL' ? r.valor : r.valor * exchangeRate), 0),
+    [custoManualRaw, exchangeRate],
+  )
   const displayCustoTotal = custoManualTotal
   const approvedRecentVendas = recentVendas.filter(v => v.status === 'approved')
   const latestSale = approvedRecentVendas[0]
