@@ -13,6 +13,7 @@ import {
   Loader2,
   MousePointerClick,
   Pencil,
+  Plug,
   RefreshCw,
   Target,
   TrendingUp,
