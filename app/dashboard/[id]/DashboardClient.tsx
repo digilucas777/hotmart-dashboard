@@ -1519,8 +1519,16 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
   }
 
+  function parseCurrencyInput(value: string): number {
+    const cleaned = value.replace(/[^\d.,]/g, '')
+    if (cleaned.includes(',')) {
+      return parseFloat(cleaned.replace(/\./g, '').replace(',', '.'))
+    }
+    return parseFloat(cleaned.replace(/,/g, ''))
+  }
+
   async function saveCusto() {
-    const valor = parseFloat(custoForm.valor.replace(',', '.'))
+    const valor = parseCurrencyInput(custoForm.valor)
     if (!custoForm.data || isNaN(valor) || valor <= 0) return
     setSavingCusto(true)
     await supabase.from('custos_manuais').insert({
@@ -2208,12 +2216,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             <div>
               <label className="mb-1 block text-xs font-semibold text-[var(--dash-muted)]">Valor *</label>
               <input
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={custoForm.valor}
                 onChange={e => setCustoForm(f => ({ ...f, valor: e.target.value }))}
-                placeholder="0.00"
+                placeholder="0,00 ou 1.884,79"
                 className="h-9 w-full rounded-lg border border-white/10 bg-[#121221] px-3 text-sm text-slate-200 outline-none focus:border-indigo-500/60"
               />
             </div>
@@ -2286,9 +2293,13 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                         <td className="py-1.5 pr-2 text-slate-400">{c.descricao ?? '—'}</td>
                         <td className="py-1.5 text-right">
                           <button
-                            onClick={() => void deleteCusto(c.id)}
+                            onClick={() => {
+                              if (window.confirm('Tem certeza que deseja excluir este custo?')) {
+                                void deleteCusto(c.id)
+                              }
+                            }}
                             disabled={deletingCustoId === c.id}
-                            className="text-red-400/70 hover:text-red-400 disabled:opacity-40"
+                            className="text-slate-600 hover:text-red-400 disabled:opacity-40 transition-colors"
                           >
                             {deletingCustoId === c.id ? <Spinner size={11} /> : <Trash2 size={11} />}
                           </button>
