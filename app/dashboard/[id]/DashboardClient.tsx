@@ -527,7 +527,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [custoForm, setCustoForm] = useState({ valor: '', moeda: 'USD', data: '', descricao: '' })
   const [savingCusto, setSavingCusto] = useState(false)
   const [deletingCustoId, setDeletingCustoId] = useState<string | null>(null)
-  const [pullingMetaSpend, setPullingMetaSpend] = useState(false)
 
   const [origensDisponiveis, setOrigensDisponiveis] = useState<string[]>([])
   const [origensFilter, setOrigensFilter] = useState<string[]>([])
@@ -1551,30 +1550,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setDeletingCustoId(null)
   }
 
-  async function pullMetaSpend() {
-    setPullingMetaSpend(true)
-    try {
-      const { from, to } = getPeriodRange(period, customDateRange)
-      const since = from.toISOString().split('T')[0]!
-      const until = new Date(to.getTime() - 1).toISOString().split('T')[0]!
-      const res = await fetch('/api/meta/pull-spend', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projeto_id: projectId, since, until }),
-      })
-      const json = await res.json() as { total_usd?: number; dias?: number; error?: string }
-      if (!res.ok) throw new Error(json.error ?? 'Erro ao puxar gastos')
-      const totalFormatted = (json.total_usd ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-      setSuccessToast(`Meta Ads: $${totalFormatted} USD salvos (${json.dias ?? 0} dias)`)
-      setTimeout(() => setSuccessToast(null), 6000)
-      await fetchCustosManuals()
-    } catch (err) {
-      console.error('[pullMetaSpend]', err)
-    } finally {
-      setPullingMetaSpend(false)
-    }
-  }
-
   const handleDashboardDragEnd = useCallback(async (event: DragEndEvent) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -2041,18 +2016,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               >
                 <Receipt size={13} />
                 Inserir custo
-              </Button>
-            )}
-            {!editMode && linkedMetaAccountIds.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void pullMetaSpend()}
-                disabled={pullingMetaSpend}
-                className="shrink-0"
-              >
-                {pullingMetaSpend ? <Spinner size={13} /> : <RefreshCw size={13} />}
-                Puxar gastos Meta Ads
               </Button>
             )}
           </div>
