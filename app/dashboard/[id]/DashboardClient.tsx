@@ -473,7 +473,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true)
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null)
   const [nowTick, setNowTick] = useState(() => Date.now())
-  const [custoTotal, setCustoTotal] = useState(0)
 
   const [widgets, setWidgets] = useState<WidgetConfig[]>([])
   const [loadingWidgets, setLoadingWidgets] = useState(true)
@@ -726,21 +725,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   useEffect(() => {
     void Promise.resolve().then(fetchVendas)
   }, [fetchVendas])
-
-  const fetchCustos = useCallback(async () => {
-    const { from, to } = getPeriodRange(period, customDateRange)
-    const { data } = await supabase
-      .from('projeto_custos')
-      .select('custo_brl')
-      .eq('projeto_id', projectId)
-      .gte('data', from.toISOString().split('T')[0])
-      .lt('data', to.toISOString().split('T')[0])
-    setCustoTotal((data ?? []).reduce((sum: number, row: { custo_brl: number }) => sum + (row.custo_brl ?? 0), 0))
-  }, [projectId, period, customDateRange])
-
-  useEffect(() => {
-    void Promise.resolve().then(fetchCustos)
-  }, [fetchCustos])
 
   const fetchCustosManuals = useCallback(async () => {
     const { from, to } = getPeriodRange(period, customDateRange)
@@ -1470,7 +1454,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     if (afiliadosFilter.length > 0) result = result.filter(v => v.afiliado_nome != null && afiliadosFilter.includes(v.afiliado_nome))
     return result
   }, [combinedVendas, origensFilter, afiliadosFilter])
-  const displayCustoTotal = custoTotal + custoManualTotal
+  const displayCustoTotal = custoManualTotal
   const approvedRecentVendas = recentVendas.filter(v => v.status === 'approved')
   const latestSale = approvedRecentVendas[0]
   const countryDisplay = (country?: string | null) => {
