@@ -728,8 +728,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
   const fetchCustosManuals = useCallback(async () => {
     const { from, to } = getPeriodRange(period, customDateRange)
-    const fromDate = from.toISOString().split('T')[0]
-    const toDate = new Date(to.getTime() - 1).toISOString().split('T')[0]
+    const toLocalDate = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const fromDate = toLocalDate(from)
+    const toDate = toLocalDate(new Date(to.getTime() - 1))
     const [periodRes, historyRes] = await Promise.all([
       supabase
         .from('custos_manuais')

@@ -487,8 +487,10 @@ export default function RelatoriosPage() {
       setCustoManualBRL(0)
       if (!form.projeto_id) return
       const { from, to } = reportRange(form.periodo, customFrom, customTo)
-      const fromStr = from.toISOString().split('T')[0]!
-      const toStr = new Date(to.getTime() - 1).toISOString().split('T')[0]!
+      const toLocalDate = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      const fromStr = toLocalDate(from)
+      const toStr = toLocalDate(new Date(to.getTime() - 1))
       const { data: custosManuals } = await supabase
         .from('custos_manuais')
         .select('valor, moeda')
