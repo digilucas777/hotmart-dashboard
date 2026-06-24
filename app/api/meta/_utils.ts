@@ -29,11 +29,6 @@ export async function getAuthenticatedUser() {
   return { supabase, user, error }
 }
 
-export function metaRedirectUri(request: Request) {
-  const { origin } = new URL(request.url)
-  return `${origin}/api/meta/oauth/callback`
-}
-
 export async function metaFetch<T>(path: string, accessToken: string): Promise<T> {
   const separator = path.includes('?') ? '&' : '?'
   const response = await fetch(`https://graph.facebook.com/${META_API_VERSION}${path}${separator}access_token=${encodeURIComponent(accessToken)}`, {

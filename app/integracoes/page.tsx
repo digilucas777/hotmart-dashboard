@@ -1,7 +1,6 @@
 'use client'
 
-import { Suspense, useCallback, useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useCallback, useEffect, useState } from 'react'
 import {
   BarChart3,
   Boxes,
@@ -14,9 +13,7 @@ import {
   Loader2,
   MousePointerClick,
   Pencil,
-  Plug,
   RefreshCw,
-  ShieldCheck,
   Target,
   TrendingUp,
   Trash2,
@@ -76,11 +73,6 @@ function accountStatusLabel(status?: number): string {
 }
 
 function IntegracoesContent() {
-  const searchParams = useSearchParams()
-  const metaParam = searchParams.get('meta')
-  const metaError = metaParam === 'error' ? 'Falha na conexão com Meta Ads.' : searchParams.get('meta_error')
-  const metaJustConnected = metaParam === 'success' || metaParam === 'connected'
-
   const [connections, setConnections] = useState<Connection[] | undefined>(undefined)
   const [businesses, setBusinesses] = useState<BizManager[]>([])
   const [selectedBmId, setSelectedBmId] = useState<string | null>(null)
@@ -143,25 +135,8 @@ function IntegracoesContent() {
   useEffect(() => { void loadData() }, [loadData])
 
   useEffect(() => {
-    function onMessage(e: MessageEvent) {
-      if (e.data === 'meta_oauth_success') void loadData()
-    }
-    window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
-  }, [loadData])
-
-  useEffect(() => {
     if (selectedDashboardId) void loadProjectAccounts(selectedDashboardId)
   }, [selectedDashboardId, loadProjectAccounts])
-
-  useEffect(() => {
-    if (metaJustConnected || metaError) {
-      const t = setTimeout(() => {
-        window.history.replaceState({}, '', '/integracoes')
-      }, 100)
-      return () => clearTimeout(t)
-    }
-  }, [metaJustConnected, metaError])
 
   function toggleAccount(accId: string) {
     setSelectedAccountIds(prev => {
@@ -277,15 +252,6 @@ function IntegracoesContent() {
 
       <main className="mx-auto max-w-[1400px] px-6 py-10">
         {/* Alerts */}
-        {(metaJustConnected || metaError) && (
-          <div className={`mb-6 rounded-2xl border px-4 py-3 text-sm font-bold ${
-            metaJustConnected
-              ? 'border-cyan-300/20 bg-cyan-300/10 text-cyan-100'
-              : 'border-red-400/20 bg-red-500/10 text-red-200'
-          }`}>
-            {metaJustConnected ? 'Meta conectado! Dê um nome à nova conexão e sincronize as contas.' : `Falha na conexão Meta: ${metaError}`}
-          </div>
-        )}
         {saveSuccess && (
           <div className="mb-6 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm font-bold text-emerald-200">
             Vínculo salvo com sucesso!
@@ -295,18 +261,14 @@ function IntegracoesContent() {
         {/* Intro grid */}
         <section className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
           <div className="rounded-[2rem] border border-[var(--dash-border)] bg-[var(--dash-panel)] p-7 shadow-[var(--dash-shadow)]">
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-bold text-cyan-200">
-              <ShieldCheck size={14} />
-              OAuth Meta real
-            </div>
-            <h2 className="text-3xl font-black">Conecte Facebook, BMs e contas por dashboard.</h2>
+            <h2 className="text-3xl font-black">Gerencie BMs e contas de anúncio por dashboard.</h2>
             <p className="mt-4 text-sm leading-7 text-[var(--dash-muted)]">
-              Conecte o Facebook, escolha o Business Manager, selecione as contas de anúncio (múltiplas) e vincule ao dashboard do cliente.
+              Selecione o Business Manager, escolha as contas de anúncio (múltiplas) e vincule ao dashboard do cliente.
             </p>
             <div className="mt-7 grid gap-3 sm:grid-cols-2">
-              {['Facebook OAuth', 'Business Managers', 'Múltiplas contas', 'Vínculo por dashboard', 'Métricas Meta Ads', 'Criativos destaque'].map((item, i) => (
+              {['Business Managers', 'Múltiplas contas', 'Vínculo por dashboard', 'Métricas Meta Ads', 'Criativos destaque'].map((item, i) => (
                 <div key={item} className="flex items-center gap-2 rounded-2xl border border-[var(--dash-border)] bg-white/5 px-4 py-3 text-sm font-bold">
-                  <CheckCircle2 size={15} className={i < 4 ? 'text-cyan-300' : 'text-violet-300'} />
+                  <CheckCircle2 size={15} className={i < 3 ? 'text-cyan-300' : 'text-violet-300'} />
                   {item}
                 </div>
               ))}
@@ -332,13 +294,6 @@ function IntegracoesContent() {
         <section className="mt-8">
           <div className="mb-3 flex items-center justify-between gap-4">
             <h2 className="text-sm font-black uppercase tracking-wider text-[var(--dash-faint)]">Contas Meta conectadas</h2>
-            <button
-              onClick={() => window.open('/api/meta/oauth/start', 'meta_oauth', 'width=600,height=700,scrollbars=yes')}
-              className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-2.5 text-sm font-black text-white"
-            >
-              <Plug size={14} />
-              Conectar nova conta Meta
-            </button>
           </div>
 
           {pageLoading ? (
@@ -412,13 +367,6 @@ function IntegracoesContent() {
                       }`}>
                         {conn.is_active !== false ? 'Ativo' : 'Inativo'}
                       </span>
-                      <button
-                        onClick={() => window.open('/api/meta/oauth/start', 'meta_oauth', 'width=600,height=700,scrollbars=yes')}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--dash-border)] bg-white/5 px-3 py-2 text-xs font-bold text-[var(--dash-muted)] transition-colors hover:text-[var(--dash-text)]"
-                      >
-                        <RefreshCw size={12} />
-                        Reconectar
-                      </button>
                       <button
                         onClick={() => void removeConnection(conn.id)}
                         disabled={removingId === conn.id}
@@ -653,7 +601,7 @@ function IntegracoesContent() {
             <div>
               <h2 className="text-2xl font-black">Insights rápidos sem rolar colunas no gerenciador.</h2>
               <p className="mt-2 text-sm text-[var(--dash-muted)]">
-                Conecte Meta OAuth, selecione múltiplas contas de anúncio e os widgets Meta exibem dados consolidados automaticamente.
+                Selecione múltiplas contas de anúncio e os widgets Meta exibem dados consolidados automaticamente.
               </p>
             </div>
             <div className="grid min-w-80 grid-cols-3 gap-3">
@@ -675,9 +623,5 @@ function IntegracoesContent() {
 }
 
 export default function IntegracoesPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-[var(--dash-bg)]" />}>
-      <IntegracoesContent />
-    </Suspense>
-  )
+  return <IntegracoesContent />
 }
