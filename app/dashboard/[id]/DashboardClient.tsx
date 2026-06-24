@@ -48,7 +48,6 @@ import { EditWidgetModal } from '@/components/dashboard/EditWidgetModal'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
-import type { MetaCreativeResult, MetaCampaignResult } from '@/lib/meta-ads-mock'
 
 const GRID_COLUMNS = 12
 const LAYOUT_STORAGE_PREFIX = 'dashboard-layout:'
@@ -502,12 +501,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [savingProducts, setSavingProducts] = useState(false)
   const [loadingProducts, setLoadingProducts] = useState(false)
 
-  const [linkedMetaAccountIds, setLinkedMetaAccountIds] = useState<string[]>([])
-  const linkedMetaAccountId = linkedMetaAccountIds[0] ?? null
-  const [metaCacheUpdatedAt, setMetaCacheUpdatedAt] = useState<string | null>(null)
-  const [metaInsights, setMetaInsights] = useState<Record<string, unknown> | null>(null)
-  const [metaAds, setMetaAds] = useState<MetaCreativeResult | null>(null)
-  const [metaCampaigns, setMetaCampaigns] = useState<MetaCampaignResult | null>(null)
   const [showClearModal, setShowClearModal] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [successToast, setSuccessToast] = useState<string | null>(null)
@@ -608,85 +601,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       })
   }, [projectId])
 
-  useEffect(() => {
-    async function loadLinkedAccounts() {
-      // Load all linked ad accounts for this project
-      const { data: pa } = await supabase
-        .from('meta_project_accounts')
-        .select('account_id')
-        .eq('projeto_id', projectId)
-        .order('created_at', { ascending: true })
-      const ids = ((pa ?? []) as { account_id: string }[]).map(r => r.account_id).filter(Boolean)
-      if (ids.length > 0) { setLinkedMetaAccountIds(ids); return }
-
-      // Fallback: legacy account_id stored in meta_connections
-      const { data: mc } = await supabase
-        .from('meta_connections')
-        .select('account_id')
-        .eq('projeto_id', projectId)
-        .eq('status', 'connected')
-        .maybeSingle()
-      const legacyId = (mc as { account_id: string | null } | null)?.account_id
-      setLinkedMetaAccountIds(legacyId ? [legacyId] : [])
-    }
-    void loadLinkedAccounts()
-  }, [projectId])
-
-  useEffect(() => {
-    if (linkedMetaAccountIds.length === 0) { setMetaInsights(null); return }
-    const presetMap: Partial<Record<string, string>> = {
-      today: 'today', yesterday: 'yesterday',
-      thisWeek: 'this_week_mon_today', lastWeek: 'last_week_mon_sun',
-      thisMonth: 'this_month', lastMonth: 'last_month',
-      last7d: 'last_7d', last30d: 'last_30d',
-    }
-    const preset = presetMap[period]
-    if (!preset) { setMetaInsights(null); return }
-    // The API consolidates all linked accounts internally when given projeto_id — call once only
-    fetch(`/api/meta/insights?date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' })
-      .then(r => {
-        if (r.ok) {
-          const updatedAt = r.headers.get('X-Cache-Updated-At')
-          if (updatedAt) setMetaCacheUpdatedAt(updatedAt)
-          return r.json() as Promise<Record<string, unknown>>
-        }
-        return null
-      })
-      .then(data => setMetaInsights(data))
-      .catch(() => setMetaInsights(null))
-  }, [linkedMetaAccountIds, period, projectId])
-
-  useEffect(() => {
-    if (linkedMetaAccountIds.length === 0) { setMetaAds(null); return }
-    const presetMap: Partial<Record<string, string>> = {
-      today: 'today', yesterday: 'yesterday',
-      thisWeek: 'this_week_mon_today', lastWeek: 'last_week_mon_sun',
-      thisMonth: 'this_month', lastMonth: 'last_month',
-      last7d: 'last_7d', last30d: 'last_30d',
-    }
-    const preset = presetMap[period]
-    if (!preset) { setMetaAds(null); return }
-    fetch(`/api/meta/ads?date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' })
-      .then(r => r.ok ? r.json() as Promise<MetaCreativeResult> : null)
-      .then(data => setMetaAds(data))
-      .catch(() => setMetaAds(null))
-  }, [linkedMetaAccountIds, period, projectId])
-
-  useEffect(() => {
-    if (linkedMetaAccountIds.length === 0) { setMetaCampaigns(null); return }
-    const presetMap: Partial<Record<string, string>> = {
-      today: 'today', yesterday: 'yesterday',
-      thisWeek: 'this_week_mon_today', lastWeek: 'last_week_mon_sun',
-      thisMonth: 'this_month', lastMonth: 'last_month',
-      last7d: 'last_7d', last30d: 'last_30d',
-    }
-    const preset = presetMap[period]
-    if (!preset) { setMetaCampaigns(null); return }
-    fetch(`/api/meta/campaigns?date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' })
-      .then(r => r.ok ? r.json() as Promise<MetaCampaignResult> : null)
-      .then(data => setMetaCampaigns(data))
-      .catch(() => setMetaCampaigns(null))
-  }, [linkedMetaAccountIds, period, projectId])
 
   const filterRowsByOfferSelection = useCallback((
     rows: Venda[],
@@ -858,38 +772,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     void fetchCustosManuals()
   }, [fetchCustosManuals])
 
-  const fetchMetaAds = useCallback(async () => {
-    if (linkedMetaAccountIds.length === 0) return
-    const presetMap: Partial<Record<string, string>> = {
-      today: 'today', yesterday: 'yesterday',
-      thisWeek: 'this_week_mon_today', lastWeek: 'last_week_mon_sun',
-      thisMonth: 'this_month', lastMonth: 'last_month',
-      last7d: 'last_7d', last30d: 'last_30d',
-    }
-    const preset = presetMap[period]
-    if (!preset) return
-    await Promise.all([
-      supabase.from('meta_insights_cache').delete().eq('projeto_id', projectId).eq('date_preset', preset),
-      supabase.from('meta_ads_cache').delete().eq('projeto_id', projectId).eq('date_preset', preset),
-    ])
-    // The API consolidates all linked accounts internally — call once per endpoint with projeto_id
-    const [insightsRes, adsRes, campaignsRes] = await Promise.all([
-      fetch(`/api/meta/insights?date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' }),
-      fetch(`/api/meta/ads?date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' }),
-      fetch(`/api/meta/campaigns?date_preset=${preset}&projeto_id=${encodeURIComponent(projectId)}`, { cache: 'no-store' }),
-    ])
-    if (insightsRes.ok) {
-      const updatedAt = insightsRes.headers.get('X-Cache-Updated-At')
-      if (updatedAt) setMetaCacheUpdatedAt(updatedAt)
-      setMetaInsights(await insightsRes.json() as Record<string, unknown>)
-    } else {
-      setMetaInsights(null)
-    }
-    if (adsRes.ok) setMetaAds(await adsRes.json() as MetaCreativeResult)
-    else setMetaAds(null)
-    if (campaignsRes.ok) setMetaCampaigns(await campaignsRes.json() as MetaCampaignResult)
-    else setMetaCampaigns(null)
-  }, [linkedMetaAccountIds, period, projectId])
 
   const fetchHotmartOrigens = useCallback(async () => {
     const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000).toISOString()
@@ -922,13 +804,13 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
     try {
-      await Promise.all([fetchVendas(), fetchMetaAds()])
+      await fetchVendas()
       setSuccessToast('Dados atualizados')
       setTimeout(() => setSuccessToast(null), 5000)
     } finally {
       setIsRefreshing(false)
     }
-  }, [fetchVendas, fetchMetaAds])
+  }, [fetchVendas])
 
   useEffect(() => {
     async function loadOrigens() {
@@ -1787,8 +1669,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               customTo={customTo}
               updatedAt={lastUpdatedAt}
               onCustomChange={(from, to) => { setCustomFrom(from); setCustomTo(to) }}
-              hasMetaAds={!!linkedMetaAccountId}
-              metaCacheUpdatedAt={metaCacheUpdatedAt}
             />
           </div>
           <div className="flex flex-row flex-wrap gap-2 lg:contents">
@@ -2081,10 +1961,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             onDelete={deleteWidget}
             onDuplicate={editMode ? duplicateWidget : undefined}
             onEdit={editMode ? setEditingWidgetId : undefined}
-            linkedMetaAccountId={linkedMetaAccountId}
-            metaInsights={metaInsights}
-            metaAds={metaAds}
-            metaCampaigns={metaCampaigns}
+            linkedMetaAccountId={null}
+            metaInsights={null}
+            metaAds={null}
+            metaCampaigns={null}
           />
           <aside className="dashboard-panel fixed right-4 top-28 z-20 hidden max-h-[calc(100vh-8rem)] w-56 overflow-y-auto rounded-xl p-2 xl:block">
             <div className="mb-2 flex items-center gap-2 rounded-lg border border-emerald-400/12 bg-emerald-400/[0.04] px-2 py-1.5">
