@@ -67,10 +67,20 @@ export async function POST(req: NextRequest) {
   }))
 
   if (rows.length > 0) {
-    const { error } = await supabase
+    // Remove registros meta_ads existentes no período antes de inserir
+    const { error: delError } = await supabase
       .from('custos_manuais')
-      .upsert(rows, { onConflict: 'projeto_id,data,origem' })
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      .delete()
+      .eq('projeto_id', PROJECT_ID)
+      .eq('origem', 'meta_ads')
+      .gte('data', since)
+      .lte('data', until)
+    if (delError) return NextResponse.json({ error: delError.message }, { status: 500 })
+
+    const { error: insError } = await supabase
+      .from('custos_manuais')
+      .insert(rows)
+    if (insError) return NextResponse.json({ error: insError.message }, { status: 500 })
   }
 
   const totalUSD = rows.reduce((sum, r) => sum + r.valor, 0)
