@@ -768,16 +768,21 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     const rows = (data ?? []) as { id: string; hotmart_id: string }[]
     if (rows.length === 0) return
 
+    const deadline = Date.now() + 30_000
     for (const row of rows) {
+      if (Date.now() > deadline) break
       try {
-        const res = await fetch(`/api/hotmart/sync-origem?transaction=${encodeURIComponent(row.hotmart_id)}`, { cache: 'no-store' })
+        const res = await fetch(`/api/hotmart/sync-origem?transaction=${encodeURIComponent(row.hotmart_id)}`, {
+          cache: 'no-store',
+          signal: AbortSignal.timeout(10_000),
+        })
         if (res.ok) {
           const { origem } = await res.json()
           console.log('[SYNC ORIGEM]', row.hotmart_id, '→', origem ?? 'sem origem')
           if (origem) await supabase.from('vendas').update({ origem }).eq('id', row.id)
         }
       } catch {
-        // ignore individual failures
+        // ignore individual failures (timeouts, network errors)
       }
       await new Promise(resolve => setTimeout(resolve, 300))
     }
@@ -790,8 +795,17 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
     try {
-      await Promise.all([fetchVendas(), fetchCustosManuals(), fetchHotmartOrigens()])
+      const timeoutGuard = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Tempo limite excedido')), 30_000),
+      )
+      await Promise.race([
+        Promise.all([fetchVendas(), fetchCustosManuals(), fetchHotmartOrigens()]),
+        timeoutGuard,
+      ])
       setSuccessToast('Dados atualizados')
+      setTimeout(() => setSuccessToast(null), 5000)
+    } catch {
+      setSuccessToast('Erro ao atualizar — tente novamente')
       setTimeout(() => setSuccessToast(null), 5000)
     } finally {
       setIsRefreshing(false)
