@@ -85,7 +85,8 @@ const TYPE_LABELS: Record<string, string> = {
 }
 
 const PERSONALIZADO_EDIT_ITEMS = [
-  { value: 'lucro' as WidgetDataSource,          label: 'Lucro',        actualType: 'metric' as WidgetType },
+  { value: 'lucro' as WidgetDataSource,           label: 'Lucro',        actualType: 'metric' as WidgetType },
+  { value: 'lucro_usd' as WidgetDataSource,       label: 'Lucro USD',    actualType: 'metric' as WidgetType },
   { value: 'meta_roas_geral' as WidgetDataSource, label: 'ROAS (Geral)', actualType: 'meta-metric' as WidgetType },
 ]
 
@@ -121,7 +122,7 @@ export function EditWidgetModal({
 
   const sources = SOURCES_BY_TYPE[localType] ?? []
   const isMeta  = localType.startsWith('meta-')
-  const isPersonalizado = localSrc === 'lucro' || localSrc === 'meta_roas_geral'
+  const isPersonalizado = localSrc === 'lucro' || localSrc === 'lucro_usd' || localSrc === 'meta_roas_geral'
   const typeDisplayLabel = isPersonalizado ? 'Personalizado' : (TYPE_LABELS[localType] ?? localType)
 
   async function handleSave() {
