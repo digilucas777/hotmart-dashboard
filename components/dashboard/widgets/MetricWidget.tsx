@@ -26,6 +26,7 @@ const ICON_MAP: Partial<Record<WidgetDataSource, React.ElementType>> = {
   cancelled_count: AlertTriangle,
   commission:      Percent,
   lucro:           Landmark,
+  lucro_usd:       TrendingUp,
   margem_lucro:    Percent,
   roas:            BarChart2,
   cpa:             DollarSign,
@@ -43,6 +44,7 @@ const ACCENT_MAP: Partial<Record<WidgetDataSource, string>> = {
   cancelled_count: '#fb923c',
   commission:      '#6ee7b7',
   lucro:           '#4ade80',
+  lucro_usd:       '#4ade80',
   margem_lucro:    '#4ade80',
   roas:            '#6366f1',
   cpa:             '#f87171',
@@ -66,11 +68,12 @@ export function MetricWidget({
   numericValue?: number
 }) {
   const Icon = ICON_MAP[dataSource] ?? DollarSign
+  const isLucro = dataSource === 'lucro' || dataSource === 'lucro_usd'
   const accent = (() => {
-    if (dataSource === 'lucro' && numericValue !== undefined) {
+    if (isLucro && numericValue !== undefined) {
       if (numericValue < 0) return '#f87171'
       if (numericValue === 0) return '#94a3b8'
-      return ACCENT_MAP.lucro ?? '#4ade80'
+      return '#4ade80'
     }
     return ACCENT_MAP[dataSource] ?? DEFAULT_ACCENT
   })()
@@ -95,7 +98,7 @@ export function MetricWidget({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[var(--dash-faint)]">
-            {dataSource === 'lucro' || dataSource === 'margem_lucro' ? 'Personalizado' : 'Hotmart'}
+            {isLucro || dataSource === 'margem_lucro' ? 'Personalizado' : 'Hotmart'}
           </p>
           <p className="mt-0.5 truncate text-xs font-semibold text-[var(--dash-muted)]">{title}</p>
         </div>
