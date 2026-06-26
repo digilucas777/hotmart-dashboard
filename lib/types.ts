@@ -109,6 +109,7 @@ export type WidgetDataSource =
   | 'by_status'
   | 'transactions'
   | 'lucro'
+  | 'lucro_usd'
   | 'margem_lucro'
   | 'roas'
   | 'cpa'

@@ -1,59 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
-let cachedTokenHotmart: { token: string; expiresAt: number } | null = null
-
-async function getTokenHotmart(): Promise<string> {
-  if (cachedTokenHotmart && Date.now() < cachedTokenHotmart.expiresAt) return cachedTokenHotmart.token
-
-  const clientId = process.env.HOTMART_CLIENT_ID
-  const clientSecret = process.env.HOTMART_CLIENT_SECRET
-  if (!clientId || !clientSecret) throw new Error('Hotmart credentials not configured')
-
-  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
-  const res = await fetch('https://api-sec-vlc.hotmart.com/security/oauth/token', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Basic ${credentials}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: 'grant_type=client_credentials',
-  })
-
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`Hotmart auth failed [${res.status}]: ${body}`)
-  }
-
-  const data = await res.json()
-  cachedTokenHotmart = { token: data.access_token as string, expiresAt: Date.now() + 60 * 60 * 1000 }
-  return cachedTokenHotmart.token
-}
-
-async function fetchOrigemViaApi(hotmartId: string, token: string): Promise<string | null> {
-  const buscar = async () => {
-    const res = await fetch(
-      `https://developers.hotmart.com/payments/api/v1/sales/history?transaction=${encodeURIComponent(hotmartId)}`,
-      { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(10000) }
-    )
-    if (!res.ok) {
-      console.log('[HOTMART API] erro:', res.status, await res.text())
-      return null
-    }
-    const data = await res.json()
-    console.log('[HOTMART API] tracking:', JSON.stringify(data?.items?.[0]?.purchase?.tracking))
-    const purchase = (data?.items ?? [])[0]
-    return purchase?.tracking?.source ?? null
-  }
-
-  let origem = await buscar()
-  if (origem) return origem
-  await new Promise(r => setTimeout(r, 15000))
-  origem = await buscar()
-  if (origem) return origem
-  await new Promise(r => setTimeout(r, 30000))
-  return await buscar()
-}
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -167,33 +114,20 @@ export async function POST(req: NextRequest) {
 
     const hotmartId: string | null = dados.purchase?.transaction ?? null
 
+    const origemObj = dados.purchase?.origin
     const origem: string | null =
       dados.purchase?.tracking_parameters?.utm_source ??
-      (typeof dados.purchase?.origin === 'object' ? dados.purchase?.origin?.src : dados.purchase?.origin) ??
-      null
-
-    let origemFinal = origem
-    if (!origemFinal && hotmartId) {
-      try {
-        console.log('[WEBHOOK] chamando getTokenHotmart para', hotmartId)
-        const token = await getTokenHotmart()
-        console.log('[WEBHOOK] token obtido:', !!token)
-        origemFinal = await fetchOrigemViaApi(hotmartId, token)
-        if (origemFinal) console.log('[WEBHOOK] origem via API:', hotmartId, '→', origemFinal)
-      } catch (err: any) {
-        console.log('[WEBHOOK ORIGEM API ERROR]', hotmartId, {
-          message: err?.message,
-          status: err?.status,
-          stack: err?.stack?.substring(0, 200)
-        })
-      }
-    }
+      dados.purchase?.tracking?.source ??
+      (typeof origemObj === 'object' && origemObj !== null
+        ? (origemObj.src ?? origemObj.sck ?? null)
+        : origemObj ?? null)
 
     console.log('[WEBHOOK ORIGEM]', {
       hotmartId,
-      origemPayload: origem,
-      origemFinal,
+      origem,
       temTracking: !!dados.purchase?.tracking,
+      trackingSource: dados.purchase?.tracking?.source,
+      originObj: origemObj,
     })
 
     const afiliado_nome: string | null =
@@ -238,7 +172,7 @@ export async function POST(req: NextRequest) {
       status,
       pais: dados.buyer?.address?.country ?? null,
       forma_pagamento,
-      origem: origemFinal,
+      origem,
       afiliado_nome,
       valor_recebido: comissaoProdutor,
       valor_bruto: valorBruto,

@@ -243,6 +243,7 @@ export function computeWidgetData(
   period: Period,
   exchangeRate: number,
   custoTotal = 0,
+  custoUSD = 0,
   customRange?: { from: Date; to: Date },
 ): WidgetComputedData {
   const approved = vendas.filter(v => v.status === 'approved')
@@ -290,6 +291,18 @@ export function computeWidgetData(
         value: formatBRL(lucro),
         subValue: `Receita ${formatBRL(totalConverted)} — Custo ${formatBRL(custoTotal)}`,
         numericValue: lucro,
+      }
+    }
+    case 'lucro_usd': {
+      if (custoUSD <= 0) {
+        return { kind: 'metric', value: formatUSD(totalUSD), subValue: 'Sem custo USD cadastrado', numericValue: totalUSD }
+      }
+      const lucroUSD = totalUSD - custoUSD
+      return {
+        kind: 'metric',
+        value: formatUSD(lucroUSD),
+        subValue: `Receita ${formatUSD(totalUSD)} — Custo ${formatUSD(custoUSD)}`,
+        numericValue: lucroUSD,
       }
     }
     case 'margem_lucro': {
@@ -516,6 +529,7 @@ export function computeComparableMetric(
   dataSource: WidgetDataSource,
   exchangeRate: number,
   custoTotal = 0,
+  custoUSD = 0,
 ): number | null {
   const approved = vendas.filter(v => v.status === 'approved')
   const sumConverted = (arr: Venda[]) =>
@@ -544,6 +558,8 @@ export function computeComparableMetric(
       return vendas.filter(v => v.status === 'cancelled').length
     case 'lucro':
       return totalConverted - custoTotal
+    case 'lucro_usd':
+      return totalUSD - custoUSD
     case 'margem_lucro':
       return totalConverted > 0 ? ((totalConverted - custoTotal) / totalConverted) * 100 : 0
     case 'roas':

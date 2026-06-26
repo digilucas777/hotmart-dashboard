@@ -59,6 +59,7 @@ type Props = {
   exchangeRate: number
   custoTotal: number
   custoManualTotal?: number
+  custoUSD?: number
   customRange?: { from: Date; to: Date }
   loading: boolean
   selectedWidgetIds: Set<string>
@@ -84,6 +85,7 @@ export function DashboardGrid({
   exchangeRate,
   custoTotal,
   custoManualTotal = 0,
+  custoUSD = 0,
   customRange,
   loading,
   selectedWidgetIds,
@@ -161,6 +163,7 @@ export function DashboardGrid({
               exchangeRate={exchangeRate}
               custoTotal={custoTotal}
               custoManualTotal={custoManualTotal}
+              custoUSD={custoUSD}
               customRange={customRange}
               editMode={isEditing && !isMobile}
               loading={loading}

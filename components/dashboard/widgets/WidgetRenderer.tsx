@@ -61,6 +61,7 @@ function WidgetRendererBase({
   exchangeRate,
   custoTotal = 0,
   custoManualTotal = 0,
+  custoUSD = 0,
   customRange,
   editMode,
   loading,
@@ -82,6 +83,7 @@ function WidgetRendererBase({
   exchangeRate: number
   custoTotal?: number
   custoManualTotal?: number
+  custoUSD?: number
   customRange?: { from: Date; to: Date }
   editMode: boolean
   loading?: boolean
@@ -106,12 +108,18 @@ function WidgetRendererBase({
   const isMetaLinked = !!linkedMetaAccountId
 
   // Para widgets de custo: Meta spend (live) tem precedência; sem Meta, usa custoManualTotal ou custoTotal
-  const costWidgets = ['lucro', 'margem_lucro', 'roas', 'cpa']
+  const costWidgets = ['lucro', 'lucro_usd', 'margem_lucro', 'roas', 'cpa']
   const effectiveCusto = costWidgets.includes(config.data_source)
     ? isMetaLinked && metaInsights?.spend_brl !== undefined
       ? parseFloat(String(metaInsights.spend_brl)) || 0
       : custoTotal  // inclui custoManualTotal via displayCustoTotal
     : custoTotal
+
+  const effectiveCustoUSD = config.data_source === 'lucro_usd'
+    ? isMetaLinked && metaInsights?.spend_usd !== undefined
+      ? parseFloat(String(metaInsights.spend_usd)) || 0
+      : custoUSD
+    : 0
 
   const hasManualCost = custoManualTotal > 0
 
@@ -136,13 +144,13 @@ function WidgetRendererBase({
         }
         return mock
       })()
-    : computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, effectiveCusto, customRange)
+    : computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, effectiveCusto, effectiveCustoUSD, customRange)
 
   const isBRL = !isMetaWidget && getValueFormat(config.data_source) === 'brl'
   const comparison = !isMetaWidget && data.kind === 'metric' && previousVendas
     ? (() => {
-        const current = computeComparableMetric(vendas, config.data_source, exchangeRate, custoTotal)
-        const previous = computeComparableMetric(previousVendas, config.data_source, exchangeRate, custoTotal)
+        const current = computeComparableMetric(vendas, config.data_source, exchangeRate, custoTotal, effectiveCustoUSD)
+        const previous = computeComparableMetric(previousVendas, config.data_source, exchangeRate, custoTotal, effectiveCustoUSD)
         if (current === null || previous === null || previous === 0) return null
         const pct = ((current - previous) / Math.abs(previous)) * 100
         if (Math.abs(pct) < 0.1) return `• 0% vs ${formatPeriodComparisonLabel(period)}`

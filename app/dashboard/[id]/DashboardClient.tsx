@@ -783,16 +783,20 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
   }, [])
 
+  useEffect(() => {
+    void fetchHotmartOrigens()
+  }, [fetchHotmartOrigens])
+
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
     try {
-      await Promise.all([fetchVendas(), fetchCustosManuals()])
+      await Promise.all([fetchVendas(), fetchCustosManuals(), fetchHotmartOrigens()])
       setSuccessToast('Dados atualizados')
       setTimeout(() => setSuccessToast(null), 5000)
     } finally {
       setIsRefreshing(false)
     }
-  }, [fetchVendas, fetchCustosManuals])
+  }, [fetchVendas, fetchCustosManuals, fetchHotmartOrigens])
 
   useEffect(() => {
     async function loadOrigens() {
@@ -1456,6 +1460,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     () => custoManualRaw.reduce((sum, r) => sum + (r.moeda === 'BRL' ? r.valor : r.valor * exchangeRate), 0),
     [custoManualRaw, exchangeRate],
   )
+  const custoManualTotalUSD = useMemo(
+    () => custoManualRaw.filter(r => r.moeda === 'USD').reduce((sum, r) => sum + r.valor, 0),
+    [custoManualRaw],
+  )
   const displayCustoTotal = custoManualTotal
   const approvedRecentVendas = recentVendas.filter(v => v.status === 'approved')
   const latestSale = approvedRecentVendas[0]
@@ -1930,6 +1938,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             exchangeRate={exchangeRate}
             custoTotal={displayCustoTotal}
             custoManualTotal={custoManualTotal}
+            custoUSD={custoManualTotalUSD}
             customRange={customDateRange}
             loading={false}
             selectedWidgetIds={selectedWidgetIds}
