@@ -666,56 +666,59 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
       const { from, to } = getPeriodRange(period, customDateRange)
       const previousRange = getPreviousPeriodRange(period, customDateRange)
-      const { data: selectedOffers } = await supabase
-        .from('projeto_produto_ofertas')
-        .select('produto_id, oferta_codigo, oferta_nome, oferta_preco, oferta_moeda')
-        .eq('projeto_id', projectId)
-      const offerLinks = (selectedOffers ?? []) as ProjetoProdutoOfertaLink[]
-
-      const { data } = await supabase
-        .from('vendas')
-        .select('*')
-        .in('hotmart_produto_id', hotmartIds)
-        .gte('data_venda', from.toISOString())
-        .lt('data_venda', to.toISOString())
-        .order('data_venda', { ascending: false })
-
-      setVendas(filterRowsByOfferSelection((data ?? []) as Venda[], products, productLinks, offerLinks))
-
-      const { data: previousData } = await supabase
-        .from('vendas')
-        .select('*')
-        .in('hotmart_produto_id', hotmartIds)
-        .gte('data_venda', previousRange.from.toISOString())
-        .lt('data_venda', previousRange.to.toISOString())
-        .order('data_venda', { ascending: false })
-
-      setPreviousVendas(filterRowsByOfferSelection((previousData ?? []) as Venda[], products, productLinks, offerLinks))
-
-      const { data: recentData } = await supabase
-        .from('vendas')
-        .select('*')
-        .in('hotmart_produto_id', hotmartIds)
-        .eq('status', 'approved')
-        .order('data_venda', { ascending: false })
-        .limit(80)
-
-      setRecentVendas(filterRowsByOfferSelection((recentData ?? []) as Venda[], products, productLinks, offerLinks).slice(0, 8))
 
       const now = new Date()
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
       const thirtyDays = new Date(todayStart.getTime() - 29 * 86_400_000)
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
       const combinedFrom = thirtyDays < monthStart ? thirtyDays : monthStart
-      const { data: combinedData } = await supabase
-        .from('vendas')
-        .select('*')
-        .in('hotmart_produto_id', hotmartIds)
-        .gte('data_venda', combinedFrom.toISOString())
-        .lt('data_venda', new Date(todayStart.getTime() + 86_400_000).toISOString())
-        .order('data_venda', { ascending: false })
 
-      setCombinedVendas(filterRowsByOfferSelection((combinedData ?? []) as Venda[], products, productLinks, offerLinks))
+      const [
+        selectedOffersRes,
+        currentRes,
+        previousRes,
+        recentRes,
+        combinedRes,
+      ] = await Promise.all([
+        supabase
+          .from('projeto_produto_ofertas')
+          .select('produto_id, oferta_codigo, oferta_nome, oferta_preco, oferta_moeda')
+          .eq('projeto_id', projectId),
+        supabase
+          .from('vendas')
+          .select('*')
+          .in('hotmart_produto_id', hotmartIds)
+          .gte('data_venda', from.toISOString())
+          .lt('data_venda', to.toISOString())
+          .order('data_venda', { ascending: false }),
+        supabase
+          .from('vendas')
+          .select('*')
+          .in('hotmart_produto_id', hotmartIds)
+          .gte('data_venda', previousRange.from.toISOString())
+          .lt('data_venda', previousRange.to.toISOString())
+          .order('data_venda', { ascending: false }),
+        supabase
+          .from('vendas')
+          .select('*')
+          .in('hotmart_produto_id', hotmartIds)
+          .eq('status', 'approved')
+          .order('data_venda', { ascending: false })
+          .limit(80),
+        supabase
+          .from('vendas')
+          .select('*')
+          .in('hotmart_produto_id', hotmartIds)
+          .gte('data_venda', combinedFrom.toISOString())
+          .lt('data_venda', new Date(todayStart.getTime() + 86_400_000).toISOString())
+          .order('data_venda', { ascending: false }),
+      ])
+
+      const offerLinks = (selectedOffersRes.data ?? []) as ProjetoProdutoOfertaLink[]
+      setVendas(filterRowsByOfferSelection((currentRes.data ?? []) as Venda[], products, productLinks, offerLinks))
+      setPreviousVendas(filterRowsByOfferSelection((previousRes.data ?? []) as Venda[], products, productLinks, offerLinks))
+      setRecentVendas(filterRowsByOfferSelection((recentRes.data ?? []) as Venda[], products, productLinks, offerLinks).slice(0, 8))
+      setCombinedVendas(filterRowsByOfferSelection((combinedRes.data ?? []) as Venda[], products, productLinks, offerLinks))
       setLastUpdatedAt(new Date())
     } finally {
       setLoading(false)
@@ -795,13 +798,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
     try {
-      const timeoutGuard = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Tempo limite excedido')), 30_000),
-      )
-      await Promise.race([
-        Promise.all([fetchVendas(), fetchCustosManuals(), fetchHotmartOrigens()]),
-        timeoutGuard,
-      ])
+      await Promise.all([fetchVendas(), fetchCustosManuals()])
       setSuccessToast('Dados atualizados')
       setTimeout(() => setSuccessToast(null), 5000)
     } catch {
@@ -810,6 +807,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     } finally {
       setIsRefreshing(false)
     }
+    // Sincronização de origens em background — não bloqueia a UI
+    void fetchHotmartOrigens()
   }, [fetchVendas, fetchCustosManuals, fetchHotmartOrigens])
 
   useEffect(() => {
