@@ -45,6 +45,13 @@ const PERSONALIZADO_ITEMS: {
     icon: Landmark,
   },
   {
+    label: 'Lucro USD',
+    description: 'Faturamento USD Hotmart menos gasto Meta Ads em USD',
+    type: 'metric',
+    data_source: 'lucro_usd',
+    icon: TrendingUp,
+  },
+  {
     label: 'ROAS (Geral)',
     description: 'Faturamento Hotmart dividido pelo gasto Meta Ads',
     type: 'meta-metric',
