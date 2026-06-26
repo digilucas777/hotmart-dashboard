@@ -1058,7 +1058,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     updates: { type: WidgetType; data_source: WidgetDataSource; title: string },
   ) => {
     const { error } = await supabase.from('dashboard_widgets').update(updates).eq('id', id)
-    if (error) { setWidgetError(error.message); return }
+    if (error) throw new Error(error.message)
     setWidgets(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w))
     setSavedWidgets(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w))
     setEditingWidgetId(null)
