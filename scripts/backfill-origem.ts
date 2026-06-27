@@ -44,9 +44,25 @@ async function backfill() {
       console.log('[DEBUG] dados:', JSON.stringify(dados?.purchase?.origin))
     }
 
+    // payload do webhook: body.data.purchase.tracking.source, tracking_parameters, origin, commissions
+    const p = dados?.purchase
+    const origemObj = p?.origin
+    const commissionSource = dados?.commissions?.[0]?.source
+    const commissionSourceClean =
+      commissionSource &&
+      !['PRODUCER','MARKETPLACE','AFFILIATE','COPRODUCER','SELLER','VENDOR','OWNER'].some(
+        t => String(commissionSource).toUpperCase().includes(t)
+      )
+        ? String(commissionSource)
+        : null
     const origem: string | null =
-      dados?.purchase?.tracking_parameters?.utm_source ??
-      (typeof dados?.purchase?.origin === 'object' ? dados?.purchase?.origin?.src : dados?.purchase?.origin) ??
+      p?.tracking?.source ??
+      p?.tracking?.external_reference ??
+      p?.tracking_parameters?.utm_source ??
+      (typeof origemObj === 'object' && origemObj !== null
+        ? (origemObj.src ?? origemObj.sck ?? null)
+        : typeof origemObj === 'string' ? origemObj : null) ??
+      commissionSourceClean ??
       null
 
     if (origem === null) {

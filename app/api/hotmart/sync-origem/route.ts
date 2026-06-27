@@ -1,5 +1,27 @@
 export const dynamic = 'force-dynamic'
 
+const COMMISSION_TYPES = ['PRODUCER','MARKETPLACE','AFFILIATE','COPRODUCER','SELLER','VENDOR','OWNER']
+
+function extractOrigem(purchase: any, commissions: any[]): string | null {
+  const origemObj = purchase?.origin
+  const commissionSource = commissions?.[0]?.source
+  const commissionSourceClean =
+    commissionSource &&
+    !COMMISSION_TYPES.some(t => String(commissionSource).toUpperCase().includes(t))
+      ? String(commissionSource)
+      : null
+  return (
+    purchase?.tracking?.source ??
+    purchase?.tracking?.external_reference ??
+    purchase?.tracking_parameters?.utm_source ??
+    (typeof origemObj === 'object' && origemObj !== null
+      ? (origemObj.src ?? origemObj.sck ?? null)
+      : typeof origemObj === 'string' ? origemObj : null) ??
+    commissionSourceClean ??
+    null
+  )
+}
+
 let cachedToken: { token: string; expiresAt: number } | null = null
 
 async function getToken(): Promise<string> {
@@ -55,15 +77,10 @@ export async function GET(request: Request) {
     }
 
     const data = await res.json()
-    const purchase = (data?.items ?? [])[0]
-    const origemObj = purchase?.origin
-    const origem =
-      purchase?.tracking_parameters?.utm_source ??
-      purchase?.tracking?.source ??
-      (typeof origemObj === 'object' && origemObj !== null
-        ? (origemObj.src ?? origemObj.sck ?? null)
-        : typeof origemObj === 'string' ? origemObj : null) ??
-      null
+    const item = (data?.items ?? [])[0]
+    const purchaseData = item?.purchase
+    const origemObj = purchaseData?.origin
+    const origem = extractOrigem(purchaseData, item?.commissions ?? [])
 
     return Response.json({ origem })
   } catch (err: any) {

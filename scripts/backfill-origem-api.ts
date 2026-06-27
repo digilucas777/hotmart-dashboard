@@ -39,6 +39,28 @@ async function getToken(): Promise<string> {
   return data.access_token
 }
 
+const COMMISSION_TYPES = ['PRODUCER','MARKETPLACE','AFFILIATE','COPRODUCER','SELLER','VENDOR','OWNER']
+
+function extractOrigem(purchase: any, commissions: any[]): string | null {
+  const origemObj = purchase?.origin
+  const commissionSource = commissions?.[0]?.source
+  const commissionSourceClean =
+    commissionSource &&
+    !COMMISSION_TYPES.some(t => String(commissionSource).toUpperCase().includes(t))
+      ? String(commissionSource)
+      : null
+  const source =
+    purchase?.tracking?.source ??
+    purchase?.tracking?.external_reference ??
+    purchase?.tracking_parameters?.utm_source ??
+    (typeof origemObj === 'object' && origemObj !== null
+      ? (origemObj.src ?? origemObj.sck ?? null)
+      : typeof origemObj === 'string' ? origemObj : null) ??
+    commissionSourceClean ??
+    null
+  return source && typeof source === 'string' && source.trim() !== '' ? source.trim() : null
+}
+
 async function fetchTrackingSource(token: string, hotmartId: string): Promise<string | null> {
   const url = `https://developers.hotmart.com/payments/api/v1/sales/history?transaction=${hotmartId}`
   const res = await fetch(url, {
@@ -51,8 +73,9 @@ async function fetchTrackingSource(token: string, hotmartId: string): Promise<st
   }
 
   const data = await res.json()
-  const source = data?.items?.[0]?.purchase?.tracking?.source ?? null
-  return source && source.trim() !== '' ? source.trim() : null
+  // A API retorna: { items: [{ product, buyer, purchase: { tracking, tracking_parameters, origin, ... }, commissions }] }
+  const item = data?.items?.[0]
+  return extractOrigem(item?.purchase, item?.commissions ?? [])
 }
 
 function sleep(ms: number) {

@@ -115,12 +115,23 @@ export async function POST(req: NextRequest) {
     const hotmartId: string | null = dados.purchase?.transaction ?? null
 
     const origemObj = dados.purchase?.origin
+    const commissionSource = dados.commissions?.[0]?.source
+    const commissionSourceClean =
+      commissionSource &&
+      !['PRODUCER','MARKETPLACE','AFFILIATE','COPRODUCER','SELLER','VENDOR','OWNER'].some(
+        t => String(commissionSource).toUpperCase().includes(t)
+      )
+        ? String(commissionSource)
+        : null
     const origem: string | null =
-      dados.purchase?.tracking_parameters?.utm_source ??
       dados.purchase?.tracking?.source ??
+      dados.purchase?.tracking?.external_reference ??
+      dados.purchase?.tracking_parameters?.utm_source ??
       (typeof origemObj === 'object' && origemObj !== null
         ? (origemObj.src ?? origemObj.sck ?? null)
-        : origemObj ?? null)
+        : typeof origemObj === 'string' ? origemObj : null) ??
+      commissionSourceClean ??
+      null
 
     console.log('[WEBHOOK ORIGEM]', {
       hotmartId,
