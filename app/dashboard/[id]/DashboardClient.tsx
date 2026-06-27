@@ -795,7 +795,15 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         if (res.ok) {
           const { origem } = await res.json()
           console.log('[SYNC ORIGEM]', row.hotmart_id, '→', origem ?? 'sem origem')
-          if (origem) await supabase.from('vendas').update({ origem }).eq('id', row.id)
+          if (origem) {
+            await supabase.from('vendas').update({ origem }).eq('id', row.id)
+            // Atualiza estado local imediatamente — sem re-fetch completo
+            const patch = (v: Venda) => v.id === row.id ? { ...v, origem } : v
+            setVendas(prev => prev.map(patch))
+            setPreviousVendas(prev => prev.map(patch))
+            setCombinedVendas(prev => prev.map(patch))
+            setRecentVendas(prev => prev.map(patch))
+          }
         }
       } catch {
         // ignore individual failures (timeouts, network errors)

@@ -56,7 +56,14 @@ export async function GET(request: Request) {
 
     const data = await res.json()
     const purchase = (data?.items ?? [])[0]
-    const origem = purchase?.tracking?.source ?? null
+    const origemObj = purchase?.origin
+    const origem =
+      purchase?.tracking_parameters?.utm_source ??
+      purchase?.tracking?.source ??
+      (typeof origemObj === 'object' && origemObj !== null
+        ? (origemObj.src ?? origemObj.sck ?? null)
+        : typeof origemObj === 'string' ? origemObj : null) ??
+      null
 
     return Response.json({ origem })
   } catch (err: any) {
