@@ -669,7 +669,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       const { from, to } = getPeriodRange(period, customDateRange)
       const previousRange = getPreviousPeriodRange(period, customDateRange)
       console.log('[DEBUG] período atual from:', from.toISOString(), '| to:', to.toISOString())
-      console.log('[DEBUG] período anterior from:', previousRange.from.toISOString(), '| to:', previousRange.to.toISOString())
 
       const now = new Date()
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -677,13 +676,39 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
       const combinedFrom = thirtyDays < monthStart ? thirtyDays : monthStart
 
+      // Busca paginada: PostgREST limita a 1000 rows/req independente do .limit() do cliente.
+      // Faz requests em paralelo (current, previous, combined) e cada um pagina internamente.
+      const fetchAllForPeriod = async (fromISO: string, toISO: string): Promise<Venda[]> => {
+        const PAGE_SIZE = 1000
+        const all: Venda[] = []
+        let offset = 0
+        while (true) {
+          const { data } = await supabase
+            .from('vendas')
+            .select('*')
+            .in('hotmart_produto_id', hotmartIds)
+            .gte('data_venda', fromISO)
+            .lt('data_venda', toISO)
+            .order('data_venda', { ascending: false })
+            .range(offset, offset + PAGE_SIZE - 1)
+          if (!data || data.length === 0) break
+          all.push(...(data as Venda[]))
+          if (data.length < PAGE_SIZE) break
+          offset += PAGE_SIZE
+        }
+        return all
+      }
+
       const [
+        currentData,
+        previousData,
+        combinedData,
         selectedOffersRes,
-        currentRes,
-        previousRes,
         recentRes,
-        combinedRes,
       ] = await Promise.all([
+        fetchAllForPeriod(from.toISOString(), to.toISOString()),
+        fetchAllForPeriod(previousRange.from.toISOString(), previousRange.to.toISOString()),
+        fetchAllForPeriod(combinedFrom.toISOString(), new Date(todayStart.getTime() + 86_400_000).toISOString()),
         supabase
           .from('projeto_produto_ofertas')
           .select('produto_id, oferta_codigo, oferta_nome, oferta_preco, oferta_moeda')
@@ -692,49 +717,21 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           .from('vendas')
           .select('*')
           .in('hotmart_produto_id', hotmartIds)
-          .gte('data_venda', from.toISOString())
-          .lt('data_venda', to.toISOString())
-          .order('data_venda', { ascending: false })
-          .limit(10000),
-        supabase
-          .from('vendas')
-          .select('*')
-          .in('hotmart_produto_id', hotmartIds)
-          .gte('data_venda', previousRange.from.toISOString())
-          .lt('data_venda', previousRange.to.toISOString())
-          .order('data_venda', { ascending: false })
-          .limit(10000),
-        supabase
-          .from('vendas')
-          .select('*')
-          .in('hotmart_produto_id', hotmartIds)
           .eq('status', 'approved')
           .order('data_venda', { ascending: false })
           .limit(80),
-        supabase
-          .from('vendas')
-          .select('*')
-          .in('hotmart_produto_id', hotmartIds)
-          .gte('data_venda', combinedFrom.toISOString())
-          .lt('data_venda', new Date(todayStart.getTime() + 86_400_000).toISOString())
-          .order('data_venda', { ascending: false })
-          .limit(10000),
       ])
 
-      console.log('[DEBUG] currentRes:', currentRes.data?.length, '| error:', currentRes.error)
-      console.log('[DEBUG] previousRes:', previousRes.data?.length, '| error:', previousRes.error)
-      console.log('[DEBUG] combinedRes:', combinedRes.data?.length, '| error:', combinedRes.error)
+      console.log('[DEBUG] currentData:', currentData.length, '| previousData:', previousData.length, '| combinedData:', combinedData.length)
 
       const offerLinks = (selectedOffersRes.data ?? []) as ProjetoProdutoOfertaLink[]
-      console.log('[DEBUG] offerLinks (projeto_produto_ofertas):', offerLinks.length, offerLinks)
+      console.log('[DEBUG] offerLinks:', offerLinks.length, '| approved USD:', currentData.filter(v => v.status === 'approved' && v.moeda === 'USD').length)
 
-      const currentFiltered = filterRowsByOfferSelection((currentRes.data ?? []) as Venda[], products, productLinks, offerLinks)
-      console.log('[DEBUG] currentRes pós-filtro oferta:', currentFiltered.length, '| approved USD:', currentFiltered.filter(v => v.status === 'approved' && v.moeda === 'USD').length)
-
+      const currentFiltered = filterRowsByOfferSelection(currentData, products, productLinks, offerLinks)
       setVendas(currentFiltered)
-      setPreviousVendas(filterRowsByOfferSelection((previousRes.data ?? []) as Venda[], products, productLinks, offerLinks))
+      setPreviousVendas(filterRowsByOfferSelection(previousData, products, productLinks, offerLinks))
       setRecentVendas(filterRowsByOfferSelection((recentRes.data ?? []) as Venda[], products, productLinks, offerLinks).slice(0, 8))
-      setCombinedVendas(filterRowsByOfferSelection((combinedRes.data ?? []) as Venda[], products, productLinks, offerLinks))
+      setCombinedVendas(filterRowsByOfferSelection(combinedData, products, productLinks, offerLinks))
       setLastUpdatedAt(new Date())
     } finally {
       setLoading(false)
