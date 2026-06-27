@@ -690,14 +690,16 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           .in('hotmart_produto_id', hotmartIds)
           .gte('data_venda', from.toISOString())
           .lt('data_venda', to.toISOString())
-          .order('data_venda', { ascending: false }),
+          .order('data_venda', { ascending: false })
+          .limit(10000),
         supabase
           .from('vendas')
           .select('*')
           .in('hotmart_produto_id', hotmartIds)
           .gte('data_venda', previousRange.from.toISOString())
           .lt('data_venda', previousRange.to.toISOString())
-          .order('data_venda', { ascending: false }),
+          .order('data_venda', { ascending: false })
+          .limit(10000),
         supabase
           .from('vendas')
           .select('*')
@@ -711,7 +713,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           .in('hotmart_produto_id', hotmartIds)
           .gte('data_venda', combinedFrom.toISOString())
           .lt('data_venda', new Date(todayStart.getTime() + 86_400_000).toISOString())
-          .order('data_venda', { ascending: false }),
+          .order('data_venda', { ascending: false })
+          .limit(10000),
       ])
 
       const offerLinks = (selectedOffersRes.data ?? []) as ProjetoProdutoOfertaLink[]
