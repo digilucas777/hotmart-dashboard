@@ -655,6 +655,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
       const products = (prods ?? []) as { id: string; hotmart_id: string }[]
       const hotmartIds = products.map(r => r.hotmart_id)
+      console.log('[DEBUG] projeto_produtos retornou:', produtoIds.length, 'produtos | hotmartIds:', hotmartIds.length, hotmartIds)
+      console.log('[DEBUG] productLinks todas_ofertas:', productLinks.map(l => ({ produto_id: l.produto_id, todas_ofertas: l.todas_ofertas })))
 
       if (hotmartIds.length === 0) {
         setVendas([])
@@ -666,6 +668,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
       const { from, to } = getPeriodRange(period, customDateRange)
       const previousRange = getPreviousPeriodRange(period, customDateRange)
+      console.log('[DEBUG] período atual from:', from.toISOString(), '| to:', to.toISOString())
+      console.log('[DEBUG] período anterior from:', previousRange.from.toISOString(), '| to:', previousRange.to.toISOString())
 
       const now = new Date()
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -717,8 +721,17 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           .limit(10000),
       ])
 
+      console.log('[DEBUG] currentRes:', currentRes.data?.length, '| error:', currentRes.error)
+      console.log('[DEBUG] previousRes:', previousRes.data?.length, '| error:', previousRes.error)
+      console.log('[DEBUG] combinedRes:', combinedRes.data?.length, '| error:', combinedRes.error)
+
       const offerLinks = (selectedOffersRes.data ?? []) as ProjetoProdutoOfertaLink[]
-      setVendas(filterRowsByOfferSelection((currentRes.data ?? []) as Venda[], products, productLinks, offerLinks))
+      console.log('[DEBUG] offerLinks (projeto_produto_ofertas):', offerLinks.length, offerLinks)
+
+      const currentFiltered = filterRowsByOfferSelection((currentRes.data ?? []) as Venda[], products, productLinks, offerLinks)
+      console.log('[DEBUG] currentRes pós-filtro oferta:', currentFiltered.length, '| approved USD:', currentFiltered.filter(v => v.status === 'approved' && v.moeda === 'USD').length)
+
+      setVendas(currentFiltered)
       setPreviousVendas(filterRowsByOfferSelection((previousRes.data ?? []) as Venda[], products, productLinks, offerLinks))
       setRecentVendas(filterRowsByOfferSelection((recentRes.data ?? []) as Venda[], products, productLinks, offerLinks).slice(0, 8))
       setCombinedVendas(filterRowsByOfferSelection((combinedRes.data ?? []) as Venda[], products, productLinks, offerLinks))
