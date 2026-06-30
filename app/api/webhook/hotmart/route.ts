@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { after } from 'next/server'
 import { NextRequest, NextResponse } from 'next/server'
 
 
@@ -12,6 +13,28 @@ interface HotmartCommission {
   currency_value: string
   value: number
   currency_conversion?: { conversion_rate?: number }
+}
+
+const COMMISSION_TYPES = ['PRODUCER','MARKETPLACE','AFFILIATE','COPRODUCER','SELLER','VENDOR','OWNER']
+
+function extractOrigem(purchase: any, commissions: any[]): string | null {
+  const origemObj = purchase?.origin
+  const commissionSource = commissions?.[0]?.source
+  const commissionSourceClean =
+    commissionSource &&
+    !COMMISSION_TYPES.some(t => String(commissionSource).toUpperCase().includes(t))
+      ? String(commissionSource)
+      : null
+  const source =
+    purchase?.tracking?.source ??
+    purchase?.tracking?.external_reference ??
+    purchase?.tracking_parameters?.utm_source ??
+    (typeof origemObj === 'object' && origemObj !== null
+      ? (origemObj.src ?? origemObj.sck ?? null)
+      : typeof origemObj === 'string' ? origemObj : null) ??
+    commissionSourceClean ??
+    null
+  return source && typeof source === 'string' && source.trim() !== '' ? source.trim() : null
 }
 
 function sameCurrencyValue(commissions: HotmartCommission[], currency: string, matcher: (source: string) => boolean) {
@@ -114,31 +137,14 @@ export async function POST(req: NextRequest) {
 
     const hotmartId: string | null = dados.purchase?.transaction ?? null
 
-    const origemObj = dados.purchase?.origin
-    const commissionSource = dados.commissions?.[0]?.source
-    const commissionSourceClean =
-      commissionSource &&
-      !['PRODUCER','MARKETPLACE','AFFILIATE','COPRODUCER','SELLER','VENDOR','OWNER'].some(
-        t => String(commissionSource).toUpperCase().includes(t)
-      )
-        ? String(commissionSource)
-        : null
-    const origem: string | null =
-      dados.purchase?.tracking?.source ??
-      dados.purchase?.tracking?.external_reference ??
-      dados.purchase?.tracking_parameters?.utm_source ??
-      (typeof origemObj === 'object' && origemObj !== null
-        ? (origemObj.src ?? origemObj.sck ?? null)
-        : typeof origemObj === 'string' ? origemObj : null) ??
-      commissionSourceClean ??
-      null
+    const origem: string | null = extractOrigem(dados.purchase, dados.commissions ?? [])
 
     console.log('[WEBHOOK ORIGEM]', {
       hotmartId,
       origem,
       temTracking: !!dados.purchase?.tracking,
       trackingSource: dados.purchase?.tracking?.source,
-      originObj: origemObj,
+      originObj: dados.purchase?.origin,
     })
 
     const afiliado_nome: string | null =
@@ -225,6 +231,44 @@ export async function POST(req: NextRequest) {
     if (error) {
       console.error('Erro ao salvar venda:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // Hotmart às vezes não inclui tracking no payload do webhook mesmo quando existe na API.
+    // Se origem ficou null, buscamos da API em background sem atrasar a resposta.
+    if (!origem && hotmartId) {
+      after(async () => {
+        try {
+          const clientId = process.env.HOTMART_CLIENT_ID
+          const clientSecret = process.env.HOTMART_CLIENT_SECRET
+          if (!clientId || !clientSecret) return
+
+          const tokenRes = await fetch('https://api-sec-vlc.hotmart.com/security/oauth/token', {
+            method: 'POST',
+            headers: {
+              Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'grant_type=client_credentials',
+          })
+          if (!tokenRes.ok) return
+          const { access_token: token } = await tokenRes.json()
+
+          const histRes = await fetch(
+            `https://developers.hotmart.com/payments/api/v1/sales/history?transaction=${encodeURIComponent(hotmartId)}`,
+            { headers: { Authorization: `Bearer ${token}` } },
+          )
+          if (!histRes.ok) return
+          const histData = await histRes.json()
+          const item = histData?.items?.[0]
+          const origemApi = extractOrigem(item?.purchase, item?.commissions ?? [])
+          if (!origemApi) return
+
+          await supabase.from('vendas').update({ origem: origemApi }).eq('hotmart_id', hotmartId)
+          console.log(`[WEBHOOK AFTER] origem da API: ${hotmartId} → ${origemApi}`)
+        } catch (err) {
+          console.error('[WEBHOOK AFTER] erro ao sincronizar origem:', err)
+        }
+      })
     }
 
     return NextResponse.json({ ok: true })
