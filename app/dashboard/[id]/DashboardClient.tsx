@@ -53,6 +53,9 @@ const GRID_COLUMNS = 12
 const LAYOUT_STORAGE_PREFIX = 'dashboard-layout:'
 const THEME_STORAGE_KEY = 'dashboard-theme'
 
+// Colunas explícitas evitam buscar campos extras do banco (created_at, updated_at, etc.)
+const VENDA_COLUMNS = 'id,hotmart_id,hotmart_produto_id,produto,oferta_codigo,oferta_nome,oferta_descricao,oferta_preco,oferta_moeda,plano_id,plano_nome,comprador_nome,comprador_email,valor,valor_recebido,valor_bruto,taxa_hotmart,comissao_produtor,comissao_coprodutor,comissao_afiliado,valor_operacional_final,moeda,status,data_venda,forma_pagamento,pais,origem,afiliado_nome'
+
 // Three content-aware snap heights for metric cards:
 // 7 rows = icon + title + value
 // 8 rows = + subValue
@@ -512,6 +515,13 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [showDeleteDashboard, setShowDeleteDashboard] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const exportGridRef = useRef<HTMLDivElement>(null)
+  // Cache de configuração de produtos — evita 2 queries sequenciais a cada troca de período
+  const hotmartCacheRef = useRef<{
+    hotmartIds: string[]
+    products: { id: string; hotmart_id: string }[]
+    productLinks: ProjetoProdutoLink[]
+    offerLinks: ProjetoProdutoOfertaLink[]
+  } | null>(null)
 
   const [showCustoModal, setShowCustoModal] = useState(false)
   const [custoManualList, setCustoManualList] = useState<CustoManual[]>([])
@@ -632,39 +642,67 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const fetchVendas = useCallback(async () => {
     setLoading(true)
     try {
-      const { data: pp } = await supabase
-        .from('projeto_produtos')
-        .select('produto_id, todas_ofertas')
-        .eq('projeto_id', projectId)
+      // Cache hit: pula as 2 queries sequenciais de configuração de produto a cada troca de período
+      let config = hotmartCacheRef.current
+      if (!config) {
+        const { data: pp } = await supabase
+          .from('projeto_produtos')
+          .select('produto_id, todas_ofertas')
+          .eq('projeto_id', projectId)
 
-      const productLinks = (pp ?? []) as ProjetoProdutoLink[]
-      const produtoIds = productLinks.map(r => r.produto_id)
+        const productLinks = (pp ?? []) as ProjetoProdutoLink[]
+        const produtoIds = productLinks.map(r => r.produto_id)
 
-      if (produtoIds.length === 0) {
-        setVendas([])
-        setPreviousVendas([])
-        setRecentVendas([])
-        setCombinedVendas([])
-        return
+        if (produtoIds.length === 0) {
+          setVendas([])
+          setPreviousVendas([])
+          setRecentVendas([])
+          setCombinedVendas([])
+          return
+        }
+
+        // Busca produtos e ofertas em paralelo (eram 2 queries sequenciais)
+        const [prodsRes, offersRes] = await Promise.all([
+          supabase.from('produtos').select('id, hotmart_id').in('id', produtoIds),
+          supabase
+            .from('projeto_produto_ofertas')
+            .select('produto_id, oferta_codigo, oferta_nome, oferta_preco, oferta_moeda')
+            .eq('projeto_id', projectId),
+        ])
+
+        const products = (prodsRes.data ?? []) as { id: string; hotmart_id: string }[]
+        const hotmartIds = products.map(r => r.hotmart_id)
+        const offerLinks = (offersRes.data ?? []) as ProjetoProdutoOfertaLink[]
+        console.log('[DEBUG] projeto_produtos retornou:', produtoIds.length, 'produtos | hotmartIds:', hotmartIds.length, hotmartIds)
+        console.log('[DEBUG] productLinks todas_ofertas:', productLinks.map(l => ({ produto_id: l.produto_id, todas_ofertas: l.todas_ofertas })))
+
+        if (hotmartIds.length === 0) {
+          setVendas([])
+          setPreviousVendas([])
+          setRecentVendas([])
+          setCombinedVendas([])
+          return
+        }
+
+        config = { hotmartIds, products, productLinks, offerLinks }
+        hotmartCacheRef.current = config
+
+        // recentVendas não depende do período — busca apenas na primeira carga e após refresh
+        const { data: recentData } = await supabase
+          .from('vendas')
+          .select(VENDA_COLUMNS)
+          .in('hotmart_produto_id', hotmartIds)
+          .eq('status', 'approved')
+          .order('data_venda', { ascending: false })
+          .limit(80)
+        setRecentVendas(
+          filterRowsByOfferSelection(
+            (recentData ?? []) as Venda[], products, productLinks, offerLinks,
+          ).slice(0, 8),
+        )
       }
 
-      const { data: prods } = await supabase
-        .from('produtos')
-        .select('id, hotmart_id')
-        .in('id', produtoIds)
-
-      const products = (prods ?? []) as { id: string; hotmart_id: string }[]
-      const hotmartIds = products.map(r => r.hotmart_id)
-      console.log('[DEBUG] projeto_produtos retornou:', produtoIds.length, 'produtos | hotmartIds:', hotmartIds.length, hotmartIds)
-      console.log('[DEBUG] productLinks todas_ofertas:', productLinks.map(l => ({ produto_id: l.produto_id, todas_ofertas: l.todas_ofertas })))
-
-      if (hotmartIds.length === 0) {
-        setVendas([])
-        setPreviousVendas([])
-        setRecentVendas([])
-        setCombinedVendas([])
-        return
-      }
+      const { hotmartIds, products, productLinks, offerLinks } = config
 
       const { from, to } = getPeriodRange(period, customDateRange)
       const previousRange = getPreviousPeriodRange(period, customDateRange)
@@ -677,7 +715,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       const combinedFrom = thirtyDays < monthStart ? thirtyDays : monthStart
 
       // Busca paginada: PostgREST limita a 1000 rows/req independente do .limit() do cliente.
-      // Faz requests em paralelo (current, previous, combined) e cada um pagina internamente.
       const fetchAllForPeriod = async (fromISO: string, toISO: string): Promise<Venda[]> => {
         const PAGE_SIZE = 1000
         const all: Venda[] = []
@@ -685,7 +722,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         while (true) {
           const { data } = await supabase
             .from('vendas')
-            .select('*')
+            .select(VENDA_COLUMNS)
             .in('hotmart_produto_id', hotmartIds)
             .gte('data_venda', fromISO)
             .lt('data_venda', toISO)
@@ -699,38 +736,19 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         return all
       }
 
-      const [
-        currentData,
-        previousData,
-        combinedData,
-        selectedOffersRes,
-        recentRes,
-      ] = await Promise.all([
+      // 3 queries em paralelo (antes eram 5: + offerLinks + recentVendas)
+      const [currentData, previousData, combinedData] = await Promise.all([
         fetchAllForPeriod(from.toISOString(), to.toISOString()),
         fetchAllForPeriod(previousRange.from.toISOString(), previousRange.to.toISOString()),
         fetchAllForPeriod(combinedFrom.toISOString(), new Date(todayStart.getTime() + 86_400_000).toISOString()),
-        supabase
-          .from('projeto_produto_ofertas')
-          .select('produto_id, oferta_codigo, oferta_nome, oferta_preco, oferta_moeda')
-          .eq('projeto_id', projectId),
-        supabase
-          .from('vendas')
-          .select('*')
-          .in('hotmart_produto_id', hotmartIds)
-          .eq('status', 'approved')
-          .order('data_venda', { ascending: false })
-          .limit(80),
       ])
 
       console.log('[DEBUG] currentData:', currentData.length, '| previousData:', previousData.length, '| combinedData:', combinedData.length)
-
-      const offerLinks = (selectedOffersRes.data ?? []) as ProjetoProdutoOfertaLink[]
       console.log('[DEBUG] offerLinks:', offerLinks.length, '| approved USD:', currentData.filter(v => v.status === 'approved' && v.moeda === 'USD').length)
 
       const currentFiltered = filterRowsByOfferSelection(currentData, products, productLinks, offerLinks)
       setVendas(currentFiltered)
       setPreviousVendas(filterRowsByOfferSelection(previousData, products, productLinks, offerLinks))
-      setRecentVendas(filterRowsByOfferSelection((recentRes.data ?? []) as Venda[], products, productLinks, offerLinks).slice(0, 8))
       setCombinedVendas(filterRowsByOfferSelection(combinedData, products, productLinks, offerLinks))
       setLastUpdatedAt(new Date())
     } finally {
@@ -818,6 +836,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
+    hotmartCacheRef.current = null  // força re-fetch completo no refresh manual
     try {
       await Promise.all([fetchVendas(), fetchCustosManuals()])
       setSuccessToast('Dados atualizados')
@@ -1338,6 +1357,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
     setSavingProducts(false)
     setShowProducts(false)
+    hotmartCacheRef.current = null  // produtos mudaram — força re-fetch da config
     await fetchVendas()
   }
 
@@ -1974,7 +1994,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             custoManualTotal={custoManualTotal}
             custoUSD={custoManualTotalUSD}
             customRange={customDateRange}
-            loading={false}
+            loading={loading}
             selectedWidgetIds={selectedWidgetIds}
             onSelect={(id, multi) => {
               if (multi) {
@@ -2006,11 +2026,17 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 <p className="truncate text-[11px] text-[var(--dash-faint)]">Última venda {formatRelativeTime(latestSale?.data_venda)}</p>
               </div>
             </div>
+            {loading && (
+              <div className="mb-2 flex items-center gap-1.5 rounded-lg border border-cyan-400/15 bg-cyan-400/[0.06] px-2 py-1">
+                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" />
+                <p className="text-[10px] font-medium text-cyan-300/80">Atualizando período...</p>
+              </div>
+            )}
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--dash-muted)]">Últimas vendas</h3>
               <span className="h-2 w-2 rounded-full bg-emerald-300" />
             </div>
-            <div className="relative max-h-[360px] space-y-1 overflow-y-auto pr-1">
+            <div className={`relative max-h-[360px] space-y-1 overflow-y-auto pr-1 transition-opacity duration-300 ${loading ? 'pointer-events-none opacity-35' : ''}`}>
               {approvedRecentVendas.length === 0 ? (
                 <p className="py-6 text-center text-xs text-[var(--dash-faint)]">Aguardando vendas</p>
               ) : approvedRecentVendas.map(venda => {
@@ -2031,28 +2057,38 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             </div>
             <div className="mt-3 border-t border-white/[0.06] pt-2.5">
               <h3 className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-muted)]">Insights automáticos</h3>
-              <div className="space-y-1.5">
-                {insights.map((item, index) => (
-                  <div key={index} className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-2.5 py-1.5 text-[11px] leading-4 text-[var(--dash-muted)]">
-                    {item}
-                  </div>
-                ))}
+              <div className={`space-y-1.5 transition-opacity duration-300 ${loading ? 'pointer-events-none opacity-35' : ''}`}>
+                {loading
+                  ? Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="h-8 animate-pulse rounded-lg bg-white/[0.04]" />
+                    ))
+                  : insights.map((item, index) => (
+                      <div key={index} className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-2.5 py-1.5 text-[11px] leading-4 text-[var(--dash-muted)]">
+                        {item}
+                      </div>
+                    ))
+                }
               </div>
             </div>
             <div className="mt-3 border-t border-white/[0.06] pt-2.5">
               <h3 className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-muted)]">Mapa de países</h3>
-              <div className="space-y-1.5">
-                {(countryRanking.length ? countryRanking : [{ label: 'Unknown', count: 0, revenue: 0 }]).map((country, index) => (
-                  <div key={country.label} className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-lg bg-white/[0.025] px-2 py-1.5">
-                    <div>
-                      <p className="text-xs font-bold text-[var(--dash-text)]">{country.label === 'Unknown' ? '🌐 Unknown' : `🌐 ${country.label}`}</p>
-                      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/5">
-                        <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-400" style={{ width: `${Math.max(8, 100 - index * 18)}%` }} />
+              <div className={`space-y-1.5 transition-opacity duration-300 ${loading ? 'pointer-events-none opacity-35' : ''}`}>
+                {loading
+                  ? Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="h-10 animate-pulse rounded-lg bg-white/[0.04]" />
+                    ))
+                  : (countryRanking.length ? countryRanking : [{ label: 'Unknown', count: 0, revenue: 0 }]).map((country, index) => (
+                      <div key={country.label} className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-lg bg-white/[0.025] px-2 py-1.5">
+                        <div>
+                          <p className="text-xs font-bold text-[var(--dash-text)]">{country.label === 'Unknown' ? '🌐 Unknown' : `🌐 ${country.label}`}</p>
+                          <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/5">
+                            <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-400" style={{ width: `${Math.max(8, 100 - index * 18)}%` }} />
+                          </div>
+                        </div>
+                        <p className="text-[10px] font-bold text-[var(--dash-faint)]">{country.count} vendas</p>
                       </div>
-                    </div>
-                    <p className="text-[10px] font-bold text-[var(--dash-faint)]">{country.count} vendas</p>
-                  </div>
-                ))}
+                    ))
+                }
               </div>
             </div>
           </aside>
