@@ -2026,12 +2026,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 <p className="truncate text-[11px] text-[var(--dash-faint)]">Última venda {formatRelativeTime(latestSale?.data_venda)}</p>
               </div>
             </div>
-            {loading && (
-              <div className="mb-2 flex items-center gap-1.5 rounded-lg border border-cyan-400/15 bg-cyan-400/[0.06] px-2 py-1">
-                <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" />
-                <p className="text-[10px] font-medium text-cyan-300/80">Atualizando período...</p>
-              </div>
-            )}
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--dash-muted)]">Últimas vendas</h3>
               <span className="h-2 w-2 rounded-full bg-emerald-300" />

@@ -245,8 +245,8 @@ function WidgetRendererBase({
       )}
 
       {loading && (
-        <div className="pointer-events-none absolute inset-x-4 top-3 z-40 h-0.5 overflow-hidden rounded-full bg-white/5">
-          <div className="h-full w-1/3 rounded-full bg-cyan-300/70" />
+        <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-2xl bg-black/30 backdrop-blur-[1px]">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/15 border-t-white/50" />
         </div>
       )}
 
