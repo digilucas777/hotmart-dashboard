@@ -153,28 +153,13 @@ function buildVenda(item: any): Record<string, any> | null {
       s => s.includes('AFFILIATE') || s.includes('AFILIADO'),
     )
   } else {
+    // Moeda estrangeira (EUR, MXN, GBP, etc.): commissions já vêm convertidas para USD pela Hotmart
     moeda = 'USD'
-    const origOffer = purchase?.original_offer_price
-    const taxaHotmartUSD = sameCurrencyValue(commissions, 'USD', s => s === 'MARKETPLACE')
-    if (origOffer?.currency_value === 'USD') {
-      valorBruto = Number(origOffer.value) || 0
-    } else {
-      const rate = commissions.find(c => c.currency_conversion?.conversion_rate)?.currency_conversion?.conversion_rate
-      const priceValue = origOffer?.value ?? purchase?.price?.value
-      valorBruto = rate ? roundMoney(Number(priceValue) / rate) : somaUSD
-    }
-    taxaHotmart = taxaHotmartUSD
-    comissaoProdutor = valorBruto
-    coproducerCommission = sameCurrencyValue(
-      commissions,
-      'USD',
-      s => s.includes('COPRODUCER') || s.includes('CO_PRODUCER') || s.includes('CO-PRODUCER') || s.includes('COPRODUTOR'),
-    )
-    comissaoAfiliado = sameCurrencyValue(
-      commissions,
-      'USD',
-      s => s.includes('AFFILIATE') || s.includes('AFILIADO'),
-    )
+    valorBruto = roundMoney(somaUSD)
+    taxaHotmart = Number(commissions.find(c => c.source === 'MARKETPLACE')?.value ?? 0)
+    comissaoProdutor = Number(commissions.find(c => c.source === 'PRODUCER')?.value ?? 0)
+    coproducerCommission = Number(commissions.find(c => c.source === 'CO_PRODUCTION')?.value ?? 0)
+    comissaoAfiliado = Number(commissions.find(c => c.source === 'AFFILIATE')?.value ?? 0)
   }
 
   const status = mapStatus(purchase?.status ?? '')
