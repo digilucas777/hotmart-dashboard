@@ -69,10 +69,6 @@ export async function POST(req: NextRequest) {
 
     const priceCurrency: string = dados.purchase?.price?.currency_value ?? 'BRL'
     const commissions = (dados.commissions ?? []) as HotmartCommission[]
-    const somaUSD = commissions
-      .filter((c) => c.currency_value === 'USD')
-      .reduce((s: number, c) => s + Number(c.value), 0)
-
     let moeda: string
     let valorBruto: number
     let taxaHotmart: number
@@ -105,19 +101,10 @@ export async function POST(req: NextRequest) {
         source.includes('AFFILIATE') || source.includes('AFILIADO'),
       )
     } else {
-      // Outra moeda (MXN, EUR, GBP, etc): converte para USD
+      // Outra moeda (ARS, MXN, COP, etc): original_offer_price já está em USD
       moeda = 'USD'
-      const origOffer = dados.purchase?.original_offer_price
-      const taxaHotmartUSD = sameCurrencyValue(commissions, 'USD', source => source === 'MARKETPLACE')
-
-      if (origOffer?.currency_value === 'USD') {
-        valorBruto = Number(origOffer.value) || 0
-      } else {
-        const rate = commissions.find((c) => c.currency_conversion?.conversion_rate)?.currency_conversion?.conversion_rate
-        const priceValue = origOffer?.value ?? dados.purchase?.price?.value
-        valorBruto = rate ? roundMoney(Number(priceValue) / rate) : somaUSD
-      }
-      taxaHotmart = taxaHotmartUSD
+      valorBruto = Number(dados.purchase?.original_offer_price?.value ?? 0)
+      taxaHotmart = sameCurrencyValue(commissions, 'USD', source => source === 'MARKETPLACE')
       comissaoProdutor = valorBruto
       coproducerCommission = sameCurrencyValue(commissions, 'USD', source =>
         source.includes('COPRODUCER') || source.includes('CO_PRODUCER') || source.includes('CO-PRODUCER') || source.includes('COPRODUTOR'),
