@@ -47,6 +47,46 @@ function roundMoney(value: number) {
   return parseFloat(value.toFixed(2))
 }
 
+async function getHotmartToken(clientId: string, clientSecret: string): Promise<string | null> {
+  const res = await fetch('https://api-sec-vlc.hotmart.com/security/oauth/token', {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'grant_type=client_credentials',
+  })
+  if (!res.ok) return null
+  const { access_token } = await res.json()
+  return access_token ?? null
+}
+
+async function fetchSaleItem(token: string, transactionId: string): Promise<any | null> {
+  const res = await fetch(
+    `https://developers.hotmart.com/payments/api/v1/sales/history?transaction=${encodeURIComponent(transactionId)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!res.ok) return null
+  const data = await res.json()
+  return data?.items?.[0] ?? null
+}
+
+const HOTMART_ACCOUNTS = [
+  { id: process.env.HOTMART_CLIENT_ID, secret: process.env.HOTMART_CLIENT_SECRET },
+  { id: process.env.HOTMART_CLIENT_ID_2, secret: process.env.HOTMART_CLIENT_SECRET_2 },
+]
+
+async function fetchSaleFromAnyAccount(transactionId: string): Promise<any | null> {
+  for (const account of HOTMART_ACCOUNTS) {
+    if (!account.id || !account.secret) continue
+    const token = await getHotmartToken(account.id, account.secret)
+    if (!token) continue
+    const item = await fetchSaleItem(token, transactionId)
+    if (item) return item
+  }
+  return null
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -93,7 +133,9 @@ export async function POST(req: NextRequest) {
       moeda = 'USD'
       valorBruto = Number(dados.purchase?.price?.value ?? 0)
       taxaHotmart = sameCurrencyValue(commissions, 'USD', source => source === 'MARKETPLACE')
-      comissaoProdutor = valorBruto
+      comissaoProdutor = sameCurrencyValue(commissions, 'USD', source =>
+        source === 'PRODUCER' || source === 'SELLER' || source === 'VENDOR' || source.includes('OWNER'),
+      )
       coproducerCommission = sameCurrencyValue(commissions, 'USD', source =>
         source.includes('COPRODUCER') || source.includes('CO_PRODUCER') || source.includes('CO-PRODUCER') || source.includes('COPRODUTOR'),
       )
@@ -101,11 +143,20 @@ export async function POST(req: NextRequest) {
         source.includes('AFFILIATE') || source.includes('AFILIADO'),
       )
     } else {
-      // Outra moeda (ARS, MXN, COP, etc): original_offer_price já está em USD
+      // Moeda exótica (ARS, MXN, COP, AUD, etc): a Hotmart NÃO manda um campo confiável
+      // com o total da venda em USD (price.value fica na moeda local, e original_offer_price
+      // reflete o preço original da oferta, em qualquer moeda que o produtor configurou —
+      // não necessariamente USD). O que É confiável é que cada linha de commissions[] vem
+      // convertida para USD pela Hotmart. Como estimativa imediata, somamos todas as
+      // comissões em USD (cobre o caso sem coprodução). Se houver coprodução, o webhook
+      // desta conta só mostra a fatia dela — o valor é corrigido em segundo plano abaixo
+      // usando o percentual/fixo da taxa Hotmart buscado na API.
       moeda = 'USD'
-      valorBruto = Number(dados.purchase?.original_offer_price?.value ?? 0)
       taxaHotmart = sameCurrencyValue(commissions, 'USD', source => source === 'MARKETPLACE')
-      comissaoProdutor = valorBruto
+      valorBruto = sameCurrencyValue(commissions, 'USD', () => true)
+      comissaoProdutor = sameCurrencyValue(commissions, 'USD', source =>
+        source === 'PRODUCER' || source === 'SELLER' || source === 'VENDOR' || source.includes('OWNER'),
+      )
       coproducerCommission = sameCurrencyValue(commissions, 'USD', source =>
         source.includes('COPRODUCER') || source.includes('CO_PRODUCER') || source.includes('CO-PRODUCER') || source.includes('COPRODUTOR'),
       )
@@ -222,31 +273,11 @@ export async function POST(req: NextRequest) {
 
     // Hotmart às vezes não inclui tracking no payload do webhook mesmo quando existe na API.
     // Se origem ficou null, buscamos da API em background sem atrasar a resposta.
+    // Tenta as duas contas porque a venda pode ter sido criada em qualquer uma delas.
     if (!origem && hotmartId) {
       after(async () => {
         try {
-          const clientId = process.env.HOTMART_CLIENT_ID
-          const clientSecret = process.env.HOTMART_CLIENT_SECRET
-          if (!clientId || !clientSecret) return
-
-          const tokenRes = await fetch('https://api-sec-vlc.hotmart.com/security/oauth/token', {
-            method: 'POST',
-            headers: {
-              Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: 'grant_type=client_credentials',
-          })
-          if (!tokenRes.ok) return
-          const { access_token: token } = await tokenRes.json()
-
-          const histRes = await fetch(
-            `https://developers.hotmart.com/payments/api/v1/sales/history?transaction=${encodeURIComponent(hotmartId)}`,
-            { headers: { Authorization: `Bearer ${token}` } },
-          )
-          if (!histRes.ok) return
-          const histData = await histRes.json()
-          const item = histData?.items?.[0]
+          const item = await fetchSaleFromAnyAccount(hotmartId)
           const origemApi = extractOrigem(item?.purchase, item?.commissions ?? [])
           if (!origemApi) return
 
@@ -254,6 +285,39 @@ export async function POST(req: NextRequest) {
           console.log(`[WEBHOOK AFTER] origem da API: ${hotmartId} → ${origemApi}`)
         } catch (err) {
           console.error('[WEBHOOK AFTER] erro ao sincronizar origem:', err)
+        }
+      })
+    }
+
+    // Moeda exótica: o valor síncrono (soma das commissions em USD) pode ficar incompleto
+    // quando há coprodução, porque o webhook desta conta só enxerga a fatia dela.
+    // Reconstrói o valor total em USD usando o percentual/fixo da taxa Hotmart (constantes
+    // por transação, iguais nas duas contas) aplicados sobre a taxa MARKETPLACE em USD,
+    // que já vem corretamente convertida no webhook original.
+    if (hotmartId && priceCurrency !== 'BRL' && priceCurrency !== 'USD' && taxaHotmart > 0) {
+      after(async () => {
+        try {
+          const item = await fetchSaleFromAnyAccount(hotmartId)
+          const fee = item?.purchase?.hotmart_fee
+          const percentage = Number(fee?.percentage)
+          const fixed = Number(fee?.fixed)
+          if (!fee || !(percentage > 0) || Number.isNaN(fixed)) {
+            console.log(`[WEBHOOK EXOTIC FEE] ${hotmartId}: sem hotmart_fee.percentage/fixed na API, mantém valor síncrono`)
+            return
+          }
+
+          const baseUsd = roundMoney((taxaHotmart - fixed) / (percentage / 100))
+          if (!(baseUsd > 0)) return
+
+          const valorCorrigido = status === 'abandoned' ? 0 : roundMoney(baseUsd - taxaHotmart)
+          await supabase.from('vendas').update({
+            valor_bruto: baseUsd,
+            valor: valorCorrigido,
+            valor_operacional_final: valorCorrigido,
+          }).eq('hotmart_id', hotmartId)
+          console.log(`[WEBHOOK EXOTIC FEE] ${hotmartId}: base=${baseUsd} taxa=${taxaHotmart} valor=${valorCorrigido}`)
+        } catch (err) {
+          console.error('[WEBHOOK EXOTIC FEE] erro:', err)
         }
       })
     }
