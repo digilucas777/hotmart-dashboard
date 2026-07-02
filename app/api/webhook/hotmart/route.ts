@@ -342,12 +342,17 @@ export async function POST(req: NextRequest) {
                       ? 0
                       : roundMoney(comissaoProdutor + conta2Producer + comissaoAfiliado)
                   } else {
-                    // Sem commissions: hotmart_fee.base já está em USD e é o valor correto.
-                    // Para BRL, hotmart_fee.base não existe — usa price.value como fallback.
+                    // Sem commissions: hotmart_fee.base deveria estar em USD.
+                    // Para moedas exóticas (ARS, COP, PYG, MXN...) o campo fica na moeda
+                    // local — valores > 5000 são descartados para evitar salvar ARS como USD.
                     const feeBase = Number(item2.purchase?.hotmart_fee?.base ?? 0)
                     const hotmartFeeTotal = Number(item2.purchase?.hotmart_fee?.total ?? 0)
                     const baseValue = feeBase > 0 ? feeBase : Number(item2.purchase?.price?.value ?? 0)
-                    if (baseValue > 0) {
+                    if (baseValue > 5000) {
+                      console.log(`[WEBHOOK COPROD] ${hotmartId}: baseValue ${baseValue} > 5000 — provável moeda exótica em valor local, ignorado`)
+                      comissaoCoprodutor2 = 0
+                      valorCorrigido = 0
+                    } else if (baseValue > 0) {
                       const totalLiquido = roundMoney(baseValue - hotmartFeeTotal)
                       comissaoCoprodutor2 = roundMoney(totalLiquido - comissaoProdutor - comissaoAfiliado)
                       valorCorrigido = status === 'abandoned' ? 0 : totalLiquido
