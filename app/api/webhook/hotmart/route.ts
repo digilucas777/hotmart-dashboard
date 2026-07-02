@@ -47,6 +47,30 @@ function roundMoney(value: number) {
   return parseFloat(value.toFixed(2))
 }
 
+async function getHotmartToken(clientId: string, clientSecret: string): Promise<string | null> {
+  const res = await fetch('https://api-sec-vlc.hotmart.com/security/oauth/token', {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: 'grant_type=client_credentials',
+  })
+  if (!res.ok) return null
+  const { access_token } = await res.json()
+  return access_token ?? null
+}
+
+async function fetchSaleItem(token: string, transactionId: string): Promise<any | null> {
+  const res = await fetch(
+    `https://developers.hotmart.com/payments/api/v1/sales/history?transaction=${encodeURIComponent(transactionId)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!res.ok) return null
+  const data = await res.json()
+  return data?.items?.[0] ?? null
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -123,6 +147,7 @@ export async function POST(req: NextRequest) {
     const forma_pagamento = cardBrand ? `${paymentType}|${cardBrand}` : paymentType
 
     const hotmartId: string | null = dados.purchase?.transaction ?? null
+    const hasCoprod: boolean = dados.purchase?.has_co_production === true
 
     const origem: string | null = extractOrigem(dados.purchase, dados.commissions ?? [])
 
@@ -220,49 +245,73 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Hotmart às vezes não inclui tracking no payload do webhook mesmo quando existe na API.
-    // Se origem ficou null, buscamos da API em background sem atrasar a resposta.
-    // Tenta a conta 1 e, se não encontrar resultado, tenta a conta 2.
-    if (!origem && hotmartId) {
+    // Executa em background: corrige coprodução e/ou sincroniza origem.
+    // Coprodução: o payload da conta 1 não inclui a comissão da conta 2 (coprodutor).
+    // Busca o valor PRODUCER da conta 2 e recalcula valor = PRODUCER(c1) + PRODUCER(c2) + AFFILIATE.
+    if (hotmartId && (hasCoprod || !origem)) {
       after(async () => {
         try {
-          const accounts = [
-            { id: process.env.HOTMART_CLIENT_ID, secret: process.env.HOTMART_CLIENT_SECRET },
-            { id: process.env.HOTMART_CLIENT_ID_2, secret: process.env.HOTMART_CLIENT_SECRET_2 },
-          ]
+          let origemSynced = false
 
-          for (const account of accounts) {
-            if (!account.id || !account.secret) continue
+          if (hasCoprod) {
+            const cid2 = process.env.HOTMART_CLIENT_ID_2
+            const csec2 = process.env.HOTMART_CLIENT_SECRET_2
+            if (cid2 && csec2) {
+              const token2 = await getHotmartToken(cid2, csec2)
+              if (token2) {
+                const item2 = await fetchSaleItem(token2, hotmartId)
+                if (item2) {
+                  const comms2: any[] = item2.commissions ?? []
+                  const conta2Producer = Number(comms2.find((c: any) => c.source === 'PRODUCER')?.value ?? 0)
 
-            const tokenRes = await fetch('https://api-sec-vlc.hotmart.com/security/oauth/token', {
-              method: 'POST',
-              headers: {
-                Authorization: `Basic ${Buffer.from(`${account.id}:${account.secret}`).toString('base64')}`,
-                'Content-Type': 'application/x-www-form-urlencoded',
-              },
-              body: 'grant_type=client_credentials',
-            })
-            if (!tokenRes.ok) continue
-            const { access_token: token } = await tokenRes.json()
+                  if (conta2Producer > 0) {
+                    const valorCorrigido = status === 'abandoned'
+                      ? 0
+                      : roundMoney(comissaoProdutor + conta2Producer + comissaoAfiliado)
 
-            const histRes = await fetch(
-              `https://developers.hotmart.com/payments/api/v1/sales/history?transaction=${encodeURIComponent(hotmartId)}`,
-              { headers: { Authorization: `Bearer ${token}` } },
-            )
-            if (!histRes.ok) continue
-            const histData = await histRes.json()
-            const item = histData?.items?.[0]
-            if (!item) continue
+                    await supabase.from('vendas').update({
+                      comissao_coprodutor: conta2Producer,
+                      valor: valorCorrigido,
+                      valor_operacional_final: valorCorrigido,
+                    }).eq('hotmart_id', hotmartId)
 
-            const origemApi = extractOrigem(item?.purchase, item?.commissions ?? [])
-            if (!origemApi) break
+                    console.log(`[WEBHOOK COPROD] ${hotmartId}: coprodutor=${conta2Producer} → valor=${valorCorrigido}`)
+                  }
 
-            await supabase.from('vendas').update({ origem: origemApi }).eq('hotmart_id', hotmartId)
-            console.log(`[WEBHOOK AFTER] origem da API: ${hotmartId} → ${origemApi}`)
-            break
+                  if (!origem) {
+                    const origemApi = extractOrigem(item2.purchase, comms2)
+                    if (origemApi) {
+                      await supabase.from('vendas').update({ origem: origemApi }).eq('hotmart_id', hotmartId)
+                      console.log(`[WEBHOOK COPROD] origem conta2: ${hotmartId} → ${origemApi}`)
+                      origemSynced = true
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          // Sincroniza origem se ainda não foi preenchida
+          if (!origem && !origemSynced) {
+            const accounts = [
+              { id: process.env.HOTMART_CLIENT_ID, secret: process.env.HOTMART_CLIENT_SECRET },
+              { id: process.env.HOTMART_CLIENT_ID_2, secret: process.env.HOTMART_CLIENT_SECRET_2 },
+            ]
+            for (const account of accounts) {
+              if (!account.id || !account.secret) continue
+              const token = await getHotmartToken(account.id, account.secret)
+              if (!token) continue
+              const item = await fetchSaleItem(token, hotmartId)
+              if (!item) continue
+              const origemApi = extractOrigem(item.purchase, item.commissions ?? [])
+              if (!origemApi) break
+              await supabase.from('vendas').update({ origem: origemApi }).eq('hotmart_id', hotmartId)
+              console.log(`[WEBHOOK AFTER] origem: ${hotmartId} → ${origemApi}`)
+              break
+            }
           }
         } catch (err) {
-          console.error('[WEBHOOK AFTER] erro ao sincronizar origem:', err)
+          console.error('[WEBHOOK AFTER] erro:', err)
         }
       })
     }
