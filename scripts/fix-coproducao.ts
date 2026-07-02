@@ -183,6 +183,19 @@ async function fix() {
         let comissaoCoprodutor: number
         let valorCorrigido: number
 
+        // Sanity check: para dados de assinatura a API retorna acumulado proporcional,
+        // então checar razão não funciona. Usamos threshold absoluto: nenhuma comissão
+        // individual deve ultrapassar $5000 / R$5000 nesse catálogo de produtos.
+        const MAX_SINGLE_COMMISSION = 5000
+        if (conta2Producer > MAX_SINGLE_COMMISSION) {
+          console.log(
+            `  [SUSPEITO] ${hotmartId}: coprod ${conta2Producer} > limite ${MAX_SINGLE_COMMISSION} — provável dado agregado de assinatura, pulando`
+          )
+          totalNaoEncontradas++
+          await sleep(DELAY_MS)
+          continue
+        }
+
         if (conta2Producer > 0) {
           // Caso USD/internacional: conta 2 retorna commissions com PRODUCER
           comissaoCoprodutor = conta2Producer
@@ -190,20 +203,24 @@ async function fix() {
             ? 0
             : roundMoney(comissaoProdutor1 + conta2Producer + comissaoAfiliado1)
         } else {
-          // Caso BRL: conta 2 retorna hotmart_fee e price sem commissions
-          const priceValue = Number(item2.purchase?.price?.value ?? 0)
+          // Sem commissions: hotmart_fee.base já está em USD e é o valor correto.
+          // Para BRL, hotmart_fee.base não existe — usa price.value como fallback.
+          const feeBase = Number(item2.purchase?.hotmart_fee?.base ?? 0)
           const hotmartFeeTotal = Number(item2.purchase?.hotmart_fee?.total ?? 0)
+          const baseValue = feeBase > 0 ? feeBase : Number(item2.purchase?.price?.value ?? 0)
 
-          if (priceValue === 0) {
-            console.log(`  [SEM-DADOS] ${hotmartId}: conta2 sem price.value`)
+          if (baseValue === 0) {
+            console.log(`  [SEM-DADOS] ${hotmartId}: conta2 sem hotmart_fee.base nem price.value`)
             totalNaoEncontradas++
             await sleep(DELAY_MS)
             continue
           }
 
-          // Total líquido = preço - taxa Hotmart total (cobre ambas as contas)
-          const totalLiquido = roundMoney(priceValue - hotmartFeeTotal)
-          comissaoCoprodutor = roundMoney(totalLiquido - comissaoProdutor1 - comissaoAfiliado1)
+          // Total líquido = base - taxa Hotmart total (cobre ambas as contas)
+          const totalLiquido = roundMoney(baseValue - hotmartFeeTotal)
+          const coprods = roundMoney(totalLiquido - comissaoProdutor1 - comissaoAfiliado1)
+          // Se negativo, o comissao_produtor histórico estava inflado — preserva 0
+          comissaoCoprodutor = coprods > 0 ? coprods : 0
           valorCorrigido = status === 'abandoned' ? 0 : totalLiquido
         }
 

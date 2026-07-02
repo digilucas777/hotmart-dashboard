@@ -342,11 +342,13 @@ export async function POST(req: NextRequest) {
                       ? 0
                       : roundMoney(comissaoProdutor + conta2Producer + comissaoAfiliado)
                   } else {
-                    // BRL: conta 2 retorna hotmart_fee + price sem commissions
-                    const priceValue = Number(item2.purchase?.price?.value ?? 0)
+                    // Sem commissions: hotmart_fee.base já está em USD e é o valor correto.
+                    // Para BRL, hotmart_fee.base não existe — usa price.value como fallback.
+                    const feeBase = Number(item2.purchase?.hotmart_fee?.base ?? 0)
                     const hotmartFeeTotal = Number(item2.purchase?.hotmart_fee?.total ?? 0)
-                    if (priceValue > 0) {
-                      const totalLiquido = roundMoney(priceValue - hotmartFeeTotal)
+                    const baseValue = feeBase > 0 ? feeBase : Number(item2.purchase?.price?.value ?? 0)
+                    if (baseValue > 0) {
+                      const totalLiquido = roundMoney(baseValue - hotmartFeeTotal)
                       comissaoCoprodutor2 = roundMoney(totalLiquido - comissaoProdutor - comissaoAfiliado)
                       valorCorrigido = status === 'abandoned' ? 0 : totalLiquido
                     } else {
