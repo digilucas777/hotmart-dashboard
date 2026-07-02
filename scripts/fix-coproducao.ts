@@ -84,6 +84,8 @@ async function fix() {
   let totalAtualizadas = 0
   let totalNaoEncontradas = 0
   let totalErros = 0
+  const skips: string[] = []
+  const manuals: string[] = []
 
   while (true) {
     pagina++
@@ -188,9 +190,9 @@ async function fix() {
         // individual deve ultrapassar $5000 / R$5000 nesse catálogo de produtos.
         const MAX_SINGLE_COMMISSION = 5000
         if (conta2Producer > MAX_SINGLE_COMMISSION) {
-          console.log(
-            `  [SUSPEITO] ${hotmartId}: coprod ${conta2Producer} > limite ${MAX_SINGLE_COMMISSION} — provável dado agregado de assinatura, pulando`
-          )
+          const skipMsg = `${hotmartId}: coprod ${conta2Producer} > ${MAX_SINGLE_COMMISSION} — provável dado agregado de assinatura`
+          console.log(`  [SUSPEITO] ${skipMsg}`)
+          skips.push(`[SUSPEITO] ${skipMsg}`)
           totalNaoEncontradas++
           await sleep(DELAY_MS)
           continue
@@ -203,14 +205,37 @@ async function fix() {
             ? 0
             : roundMoney(comissaoProdutor1 + conta2Producer + comissaoAfiliado1)
         } else {
-          // Sem commissions: hotmart_fee.base já está em USD e é o valor correto.
-          // Para BRL, hotmart_fee.base não existe — usa price.value como fallback.
-          const feeBase = Number(item2.purchase?.hotmart_fee?.base ?? 0)
-          const hotmartFeeTotal = Number(item2.purchase?.hotmart_fee?.total ?? 0)
+          const priceCurrency2: string = item2.purchase?.price?.currency_value ?? ''
+          const hotmartFee2: any = item2.purchase?.hotmart_fee ?? null
+
+          // Moeda exótica sem hotmart_fee → impossível converter para USD
+          if (priceCurrency2 !== 'USD' && priceCurrency2 !== 'BRL' && hotmartFee2 === null) {
+            const skipMsg = `${hotmartId}: moeda=${priceCurrency2}, hotmart_fee ausente`
+            console.log(`  [SKIP-MOEDA] ${skipMsg}`)
+            skips.push(`[SKIP-MOEDA] ${skipMsg}`)
+            totalNaoEncontradas++
+            await sleep(DELAY_MS)
+            continue
+          }
+
+          // hotmart_fee.base ausente → sem referência de valor base em USD
+          if (hotmartFee2?.base == null) {
+            const skipMsg = `${hotmartId}: hotmart_fee.base ausente (moeda=${priceCurrency2})`
+            console.log(`  [SKIP-SEM-BASE] ${skipMsg}`)
+            skips.push(`[SKIP-SEM-BASE] ${skipMsg}`)
+            totalNaoEncontradas++
+            await sleep(DELAY_MS)
+            continue
+          }
+
+          const feeBase = Number(hotmartFee2.base)
+          const hotmartFeeTotal = Number(hotmartFee2.total ?? 0)
           const baseValue = feeBase > 0 ? feeBase : Number(item2.purchase?.price?.value ?? 0)
 
           if (baseValue === 0) {
-            console.log(`  [SEM-DADOS] ${hotmartId}: conta2 sem hotmart_fee.base nem price.value`)
+            const skipMsg = `${hotmartId}: sem hotmart_fee.base nem price.value`
+            console.log(`  [SEM-DADOS] ${skipMsg}`)
+            skips.push(`[SEM-DADOS] ${skipMsg}`)
             totalNaoEncontradas++
             await sleep(DELAY_MS)
             continue
@@ -259,8 +284,17 @@ async function fix() {
   console.log(`Total lidas          : ${totalLidas}`)
   console.log(`Com has_co_production: ${totalAlvo}`)
   console.log(`Atualizadas          : ${totalAtualizadas}`)
-  console.log(`Não encontradas c2   : ${totalNaoEncontradas}`)
+  console.log(`Skips / não encontr. : ${totalNaoEncontradas}`)
   console.log(`Erros                : ${totalErros}`)
+
+  if (skips.length > 0) {
+    console.log(`\n--- [SKIP] (${skips.length}) ---`)
+    skips.forEach(s => console.log(`  ${s}`))
+  }
+  if (manuals.length > 0) {
+    console.log(`\n--- [MANUAL] (${manuals.length}) — requer revisão manual ---`)
+    manuals.forEach(m => console.log(`  ${m}`))
+  }
 }
 
 fix().catch(err => {
