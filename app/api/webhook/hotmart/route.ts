@@ -264,18 +264,37 @@ export async function POST(req: NextRequest) {
                   const comms2: any[] = item2.commissions ?? []
                   const conta2Producer = Number(comms2.find((c: any) => c.source === 'PRODUCER')?.value ?? 0)
 
+                  let comissaoCoprodutor2: number
+                  let valorCorrigido: number
+
                   if (conta2Producer > 0) {
-                    const valorCorrigido = status === 'abandoned'
+                    // USD/internacional: conta 2 retorna commissions com PRODUCER
+                    comissaoCoprodutor2 = conta2Producer
+                    valorCorrigido = status === 'abandoned'
                       ? 0
                       : roundMoney(comissaoProdutor + conta2Producer + comissaoAfiliado)
+                  } else {
+                    // BRL: conta 2 retorna hotmart_fee + price sem commissions
+                    const priceValue = Number(item2.purchase?.price?.value ?? 0)
+                    const hotmartFeeTotal = Number(item2.purchase?.hotmart_fee?.total ?? 0)
+                    if (priceValue > 0) {
+                      const totalLiquido = roundMoney(priceValue - hotmartFeeTotal)
+                      comissaoCoprodutor2 = roundMoney(totalLiquido - comissaoProdutor - comissaoAfiliado)
+                      valorCorrigido = status === 'abandoned' ? 0 : totalLiquido
+                    } else {
+                      comissaoCoprodutor2 = 0
+                      valorCorrigido = 0
+                    }
+                  }
 
+                  if (comissaoCoprodutor2 > 0) {
                     await supabase.from('vendas').update({
-                      comissao_coprodutor: conta2Producer,
+                      comissao_coprodutor: comissaoCoprodutor2,
                       valor: valorCorrigido,
                       valor_operacional_final: valorCorrigido,
                     }).eq('hotmart_id', hotmartId)
 
-                    console.log(`[WEBHOOK COPROD] ${hotmartId}: coprodutor=${conta2Producer} → valor=${valorCorrigido}`)
+                    console.log(`[WEBHOOK COPROD] ${hotmartId}: coprod=${comissaoCoprodutor2} → valor=${valorCorrigido}`)
                   }
 
                   if (!origem) {

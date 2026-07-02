@@ -180,17 +180,32 @@ async function fix() {
         const comms2: any[] = item2.commissions ?? []
         const conta2Producer = Number(comms2.find((c: any) => c.source === 'PRODUCER')?.value ?? 0)
 
-        if (conta2Producer === 0) {
-          console.log(`  [SEM-PRODUCER] ${hotmartId}: conta2 sem PRODUCER`)
-          totalNaoEncontradas++
-          await sleep(DELAY_MS)
-          continue
-        }
+        let comissaoCoprodutor: number
+        let valorCorrigido: number
 
-        // valor = PRODUCER(c1) + PRODUCER(c2) + AFFILIATE(c1), exceto abandoned
-        const valorCorrigido = status === 'abandoned'
-          ? 0
-          : roundMoney(comissaoProdutor1 + conta2Producer + comissaoAfiliado1)
+        if (conta2Producer > 0) {
+          // Caso USD/internacional: conta 2 retorna commissions com PRODUCER
+          comissaoCoprodutor = conta2Producer
+          valorCorrigido = status === 'abandoned'
+            ? 0
+            : roundMoney(comissaoProdutor1 + conta2Producer + comissaoAfiliado1)
+        } else {
+          // Caso BRL: conta 2 retorna hotmart_fee e price sem commissions
+          const priceValue = Number(item2.purchase?.price?.value ?? 0)
+          const hotmartFeeTotal = Number(item2.purchase?.hotmart_fee?.total ?? 0)
+
+          if (priceValue === 0) {
+            console.log(`  [SEM-DADOS] ${hotmartId}: conta2 sem price.value`)
+            totalNaoEncontradas++
+            await sleep(DELAY_MS)
+            continue
+          }
+
+          // Total líquido = preço - taxa Hotmart total (cobre ambas as contas)
+          const totalLiquido = roundMoney(priceValue - hotmartFeeTotal)
+          comissaoCoprodutor = roundMoney(totalLiquido - comissaoProdutor1 - comissaoAfiliado1)
+          valorCorrigido = status === 'abandoned' ? 0 : totalLiquido
+        }
 
         const valorAtual = Number(venda.valor ?? 0)
         const diff = roundMoney(valorCorrigido - valorAtual)
@@ -198,7 +213,7 @@ async function fix() {
         const { error: updateError } = await supabase
           .from('vendas')
           .update({
-            comissao_coprodutor: conta2Producer,
+            comissao_coprodutor: comissaoCoprodutor,
             valor: valorCorrigido,
             valor_operacional_final: valorCorrigido,
           })
@@ -210,8 +225,7 @@ async function fix() {
         } else {
           const sinal = diff >= 0 ? '+' : ''
           console.log(
-            `  [OK] ${hotmartId}: c1_prod=${comissaoProdutor1} + c2_prod=${conta2Producer} + afil=${comissaoAfiliado1}` +
-            ` → valor ${valorAtual} → ${valorCorrigido} (${sinal}${diff})`
+            `  [OK] ${hotmartId}: coprod=${comissaoCoprodutor} → valor ${valorAtual} → ${valorCorrigido} (${sinal}${diff})`
           )
           totalAtualizadas++
         }
