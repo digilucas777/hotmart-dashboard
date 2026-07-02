@@ -216,9 +216,71 @@ export async function POST(req: NextRequest) {
         : new Date().toISOString(),
     }
 
-    let { error } = await supabase
-      .from('vendas')
-      .upsert(venda, { onConflict: 'hotmart_id' })
+    // Quando has_co_production=true, ambas as contas Hotmart enviam webhook para a mesma
+    // transação, cada uma com seu próprio PRODUCER. Em vez de sobrescrever, somamos os dois.
+    let error: any = null
+
+    if (hasCoprod && transaction) {
+      const { data: existing } = await supabase
+        .from('vendas')
+        .select('comissao_produtor, comissao_coprodutor, comissao_afiliado, taxa_hotmart')
+        .eq('hotmart_id', transaction)
+        .maybeSingle()
+
+      if (existing) {
+        const existingP  = Number(existing.comissao_produtor  ?? 0)
+        const existingC  = Number(existing.comissao_coprodutor ?? 0)
+        const existingA  = Number(existing.comissao_afiliado   ?? 0)
+        const existingTx = Number(existing.taxa_hotmart        ?? 0)
+
+        if (existingC > 0) {
+          // Coprodutor já calculado (merge anterior ou after()) — preserva financeiro
+          console.log(`[WEBHOOK] ${transaction}: coprod já registrado (${existingC}), atualizando apenas metadados`)
+          const res = await supabase.from('vendas').update({
+            produto: venda.produto,
+            comprador_nome: venda.comprador_nome,
+            comprador_email: venda.comprador_email,
+            status: venda.status,
+            pais: venda.pais,
+            forma_pagamento: venda.forma_pagamento,
+            ...(venda.origem ? { origem: venda.origem } : {}),
+            afiliado_nome: venda.afiliado_nome,
+            data_venda: venda.data_venda,
+          }).eq('hotmart_id', transaction)
+          error = res.error
+        } else if (existingP > 0.01 && comissaoProdutor > 0.01 && Math.abs(comissaoProdutor - existingP) > 0.01) {
+          // Segundo PRODUCER de conta diferente chegando — faz merge
+          const p1 = Math.min(existingP, comissaoProdutor)
+          const p2 = Math.max(existingP, comissaoProdutor)
+          const afiliadoFinal = Math.max(existingA, comissaoAfiliado)
+          const taxaFinal     = Math.max(existingTx, taxaHotmart)
+          const valorMerged   = status === 'abandoned' ? 0 : roundMoney(p1 + p2 + afiliadoFinal)
+          console.log(`[WEBHOOK MERGE] ${transaction}: p1=${p1} + p2=${p2} + afil=${afiliadoFinal} → valor=${valorMerged}`)
+          const res = await supabase.from('vendas').update({
+            ...venda,
+            comissao_produtor:      p1,
+            comissao_coprodutor:    p2,
+            comissao_afiliado:      afiliadoFinal,
+            taxa_hotmart:           taxaFinal,
+            valor:                  valorMerged,
+            valor_operacional_final: valorMerged,
+          }).eq('hotmart_id', transaction)
+          error = res.error
+        } else {
+          // Retry da mesma conta ou existingP=0 — upsert normal
+          const res = await supabase.from('vendas').upsert(venda, { onConflict: 'hotmart_id' })
+          error = res.error
+        }
+      } else {
+        // Primeira chegada — upsert normal
+        const res = await supabase.from('vendas').upsert(venda, { onConflict: 'hotmart_id' })
+        error = res.error
+      }
+    } else {
+      // Sem coprodução — upsert normal
+      const res = await supabase.from('vendas').upsert(venda, { onConflict: 'hotmart_id' })
+      error = res.error
+    }
 
     if (error && (error.message.includes('schema cache') || error.message.includes('valor_operacional_final'))) {
       const legacyVenda: Partial<typeof venda> = { ...venda }
@@ -267,6 +329,12 @@ export async function POST(req: NextRequest) {
                   let comissaoCoprodutor2: number
                   let valorCorrigido: number
 
+                  // Sanity: API de assinatura pode retornar acumulado → threshold absoluto
+                  if (conta2Producer > 5000) {
+                    console.log(`[WEBHOOK COPROD] ${hotmartId}: coprod ${conta2Producer} > 5000, dado suspeito — ignorado`)
+                    return
+                  }
+
                   if (conta2Producer > 0) {
                     // USD/internacional: conta 2 retorna commissions com PRODUCER
                     comissaoCoprodutor2 = conta2Producer
@@ -288,13 +356,23 @@ export async function POST(req: NextRequest) {
                   }
 
                   if (comissaoCoprodutor2 > 0) {
-                    await supabase.from('vendas').update({
-                      comissao_coprodutor: comissaoCoprodutor2,
-                      valor: valorCorrigido,
-                      valor_operacional_final: valorCorrigido,
-                    }).eq('hotmart_id', hotmartId)
+                    // Só aplica se o merge via webhook da conta 2 ainda não aconteceu
+                    const { data: dbCheck } = await supabase
+                      .from('vendas')
+                      .select('comissao_coprodutor')
+                      .eq('hotmart_id', hotmartId)
+                      .maybeSingle()
 
-                    console.log(`[WEBHOOK COPROD] ${hotmartId}: coprod=${comissaoCoprodutor2} → valor=${valorCorrigido}`)
+                    if (Number(dbCheck?.comissao_coprodutor ?? 0) === 0) {
+                      await supabase.from('vendas').update({
+                        comissao_coprodutor: comissaoCoprodutor2,
+                        valor: valorCorrigido,
+                        valor_operacional_final: valorCorrigido,
+                      }).eq('hotmart_id', hotmartId)
+                      console.log(`[WEBHOOK COPROD] ${hotmartId}: coprod=${comissaoCoprodutor2} → valor=${valorCorrigido}`)
+                    } else {
+                      console.log(`[WEBHOOK COPROD] ${hotmartId}: merge já feito pelo webhook da conta 2, after() pulado`)
+                    }
                   }
 
                   if (!origem) {
