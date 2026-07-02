@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
     const forma_pagamento = cardBrand ? `${paymentType}|${cardBrand}` : paymentType
 
     const hotmartId: string | null = dados.purchase?.transaction ?? null
-    const hasCoprod: boolean = dados.purchase?.has_co_production === true
+    const hasCoprod: boolean = dados.product?.has_co_production === true
 
     const origem: string | null = extractOrigem(dados.purchase, dados.commissions ?? [])
 

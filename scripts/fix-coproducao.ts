@@ -103,11 +103,14 @@ async function fix() {
     totalLidas += vendas.length
     console.log(`--- Página ${pagina}: ${vendas.length} vendas (total lidas: ${totalLidas}) ---`)
 
-    // Filtra apenas vendas com has_co_production=true
+    // Filtra apenas vendas com has_co_production=true (está em data.product, não data.purchase)
     const alvos = vendas.filter(v => {
       const payload = v.hotmart_payload as any
-      return payload?.data?.purchase?.has_co_production === true
+      const val = payload?.data?.product?.has_co_production
+      return val === true || val === 'true' || val === 1
     })
+
+    console.log(`  → ${alvos.length} com has_co_production=true`)
 
     if (alvos.length === 0) {
       offset += PAGE_SIZE
@@ -116,7 +119,6 @@ async function fix() {
     }
 
     totalAlvo += alvos.length
-    console.log(`  → ${alvos.length} com has_co_production=true`)
 
     // Processa em lotes de BATCH_SIZE para logs organizados
     for (let i = 0; i < alvos.length; i += BATCH_SIZE) {
