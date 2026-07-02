@@ -47,30 +47,6 @@ function roundMoney(value: number) {
   return parseFloat(value.toFixed(2))
 }
 
-async function getHotmartToken(clientId: string, clientSecret: string): Promise<string | null> {
-  const res = await fetch('https://api-sec-vlc.hotmart.com/security/oauth/token', {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: 'grant_type=client_credentials',
-  })
-  if (!res.ok) return null
-  const { access_token } = await res.json()
-  return access_token ?? null
-}
-
-async function fetchSaleItem(token: string, transactionId: string): Promise<any | null> {
-  const res = await fetch(
-    `https://developers.hotmart.com/payments/api/v1/sales/history?transaction=${encodeURIComponent(transactionId)}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  )
-  if (!res.ok) return null
-  const data = await res.json()
-  return data?.items?.[0] ?? null
-}
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -129,13 +105,26 @@ export async function POST(req: NextRequest) {
         source.includes('AFFILIATE') || source.includes('AFILIADO'),
       )
     } else {
-      // Moeda estrangeira (EUR, MXN, GBP, etc.): commissions já vêm convertidas para USD pela Hotmart
+      // Outra moeda (MXN, EUR, GBP, etc): converte para USD
       moeda = 'USD'
-      valorBruto = roundMoney(somaUSD)
-      taxaHotmart = Number(commissions.find((c) => c.source === 'MARKETPLACE')?.value ?? 0)
-      comissaoProdutor = Number(commissions.find((c) => c.source === 'PRODUCER')?.value ?? 0)
-      coproducerCommission = Number(commissions.find((c) => c.source === 'CO_PRODUCTION')?.value ?? 0)
-      comissaoAfiliado = Number(commissions.find((c) => c.source === 'AFFILIATE')?.value ?? 0)
+      const origOffer = dados.purchase?.original_offer_price
+      const taxaHotmartUSD = sameCurrencyValue(commissions, 'USD', source => source === 'MARKETPLACE')
+
+      if (origOffer?.currency_value === 'USD') {
+        valorBruto = Number(origOffer.value) || 0
+      } else {
+        const rate = commissions.find((c) => c.currency_conversion?.conversion_rate)?.currency_conversion?.conversion_rate
+        const priceValue = origOffer?.value ?? dados.purchase?.price?.value
+        valorBruto = rate ? roundMoney(Number(priceValue) / rate) : somaUSD
+      }
+      taxaHotmart = taxaHotmartUSD
+      comissaoProdutor = valorBruto
+      coproducerCommission = sameCurrencyValue(commissions, 'USD', source =>
+        source.includes('COPRODUCER') || source.includes('CO_PRODUCER') || source.includes('CO-PRODUCER') || source.includes('COPRODUTOR'),
+      )
+      comissaoAfiliado = sameCurrencyValue(commissions, 'USD', source =>
+        source.includes('AFFILIATE') || source.includes('AFILIADO'),
+      )
     }
     const status = mapStatus(evento)
     const valorOperacionalFinal = status === 'abandoned'
@@ -147,7 +136,6 @@ export async function POST(req: NextRequest) {
     const forma_pagamento = cardBrand ? `${paymentType}|${cardBrand}` : paymentType
 
     const hotmartId: string | null = dados.purchase?.transaction ?? null
-    const hasCoprod: boolean = dados.product?.has_co_production === true
 
     const origem: string | null = extractOrigem(dados.purchase, dados.commissions ?? [])
 
@@ -216,71 +204,9 @@ export async function POST(req: NextRequest) {
         : new Date().toISOString(),
     }
 
-    // Quando has_co_production=true, ambas as contas Hotmart enviam webhook para a mesma
-    // transação, cada uma com seu próprio PRODUCER. Em vez de sobrescrever, somamos os dois.
-    let error: any = null
-
-    if (hasCoprod && transaction) {
-      const { data: existing } = await supabase
-        .from('vendas')
-        .select('comissao_produtor, comissao_coprodutor, comissao_afiliado, taxa_hotmart')
-        .eq('hotmart_id', transaction)
-        .maybeSingle()
-
-      if (existing) {
-        const existingP  = Number(existing.comissao_produtor  ?? 0)
-        const existingC  = Number(existing.comissao_coprodutor ?? 0)
-        const existingA  = Number(existing.comissao_afiliado   ?? 0)
-        const existingTx = Number(existing.taxa_hotmart        ?? 0)
-
-        if (existingC > 0) {
-          // Coprodutor já calculado (merge anterior ou after()) — preserva financeiro
-          console.log(`[WEBHOOK] ${transaction}: coprod já registrado (${existingC}), atualizando apenas metadados`)
-          const res = await supabase.from('vendas').update({
-            produto: venda.produto,
-            comprador_nome: venda.comprador_nome,
-            comprador_email: venda.comprador_email,
-            status: venda.status,
-            pais: venda.pais,
-            forma_pagamento: venda.forma_pagamento,
-            ...(venda.origem ? { origem: venda.origem } : {}),
-            afiliado_nome: venda.afiliado_nome,
-            data_venda: venda.data_venda,
-          }).eq('hotmart_id', transaction)
-          error = res.error
-        } else if (existingP > 0.01 && comissaoProdutor > 0.01 && Math.abs(comissaoProdutor - existingP) > 0.01) {
-          // Segundo PRODUCER de conta diferente chegando — faz merge
-          const p1 = Math.min(existingP, comissaoProdutor)
-          const p2 = Math.max(existingP, comissaoProdutor)
-          const afiliadoFinal = Math.max(existingA, comissaoAfiliado)
-          const taxaFinal     = Math.max(existingTx, taxaHotmart)
-          const valorMerged   = status === 'abandoned' ? 0 : roundMoney(p1 + p2 + afiliadoFinal)
-          console.log(`[WEBHOOK MERGE] ${transaction}: p1=${p1} + p2=${p2} + afil=${afiliadoFinal} → valor=${valorMerged}`)
-          const res = await supabase.from('vendas').update({
-            ...venda,
-            comissao_produtor:      p1,
-            comissao_coprodutor:    p2,
-            comissao_afiliado:      afiliadoFinal,
-            taxa_hotmart:           taxaFinal,
-            valor:                  valorMerged,
-            valor_operacional_final: valorMerged,
-          }).eq('hotmart_id', transaction)
-          error = res.error
-        } else {
-          // Retry da mesma conta ou existingP=0 — upsert normal
-          const res = await supabase.from('vendas').upsert(venda, { onConflict: 'hotmart_id' })
-          error = res.error
-        }
-      } else {
-        // Primeira chegada — upsert normal
-        const res = await supabase.from('vendas').upsert(venda, { onConflict: 'hotmart_id' })
-        error = res.error
-      }
-    } else {
-      // Sem coprodução — upsert normal
-      const res = await supabase.from('vendas').upsert(venda, { onConflict: 'hotmart_id' })
-      error = res.error
-    }
+    let { error } = await supabase
+      .from('vendas')
+      .upsert(venda, { onConflict: 'hotmart_id' })
 
     if (error && (error.message.includes('schema cache') || error.message.includes('valor_operacional_final'))) {
       const legacyVenda: Partial<typeof venda> = { ...venda }
@@ -307,115 +233,40 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Executa em background: corrige coprodução e/ou sincroniza origem.
-    // Coprodução: o payload da conta 1 não inclui a comissão da conta 2 (coprodutor).
-    // Busca o valor PRODUCER da conta 2 e recalcula valor = PRODUCER(c1) + PRODUCER(c2) + AFFILIATE.
-    if (hotmartId && (hasCoprod || !origem)) {
+    // Hotmart às vezes não inclui tracking no payload do webhook mesmo quando existe na API.
+    // Se origem ficou null, buscamos da API em background sem atrasar a resposta.
+    if (!origem && hotmartId) {
       after(async () => {
         try {
-          let origemSynced = false
+          const clientId = process.env.HOTMART_CLIENT_ID
+          const clientSecret = process.env.HOTMART_CLIENT_SECRET
+          if (!clientId || !clientSecret) return
 
-          if (hasCoprod) {
-            const cid2 = process.env.HOTMART_CLIENT_ID_2
-            const csec2 = process.env.HOTMART_CLIENT_SECRET_2
-            if (cid2 && csec2) {
-              const token2 = await getHotmartToken(cid2, csec2)
-              if (token2) {
-                const item2 = await fetchSaleItem(token2, hotmartId)
-                if (item2) {
-                  const comms2: any[] = item2.commissions ?? []
-                  const conta2Producer = Number(comms2.find((c: any) => c.source === 'PRODUCER')?.value ?? 0)
+          const tokenRes = await fetch('https://api-sec-vlc.hotmart.com/security/oauth/token', {
+            method: 'POST',
+            headers: {
+              Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'grant_type=client_credentials',
+          })
+          if (!tokenRes.ok) return
+          const { access_token: token } = await tokenRes.json()
 
-                  let comissaoCoprodutor2: number
-                  let valorCorrigido: number
+          const histRes = await fetch(
+            `https://developers.hotmart.com/payments/api/v1/sales/history?transaction=${encodeURIComponent(hotmartId)}`,
+            { headers: { Authorization: `Bearer ${token}` } },
+          )
+          if (!histRes.ok) return
+          const histData = await histRes.json()
+          const item = histData?.items?.[0]
+          const origemApi = extractOrigem(item?.purchase, item?.commissions ?? [])
+          if (!origemApi) return
 
-                  // Sanity: API de assinatura pode retornar acumulado → threshold absoluto
-                  if (conta2Producer > 5000) {
-                    console.log(`[WEBHOOK COPROD] ${hotmartId}: coprod ${conta2Producer} > 5000, dado suspeito — ignorado`)
-                    return
-                  }
-
-                  if (conta2Producer > 0) {
-                    // USD/internacional: conta 2 retorna commissions com PRODUCER
-                    comissaoCoprodutor2 = conta2Producer
-                    valorCorrigido = status === 'abandoned'
-                      ? 0
-                      : roundMoney(comissaoProdutor + conta2Producer + comissaoAfiliado)
-                  } else {
-                    // Sem commissions: hotmart_fee.base deveria estar em USD.
-                    // Para moedas exóticas (ARS, COP, PYG, MXN...) o campo fica na moeda
-                    // local — valores > 5000 são descartados para evitar salvar ARS como USD.
-                    const feeBase = Number(item2.purchase?.hotmart_fee?.base ?? 0)
-                    const hotmartFeeTotal = Number(item2.purchase?.hotmart_fee?.total ?? 0)
-                    const baseValue = feeBase > 0 ? feeBase : Number(item2.purchase?.price?.value ?? 0)
-                    if (baseValue > 5000) {
-                      console.log(`[WEBHOOK COPROD] ${hotmartId}: baseValue ${baseValue} > 5000 — provável moeda exótica em valor local, ignorado`)
-                      comissaoCoprodutor2 = 0
-                      valorCorrigido = 0
-                    } else if (baseValue > 0) {
-                      const totalLiquido = roundMoney(baseValue - hotmartFeeTotal)
-                      comissaoCoprodutor2 = roundMoney(totalLiquido - comissaoProdutor - comissaoAfiliado)
-                      valorCorrigido = status === 'abandoned' ? 0 : totalLiquido
-                    } else {
-                      comissaoCoprodutor2 = 0
-                      valorCorrigido = 0
-                    }
-                  }
-
-                  if (comissaoCoprodutor2 > 0) {
-                    // Só aplica se o merge via webhook da conta 2 ainda não aconteceu
-                    const { data: dbCheck } = await supabase
-                      .from('vendas')
-                      .select('comissao_coprodutor')
-                      .eq('hotmart_id', hotmartId)
-                      .maybeSingle()
-
-                    if (Number(dbCheck?.comissao_coprodutor ?? 0) === 0) {
-                      await supabase.from('vendas').update({
-                        comissao_coprodutor: comissaoCoprodutor2,
-                        valor: valorCorrigido,
-                        valor_operacional_final: valorCorrigido,
-                      }).eq('hotmart_id', hotmartId)
-                      console.log(`[WEBHOOK COPROD] ${hotmartId}: coprod=${comissaoCoprodutor2} → valor=${valorCorrigido}`)
-                    } else {
-                      console.log(`[WEBHOOK COPROD] ${hotmartId}: merge já feito pelo webhook da conta 2, after() pulado`)
-                    }
-                  }
-
-                  if (!origem) {
-                    const origemApi = extractOrigem(item2.purchase, comms2)
-                    if (origemApi) {
-                      await supabase.from('vendas').update({ origem: origemApi }).eq('hotmart_id', hotmartId)
-                      console.log(`[WEBHOOK COPROD] origem conta2: ${hotmartId} → ${origemApi}`)
-                      origemSynced = true
-                    }
-                  }
-                }
-              }
-            }
-          }
-
-          // Sincroniza origem se ainda não foi preenchida
-          if (!origem && !origemSynced) {
-            const accounts = [
-              { id: process.env.HOTMART_CLIENT_ID, secret: process.env.HOTMART_CLIENT_SECRET },
-              { id: process.env.HOTMART_CLIENT_ID_2, secret: process.env.HOTMART_CLIENT_SECRET_2 },
-            ]
-            for (const account of accounts) {
-              if (!account.id || !account.secret) continue
-              const token = await getHotmartToken(account.id, account.secret)
-              if (!token) continue
-              const item = await fetchSaleItem(token, hotmartId)
-              if (!item) continue
-              const origemApi = extractOrigem(item.purchase, item.commissions ?? [])
-              if (!origemApi) break
-              await supabase.from('vendas').update({ origem: origemApi }).eq('hotmart_id', hotmartId)
-              console.log(`[WEBHOOK AFTER] origem: ${hotmartId} → ${origemApi}`)
-              break
-            }
-          }
+          await supabase.from('vendas').update({ origem: origemApi }).eq('hotmart_id', hotmartId)
+          console.log(`[WEBHOOK AFTER] origem da API: ${hotmartId} → ${origemApi}`)
         } catch (err) {
-          console.error('[WEBHOOK AFTER] erro:', err)
+          console.error('[WEBHOOK AFTER] erro ao sincronizar origem:', err)
         }
       })
     }
