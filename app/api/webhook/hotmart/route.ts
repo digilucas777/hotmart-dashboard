@@ -235,36 +235,45 @@ export async function POST(req: NextRequest) {
 
     // Hotmart às vezes não inclui tracking no payload do webhook mesmo quando existe na API.
     // Se origem ficou null, buscamos da API em background sem atrasar a resposta.
+    // Tenta a conta 1 e, se não encontrar resultado, tenta a conta 2.
     if (!origem && hotmartId) {
       after(async () => {
         try {
-          const clientId = process.env.HOTMART_CLIENT_ID
-          const clientSecret = process.env.HOTMART_CLIENT_SECRET
-          if (!clientId || !clientSecret) return
+          const accounts = [
+            { id: process.env.HOTMART_CLIENT_ID, secret: process.env.HOTMART_CLIENT_SECRET },
+            { id: process.env.HOTMART_CLIENT_ID_2, secret: process.env.HOTMART_CLIENT_SECRET_2 },
+          ]
 
-          const tokenRes = await fetch('https://api-sec-vlc.hotmart.com/security/oauth/token', {
-            method: 'POST',
-            headers: {
-              Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: 'grant_type=client_credentials',
-          })
-          if (!tokenRes.ok) return
-          const { access_token: token } = await tokenRes.json()
+          for (const account of accounts) {
+            if (!account.id || !account.secret) continue
 
-          const histRes = await fetch(
-            `https://developers.hotmart.com/payments/api/v1/sales/history?transaction=${encodeURIComponent(hotmartId)}`,
-            { headers: { Authorization: `Bearer ${token}` } },
-          )
-          if (!histRes.ok) return
-          const histData = await histRes.json()
-          const item = histData?.items?.[0]
-          const origemApi = extractOrigem(item?.purchase, item?.commissions ?? [])
-          if (!origemApi) return
+            const tokenRes = await fetch('https://api-sec-vlc.hotmart.com/security/oauth/token', {
+              method: 'POST',
+              headers: {
+                Authorization: `Basic ${Buffer.from(`${account.id}:${account.secret}`).toString('base64')}`,
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              body: 'grant_type=client_credentials',
+            })
+            if (!tokenRes.ok) continue
+            const { access_token: token } = await tokenRes.json()
 
-          await supabase.from('vendas').update({ origem: origemApi }).eq('hotmart_id', hotmartId)
-          console.log(`[WEBHOOK AFTER] origem da API: ${hotmartId} → ${origemApi}`)
+            const histRes = await fetch(
+              `https://developers.hotmart.com/payments/api/v1/sales/history?transaction=${encodeURIComponent(hotmartId)}`,
+              { headers: { Authorization: `Bearer ${token}` } },
+            )
+            if (!histRes.ok) continue
+            const histData = await histRes.json()
+            const item = histData?.items?.[0]
+            if (!item) continue
+
+            const origemApi = extractOrigem(item?.purchase, item?.commissions ?? [])
+            if (!origemApi) break
+
+            await supabase.from('vendas').update({ origem: origemApi }).eq('hotmart_id', hotmartId)
+            console.log(`[WEBHOOK AFTER] origem da API: ${hotmartId} → ${origemApi}`)
+            break
+          }
         } catch (err) {
           console.error('[WEBHOOK AFTER] erro ao sincronizar origem:', err)
         }
