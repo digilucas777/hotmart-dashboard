@@ -1,0 +1,183 @@
+-- Migration 036: permissões do "Gestor de Tráfego" + correções de RLS
+-- Contexto: user_dashboard_permissions existia mas não era respeitada pelas
+-- policies de RLS (só o dono do projeto tinha acesso). Esta migration:
+--   1. adiciona as colunas novas de permissão;
+--   2. adiciona policies extras (somativas, não substituem as existentes)
+--      para liberar acesso a quem tem uma linha em user_dashboard_permissions;
+--   3. fecha o acesso público a whatsapp_connections (tokens de API).
+
+-- ─── Novas colunas ──────────────────────────────────────────────────────────
+
+ALTER TABLE public.user_dashboard_permissions
+  ADD COLUMN IF NOT EXISTS pode_ver_vendas boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS pode_adicionar_custo_manual boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS pode_ver_conexao_whatsapp boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS dados_visiveis_a_partir date;
+
+-- ─── projetos: liberar SELECT para quem tem permissão compartilhada ────────
+
+CREATE POLICY "shared users select projetos"
+  ON public.projetos FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.user_dashboard_permissions udp
+      WHERE udp.projeto_id = projetos.id
+        AND udp.user_id = auth.uid()
+        AND udp.pode_visualizar = true
+    )
+  );
+
+-- ─── produtos: liberar SELECT para quem tem permissão compartilhada ────────
+
+CREATE POLICY "shared users select produtos"
+  ON public.produtos FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.projeto_produtos pp
+      JOIN public.user_dashboard_permissions udp ON udp.projeto_id = pp.projeto_id
+      WHERE pp.produto_id = produtos.id
+        AND udp.user_id = auth.uid()
+        AND udp.pode_visualizar = true
+    )
+  );
+
+-- ─── projeto_produtos / projeto_produto_ofertas: SELECT para viewers ───────
+
+CREATE POLICY "shared users select projeto_produtos"
+  ON public.projeto_produtos FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.user_dashboard_permissions udp
+      WHERE udp.projeto_id = projeto_produtos.projeto_id
+        AND udp.user_id = auth.uid()
+        AND udp.pode_visualizar = true
+    )
+  );
+
+CREATE POLICY "shared users select projeto_produto_ofertas"
+  ON public.projeto_produto_ofertas FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.user_dashboard_permissions udp
+      WHERE udp.projeto_id = projeto_produto_ofertas.projeto_id
+        AND udp.user_id = auth.uid()
+        AND udp.pode_visualizar = true
+    )
+  );
+
+-- ─── vendas: SELECT para viewers, com corte de data ────────────────────────
+
+CREATE POLICY "shared users select vendas"
+  ON public.vendas FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.produtos p
+      JOIN public.projeto_produtos pp ON pp.produto_id = p.id
+      JOIN public.user_dashboard_permissions udp ON udp.projeto_id = pp.projeto_id
+      WHERE p.hotmart_id = vendas.hotmart_produto_id
+        AND udp.user_id = auth.uid()
+        AND udp.pode_visualizar = true
+        AND (
+          udp.dados_visiveis_a_partir IS NULL
+          OR vendas.data_venda >= udp.dados_visiveis_a_partir
+        )
+    )
+  );
+
+-- ─── custos_manuais: SELECT com corte de data + INSERT dedicado ───────────
+
+CREATE POLICY "shared users select custos_manuais"
+  ON public.custos_manuais FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.user_dashboard_permissions udp
+      WHERE udp.projeto_id = custos_manuais.projeto_id
+        AND udp.user_id = auth.uid()
+        AND udp.pode_visualizar = true
+        AND (
+          udp.dados_visiveis_a_partir IS NULL
+          OR custos_manuais.data >= udp.dados_visiveis_a_partir
+        )
+    )
+  );
+
+CREATE POLICY "shared users insert custos_manuais"
+  ON public.custos_manuais FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.user_dashboard_permissions udp
+      WHERE udp.projeto_id = custos_manuais.projeto_id
+        AND udp.user_id = auth.uid()
+        AND udp.pode_adicionar_custo_manual = true
+    )
+  );
+
+-- ─── dashboard_widgets: SELECT para viewers, escrita para editores ─────────
+
+CREATE POLICY "shared users select dashboard_widgets"
+  ON public.dashboard_widgets FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.user_dashboard_permissions udp
+      WHERE udp.projeto_id = dashboard_widgets.projeto_id
+        AND udp.user_id = auth.uid()
+        AND udp.pode_visualizar = true
+    )
+  );
+
+CREATE POLICY "shared users edit dashboard_widgets"
+  ON public.dashboard_widgets FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.user_dashboard_permissions udp
+      WHERE udp.projeto_id = dashboard_widgets.projeto_id
+        AND udp.user_id = auth.uid()
+        AND (udp.pode_editar_layout = true OR udp.pode_adicionar_widgets = true OR udp.is_admin_dashboard = true)
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.user_dashboard_permissions udp
+      WHERE udp.projeto_id = dashboard_widgets.projeto_id
+        AND udp.user_id = auth.uid()
+        AND (udp.pode_editar_layout = true OR udp.pode_adicionar_widgets = true OR udp.is_admin_dashboard = true)
+    )
+  );
+
+-- ─── whatsapp_report_schedules: viewers podem configurar relatórios ────────
+
+CREATE POLICY "shared users manage whatsapp_report_schedules"
+  ON public.whatsapp_report_schedules FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.user_dashboard_permissions udp
+      WHERE udp.projeto_id = whatsapp_report_schedules.projeto_id
+        AND udp.user_id = auth.uid()
+        AND udp.pode_visualizar = true
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.user_dashboard_permissions udp
+      WHERE udp.projeto_id = whatsapp_report_schedules.projeto_id
+        AND udp.user_id = auth.uid()
+        AND udp.pode_visualizar = true
+    )
+  );
+
+-- ─── whatsapp_connections: fecha para "qualquer autenticado", abre só admin ─
+-- Achado de segurança: hoje qualquer usuário logado lê access_token e
+-- evolution_api_key de TODOS os projetos. Corrige para: só admin (dono).
+-- A tela de Relatórios do gestor nunca lê esta tabela diretamente — usa a
+-- rota /api/relatorios/connection-id (service role) para obter só o ID.
+
+DROP POLICY IF EXISTS "authenticated users access whatsapp_connections" ON public.whatsapp_connections;
+
+CREATE POLICY "admin manages whatsapp_connections"
+  ON public.whatsapp_connections FOR ALL
+  USING (
+    EXISTS (SELECT 1 FROM public.user_profiles WHERE id = auth.uid() AND role = 'admin')
+  )
+  WITH CHECK (
+    EXISTS (SELECT 1 FROM public.user_profiles WHERE id = auth.uid() AND role = 'admin')
+  );
