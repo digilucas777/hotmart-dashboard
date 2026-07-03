@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
 import { CalendarDays, Clock3, X } from 'lucide-react'
 import type { Period } from '@/lib/types'
 import { formatPeriodContext } from '@/lib/utils'
+import { Calendar } from '@/components/ui/Calendar'
 
 const PERIODS: { value: Period; label: string }[] = [
   { value: 'today', label: 'Hoje' },
@@ -33,6 +35,19 @@ function parseLocal(value: string) {
   return new Date(year!, month! - 1, day!)
 }
 
+function formatDisplay(value: string) {
+  const [year, month, day] = value.split('-')
+  return `${day}/${month}/${year}`
+}
+
+function subscribeNever() {
+  return () => {}
+}
+
+function useMounted() {
+  return useSyncExternalStore(subscribeNever, () => true, () => false)
+}
+
 export function PeriodFilter({
   value,
   onChange,
@@ -44,6 +59,8 @@ export function PeriodFilter({
   const [showCustom, setShowCustom] = useState(false)
   const [draftFrom, setDraftFrom] = useState(customFrom)
   const [draftTo, setDraftTo] = useState(customTo)
+  const mounted = useMounted()
+  const [calendarAnchor, setCalendarAnchor] = useState<Date>(() => new Date())
 
   const customRange = useMemo(() => {
     if (value !== 'custom' || !customFrom || !customTo) return undefined
@@ -70,6 +87,7 @@ export function PeriodFilter({
   function openCustom() {
     setDraftFrom(customFrom)
     setDraftTo(customTo)
+    setCalendarAnchor(customTo ? parseLocal(customTo) : customFrom ? parseLocal(customFrom) : new Date())
     setShowCustom(true)
   }
 
@@ -84,6 +102,12 @@ export function PeriodFilter({
     const from = new Date(to.getFullYear(), to.getMonth() - months, to.getDate())
     setDraftFrom(isoDate(from))
     setDraftTo(isoDate(to))
+    setCalendarAnchor(to)
+  }
+
+  function handleCalendarSelect(range: { from?: Date; to?: Date }) {
+    setDraftFrom(range.from ? isoDate(range.from) : '')
+    setDraftTo(range.to ? isoDate(range.to) : '')
   }
 
   useEffect(() => {
@@ -137,7 +161,7 @@ export function PeriodFilter({
           {updatedLabel}
         </span>
       </div>
-      {showCustom && (
+      {showCustom && mounted && createPortal(
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 px-4" onClick={() => setShowCustom(false)}>
           <div className="w-full max-w-md overflow-hidden rounded-3xl border border-white/10 bg-[#10101d]/95 shadow-2xl shadow-cyan-500/10" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-white/8 px-5 py-4">
@@ -155,26 +179,19 @@ export function PeriodFilter({
               </button>
             </div>
             <div className="space-y-5 p-5">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="space-y-1.5">
-                  <span className="text-xs font-semibold text-slate-400">Data inicial</span>
-                  <input
-                    type="date"
-                    value={draftFrom}
-                    onChange={e => setDraftFrom(e.target.value)}
-                    className="h-11 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-3 text-sm text-slate-100 outline-none focus:border-cyan-400/50"
-                  />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="text-xs font-semibold text-slate-400">Data final</span>
-                  <input
-                    type="date"
-                    value={draftTo}
-                    min={draftFrom}
-                    onChange={e => setDraftTo(e.target.value)}
-                    className="h-11 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-3 text-sm text-slate-100 outline-none focus:border-cyan-400/50"
-                  />
-                </label>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                <Calendar
+                  key={calendarAnchor.getTime()}
+                  initialMonth={calendarAnchor}
+                  from={draftFrom ? parseLocal(draftFrom) : undefined}
+                  to={draftTo ? parseLocal(draftTo) : undefined}
+                  onSelect={handleCalendarSelect}
+                />
+              </div>
+              <div className="flex items-center justify-center gap-2 text-xs font-semibold text-slate-400">
+                <span>{draftFrom ? formatDisplay(draftFrom) : 'Data inicial'}</span>
+                <span className="text-slate-600">→</span>
+                <span>{draftTo ? formatDisplay(draftTo) : 'Data final'}</span>
               </div>
               <div className="flex flex-wrap gap-2">
                 {[3, 6, 12].map(months => (
@@ -202,7 +219,8 @@ export function PeriodFilter({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
