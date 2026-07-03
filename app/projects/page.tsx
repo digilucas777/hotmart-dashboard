@@ -190,7 +190,13 @@ export default function ProjectsPage() {
                   novo.splice(i, 0, item)
                   setProjetos(novo)
                   setDragIndex(null)
-                  novo.forEach((proj, idx) => supabase.from('projetos').update({ ordem: idx }).eq('id', proj.id))
+                  Promise.all(
+                    novo.map((proj, idx) => supabase.from('projetos').update({ ordem: idx }).eq('id', proj.id)),
+                  ).then(results => {
+                    if (results.some(r => r.error)) {
+                      console.error('Falha ao salvar nova ordem dos projetos')
+                    }
+                  })
                 }}
                 onDragEnd={() => setDragIndex(null)}
                 style={{

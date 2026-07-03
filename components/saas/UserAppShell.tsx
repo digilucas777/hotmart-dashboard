@@ -162,6 +162,7 @@ export function UserAppShell() {
         nome: dashboardName.trim(),
         descricao: dashboardDescription.trim() || null,
         user_id: userId,
+        ordem: dashboards.length,
       })
       .select()
       .single()
@@ -281,6 +282,7 @@ export function UserAppShell() {
       imagem_url: dashboard.imagem_url ?? null,
       status: dashboard.status ?? 'active',
       user_id: userId,
+      ordem: dashboards.length,
     }
 
     let { data: duplicated, error: duplicateError } = await supabase
@@ -292,7 +294,7 @@ export function UserAppShell() {
     if (duplicateError && (duplicateError.message.includes('schema cache') || duplicateError.message.includes('capa_url'))) {
       const retry = await supabase
         .from('projetos')
-        .insert({ nome: payload.nome, descricao: payload.descricao, user_id: userId })
+        .insert({ nome: payload.nome, descricao: payload.descricao, user_id: userId, ordem: dashboards.length })
         .select()
         .single()
       duplicated = retry.data
@@ -471,9 +473,9 @@ export function UserAppShell() {
             </div>
 
             {loading ? (
-              <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-                {[0, 1, 2, 3].map(item => (
-                  <div key={item} className="h-48 animate-pulse rounded-2xl border border-white/10 bg-white/[0.035]" />
+              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {[0, 1, 2, 3, 4, 5].map(item => (
+                  <div key={item} className="h-56 animate-pulse rounded-2xl border border-white/10 bg-white/[0.035]" />
                 ))}
               </div>
             ) : dashboards.length === 0 ? (
@@ -494,7 +496,7 @@ export function UserAppShell() {
                 </button>
               </div>
             ) : (
-              <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {dashboards.map((dashboard, index) => (
                   <div
                     key={dashboard.id}
@@ -508,18 +510,24 @@ export function UserAppShell() {
                       novo.splice(index, 0, item)
                       setDashboards(novo)
                       setDragIndex(null)
-                      novo.forEach((d, idx) => supabase.from('projetos').update({ ordem: idx }).eq('id', d.id))
+                      Promise.all(
+                        novo.map((d, idx) => supabase.from('projetos').update({ ordem: idx }).eq('id', d.id)),
+                      ).then(results => {
+                        if (results.some(r => r.error)) {
+                          setError('Não foi possível salvar a nova ordem. Recarregue a página.')
+                        }
+                      })
                     }}
                     onDragEnd={() => setDragIndex(null)}
                     style={{ opacity: dragIndex === index ? 0.5 : 1 }}
-                    className="relative rounded-2xl border border-white/10 bg-[#0b0d14] p-4 transition-all hover:border-cyan-300/30"
+                    className="relative rounded-2xl border border-white/10 bg-[#0b0d14] p-5 transition-all hover:border-cyan-300/30"
                   >
                     {/* Grip */}
                     <div className="absolute left-2 top-2 cursor-move p-1 text-white">
                       <GripVertical size={14} />
                     </div>
 
-                    <div className="mb-3 mt-3 h-20 rounded-xl bg-[linear-gradient(135deg,rgba(0,212,255,0.2),rgba(167,139,250,0.14))] p-3">
+                    <div className="mb-4 mt-3 h-24 rounded-xl bg-[linear-gradient(135deg,rgba(0,212,255,0.2),rgba(167,139,250,0.14))] p-3 lg:h-28">
                       <div className="flex h-full items-end justify-between">
                         <div className="h-7 w-14 rounded-lg bg-white/10" />
                         <div className="flex gap-1">
@@ -530,12 +538,12 @@ export function UserAppShell() {
                       </div>
                     </div>
 
-                    <p className="text-sm font-bold">{dashboard.nome}</p>
-                    <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">
+                    <p className="text-base font-bold">{dashboard.nome}</p>
+                    <p className="mt-1 line-clamp-2 text-xs text-slate-500">
                       {dashboard.descricao || (index === 0 ? 'Dashboard principal da operação' : 'Dashboard pronto para configurar')}
                     </p>
 
-                    <div className="mt-3 grid gap-1.5 grid-cols-2">
+                    <div className="mt-4 grid gap-1.5 grid-cols-2">
                       <Link href={`/dashboard/${dashboard.id}`} className="col-span-2 inline-flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-400 to-violet-500 px-2 py-1 text-xs font-black text-white">
                         Abrir
                         <ExternalLink size={11} />
