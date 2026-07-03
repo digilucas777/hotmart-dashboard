@@ -148,9 +148,18 @@ function PermissionsProjectList({
                       type="date"
                       value={perm.dados_visiveis_a_partir ?? ''}
                       onChange={e => onSetDate(projeto.id, e.target.value)}
-                      className="rounded-lg border border-white/10 bg-[#121221] px-2 py-1 text-xs text-slate-200 outline-none focus:border-indigo-500/60"
+                      className={`rounded-lg border bg-[#121221] px-2 py-1 text-xs text-slate-200 outline-none focus:border-indigo-500/60 ${
+                        !perm.pode_ver_vendas && !perm.is_admin_dashboard && !perm.dados_visiveis_a_partir
+                          ? 'border-red-400/50'
+                          : 'border-white/10'
+                      }`}
                     />
                   </label>
+                  {!perm.pode_ver_vendas && !perm.is_admin_dashboard && !perm.dados_visiveis_a_partir && (
+                    <span className="text-[10px] font-semibold text-red-300">
+                      ⚠ sem data = vê o histórico todo
+                    </span>
+                  )}
                 </div>
 
                 <label className="mb-2.5 flex cursor-pointer items-center gap-2">
@@ -221,6 +230,7 @@ export default function AdminPage() {
   const [editPerms, setEditPerms] = useState<Record<string, PermRow>>({})
   const [loadingPerms, setLoadingPerms] = useState(false)
   const [savingPerms, setSavingPerms] = useState(false)
+  const [permsError, setPermsError] = useState('')
 
   const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([])
   const [resendingEmail, setResendingEmail] = useState<string | null>(null)
@@ -299,6 +309,12 @@ export default function AdminPage() {
     setLoadingPerms(false)
   }
 
+  function missingCutoffProjectNames(perms: Record<string, PermRow>): string[] {
+    return Object.entries(perms)
+      .filter(([, p]) => p.pode_visualizar && !p.is_admin_dashboard && !p.pode_ver_vendas && !p.dados_visiveis_a_partir)
+      .map(([projetoId]) => allProjetos.find(pr => pr.id === projetoId)?.nome ?? projetoId)
+  }
+
   function handleToggleProject(
     state: Record<string, PermRow>,
     setState: (v: Record<string, PermRow>) => void,
@@ -347,6 +363,12 @@ export default function AdminPage() {
 
   async function savePermissoes() {
     if (!editPermsUser) return
+    const missing = missingCutoffProjectNames(editPerms)
+    if (missing.length > 0) {
+      setPermsError(`Defina a data de corte antes de salvar (projeto: ${missing.join(', ')}).`)
+      return
+    }
+    setPermsError('')
     setSavingPerms(true)
     const permissions = Object.entries(editPerms).map(([projeto_id, p]) => ({ projeto_id, ...p }))
     await fetch('/api/admin/permissions', {
@@ -360,6 +382,11 @@ export default function AdminPage() {
 
   async function sendInvite() {
     if (!inviteEmail.trim()) return
+    const missing = missingCutoffProjectNames(invitePerms)
+    if (missing.length > 0) {
+      setInviteStatus(`Defina a data de corte antes de enviar (projeto: ${missing.join(', ')}).`)
+      return
+    }
     setInviting(true)
     setInviteStatus('')
     const permissoes = Object.entries(invitePerms).map(([projeto_id, p]) => ({ projeto_id, ...p }))
@@ -715,9 +742,15 @@ export default function AdminPage() {
               )}
             </div>
 
+            {permsError && (
+              <p className="border-t border-red-400/20 bg-red-500/10 px-5 py-2.5 text-xs font-semibold text-red-300">
+                {permsError}
+              </p>
+            )}
+
             <div className="flex gap-2 border-t border-white/8 p-5">
               <button
-                onClick={() => setEditPermsUser(null)}
+                onClick={() => { setEditPermsUser(null); setPermsError('') }}
                 disabled={savingPerms}
                 className="h-11 flex-1 rounded-2xl border border-white/10 text-sm font-semibold text-slate-400 hover:text-white disabled:opacity-50"
               >
