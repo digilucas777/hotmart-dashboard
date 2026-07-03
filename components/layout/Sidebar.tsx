@@ -31,6 +31,7 @@ function isNavActive(href: string, pathname: string): boolean {
 export function Sidebar() {
   const [companyName, setCompanyName] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
+  const [canSeeVendas, setCanSeeVendas] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
 
@@ -50,7 +51,15 @@ export function Sidebar() {
         .select('role')
         .eq('id', user.id)
         .maybeSingle()
-      if (profile?.role === 'admin') setIsAdmin(true)
+      const admin = profile?.role === 'admin'
+      if (admin) { setIsAdmin(true); setCanSeeVendas(true); return }
+      const { data: perms } = await supabase
+        .from('user_dashboard_permissions')
+        .select('pode_ver_vendas')
+        .eq('user_id', user.id)
+        .eq('pode_ver_vendas', true)
+        .limit(1)
+      setCanSeeVendas((perms ?? []).length > 0)
     })
   }, [])
 
@@ -61,6 +70,12 @@ export function Sidebar() {
 
   const hiddenRoutes = ['/', '/login', '/register', '/forgot-password', '/pricing', '/dashboard']
   if (hiddenRoutes.includes(pathname)) return null
+
+  const visibleNavItems = NAV_ITEMS.filter(item => {
+    if (item.href === '/vendas') return isAdmin || canSeeVendas
+    if (item.href === '/integracoes') return isAdmin
+    return true
+  })
 
   return (
     <aside
@@ -90,7 +105,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="app-sidebar-nav flex flex-1 flex-col gap-0.5 p-2 pt-3">
-        {NAV_ITEMS.map(item => {
+        {visibleNavItems.map(item => {
           const active = isNavActive(item.href, pathname)
           const Icon = item.icon
           return (
