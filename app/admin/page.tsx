@@ -25,7 +25,11 @@ type PermRow = {
   pode_configurar_produtos: boolean
   pode_ver_produtos_ofertas: boolean
   pode_excluir_dashboard: boolean
+  pode_ver_vendas: boolean
+  pode_adicionar_custo_manual: boolean
+  pode_ver_conexao_whatsapp: boolean
   is_admin_dashboard: boolean
+  dados_visiveis_a_partir: string | null
 }
 
 type StoredPerm = PermRow & { projeto_id: string }
@@ -37,16 +41,36 @@ const DEFAULT_PERM: PermRow = {
   pode_configurar_produtos: false,
   pode_ver_produtos_ofertas: true,
   pode_excluir_dashboard: false,
+  pode_ver_vendas: false,
+  pode_adicionar_custo_manual: false,
+  pode_ver_conexao_whatsapp: false,
+  is_admin_dashboard: false,
+  dados_visiveis_a_partir: null,
+}
+
+const GESTOR_TRAFEGO_PERM: Omit<PermRow, 'dados_visiveis_a_partir'> = {
+  pode_visualizar: true,
+  pode_editar_layout: false,
+  pode_adicionar_widgets: false,
+  pode_configurar_produtos: false,
+  pode_ver_produtos_ofertas: false,
+  pode_excluir_dashboard: false,
+  pode_ver_vendas: false,
+  pode_adicionar_custo_manual: true,
+  pode_ver_conexao_whatsapp: false,
   is_admin_dashboard: false,
 }
 
-const PERM_KEYS: { key: keyof Omit<PermRow, 'is_admin_dashboard'>; label: string }[] = [
+const PERM_KEYS: { key: keyof Omit<PermRow, 'is_admin_dashboard' | 'dados_visiveis_a_partir'>; label: string }[] = [
   { key: 'pode_visualizar', label: 'Visualizar' },
   { key: 'pode_editar_layout', label: 'Editar layout' },
   { key: 'pode_adicionar_widgets', label: 'Adicionar widgets' },
   { key: 'pode_configurar_produtos', label: 'Configurar produtos' },
   { key: 'pode_ver_produtos_ofertas', label: 'Ver produtos e ofertas' },
   { key: 'pode_excluir_dashboard', label: 'Excluir dashboard' },
+  { key: 'pode_ver_vendas', label: 'Ver aba Vendas' },
+  { key: 'pode_adicionar_custo_manual', label: 'Adicionar custo manual' },
+  { key: 'pode_ver_conexao_whatsapp', label: 'Ver conexão WhatsApp' },
 ]
 
 type DashboardEntry = { id: string; nome: string; data_criacao: string }
@@ -62,11 +86,15 @@ function PermissionsProjectList({
   perms,
   onToggle,
   onSetPerm,
+  onApplyPreset,
+  onSetDate,
 }: {
   projetos: Projeto[]
   perms: Record<string, PermRow>
   onToggle: (id: string, checked: boolean) => void
   onSetPerm: (id: string, key: keyof PermRow, value: boolean) => void
+  onApplyPreset: (id: string) => void
+  onSetDate: (id: string, value: string) => void
 }) {
   if (projetos.length === 0) {
     return <p className="py-6 text-center text-xs text-slate-500">Nenhum projeto criado ainda.</p>
@@ -106,7 +134,25 @@ function PermissionsProjectList({
 
             {hasAccess && perm && (
               <div className="border-t border-white/8 px-4 pb-3 pt-2.5">
-                {/* Admin total */}
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onApplyPreset(projeto.id)}
+                    className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1.5 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-400/20"
+                  >
+                    Gestor de Tráfego (preset seguro)
+                  </button>
+                  <label className="flex items-center gap-1.5 text-xs text-slate-400">
+                    Só ver dados a partir de:
+                    <input
+                      type="date"
+                      value={perm.dados_visiveis_a_partir ?? ''}
+                      onChange={e => onSetDate(projeto.id, e.target.value)}
+                      className="rounded-lg border border-white/10 bg-[#121221] px-2 py-1 text-xs text-slate-200 outline-none focus:border-indigo-500/60"
+                    />
+                  </label>
+                </div>
+
                 <label className="mb-2.5 flex cursor-pointer items-center gap-2">
                   <span
                     className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
@@ -137,7 +183,7 @@ function PermissionsProjectList({
                       <input
                         type="checkbox"
                         className="sr-only"
-                        checked={perm[key]}
+                        checked={perm[key] as boolean}
                         onChange={e => onSetPerm(projeto.id, key, e.target.checked)}
                       />
                     </label>
@@ -239,7 +285,11 @@ export default function AdminPage() {
         pode_configurar_produtos: p.pode_configurar_produtos,
         pode_ver_produtos_ofertas: p.pode_ver_produtos_ofertas,
         pode_excluir_dashboard: p.pode_excluir_dashboard,
+        pode_ver_vendas: p.pode_ver_vendas,
+        pode_adicionar_custo_manual: p.pode_adicionar_custo_manual,
+        pode_ver_conexao_whatsapp: p.pode_ver_conexao_whatsapp,
         is_admin_dashboard: p.is_admin_dashboard,
+        dados_visiveis_a_partir: p.dados_visiveis_a_partir,
       }
     })
     setEditPerms(map)
@@ -274,12 +324,16 @@ export default function AdminPage() {
       setState({
         ...state,
         [projetoId]: {
+          ...current,
           pode_visualizar: true,
           pode_editar_layout: true,
           pode_adicionar_widgets: true,
           pode_configurar_produtos: true,
           pode_ver_produtos_ofertas: true,
           pode_excluir_dashboard: true,
+          pode_ver_vendas: true,
+          pode_adicionar_custo_manual: true,
+          pode_ver_conexao_whatsapp: true,
           is_admin_dashboard: true,
         },
       })
@@ -541,6 +595,12 @@ export default function AdminPage() {
                     onSetPerm={(id, key, value) =>
                       handleSetPerm(invitePerms, setInvitePerms, id, key, value)
                     }
+                    onApplyPreset={(id) =>
+                      setInvitePerms(prev => ({ ...prev, [id]: { ...GESTOR_TRAFEGO_PERM, dados_visiveis_a_partir: prev[id]?.dados_visiveis_a_partir ?? null } }))
+                    }
+                    onSetDate={(id, value) =>
+                      setInvitePerms(prev => ({ ...prev, [id]: { ...(prev[id] ?? DEFAULT_PERM), dados_visiveis_a_partir: value || null } }))
+                    }
                   />
                 </div>
 
@@ -606,6 +666,12 @@ export default function AdminPage() {
                   }
                   onSetPerm={(id, key, value) =>
                     handleSetPerm(editPerms, setEditPerms, id, key, value)
+                  }
+                  onApplyPreset={(id) =>
+                    setEditPerms(prev => ({ ...prev, [id]: { ...GESTOR_TRAFEGO_PERM, dados_visiveis_a_partir: prev[id]?.dados_visiveis_a_partir ?? null } }))
+                  }
+                  onSetDate={(id, value) =>
+                    setEditPerms(prev => ({ ...prev, [id]: { ...(prev[id] ?? DEFAULT_PERM), dados_visiveis_a_partir: value || null } }))
                   }
                 />
               )}
