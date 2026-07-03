@@ -338,6 +338,44 @@ export default function RelatoriosPage() {
   const previewRef = useRef<HTMLDivElement>(null)
   const selectedProject = projetos.find(p => p.id === form.projeto_id)
 
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [allowedProjetoIds, setAllowedProjetoIds] = useState<Set<string> | null>(null)
+  const [canSeeConnection, setCanSeeConnection] = useState(false)
+
+  useEffect(() => {
+    async function loadAccess() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle()
+      const admin = profile?.role === 'admin'
+      setIsAdmin(admin)
+      if (admin) { setCanSeeConnection(true); return }
+      const { data: perms } = await supabase
+        .from('user_dashboard_permissions')
+        .select('projeto_id, pode_ver_conexao_whatsapp')
+        .eq('user_id', user.id)
+        .eq('pode_visualizar', true)
+      const rows = (perms ?? []) as { projeto_id: string; pode_ver_conexao_whatsapp: boolean }[]
+      setAllowedProjetoIds(new Set(rows.map(r => r.projeto_id)))
+      setCanSeeConnection(rows.some(r => r.pode_ver_conexao_whatsapp))
+    }
+    void loadAccess()
+  }, [])
+
+  useEffect(() => {
+    if (canSeeConnection || !form.projeto_id) return
+    fetch(`/api/relatorios/connection-id?projeto_id=${form.projeto_id}`)
+      .then(r => r.json())
+      .then((d: { connectionId: string | null }) => {
+        if (d.connectionId) setForm(prev => ({ ...prev, whatsapp_connection_id: d.connectionId! }))
+      })
+      .catch(() => {})
+  }, [canSeeConnection, form.projeto_id])
+
   const loadBase = useCallback(async () => {
     setLoading(true)
     try {
@@ -825,6 +863,7 @@ export default function RelatoriosPage() {
           ) : (
             <>
               {/* ── Accordion WhatsApp ── */}
+              {canSeeConnection && (
               <div className="mb-3 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-[#151525] shadow-2xl shadow-black/20">
                 <button
                   onClick={() => setWhatsappOpen(o => !o)}
@@ -912,6 +951,7 @@ export default function RelatoriosPage() {
                   </div>
                 )}
               </div>
+              )}
 
               {/* ── 3-col body ── */}
               <div className="grid flex-1 grid-cols-1 gap-4 lg:min-h-0 lg:grid-cols-[3fr_3fr_4fr] lg:gap-3">
