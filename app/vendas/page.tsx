@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { ShoppingCart, RefreshCw, Search } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { SalesTable } from '@/components/dashboard/SalesTable'
@@ -19,6 +20,8 @@ const STATUS_OPTIONS = [
 ]
 
 export default function VendasPage() {
+  const router = useRouter()
+  const [allowed, setAllowed] = useState<boolean | null>(null)
   const [vendas, setVendas] = useState<Venda[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [loading, setLoading] = useState(true)
@@ -39,6 +42,28 @@ export default function VendasPage() {
   const [statusFilter, setStatusFilter] = useState<string[]>([])
   const [origemFilter, setOrigemFilter] = useState('')
   const [origemInput, setOrigemInput] = useState('')
+
+  useEffect(() => {
+    async function checkAccess() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/login'); return }
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle()
+      if (profile?.role === 'admin') { setAllowed(true); return }
+      const { data: perms } = await supabase
+        .from('user_dashboard_permissions')
+        .select('pode_ver_vendas')
+        .eq('user_id', user.id)
+        .eq('pode_ver_vendas', true)
+        .limit(1)
+      if ((perms ?? []).length === 0) { router.push('/projects'); return }
+      setAllowed(true)
+    }
+    void checkAccess()
+  }, [router])
 
   const customDateRange = useMemo(() => {
     if (period !== 'custom') return undefined
@@ -106,6 +131,14 @@ export default function VendasPage() {
   }
 
   const hasFilters = produtoFilter.length > 0 || statusFilter.length > 0 || origemFilter
+
+  if (allowed !== true) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Spinner size={28} />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen">
