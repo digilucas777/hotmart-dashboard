@@ -174,6 +174,7 @@ export async function POST(req: NextRequest) {
     const forma_pagamento = cardBrand ? `${paymentType}|${cardBrand}` : paymentType
 
     const hotmartId: string | null = dados.purchase?.transaction ?? null
+    const hasCoprod: boolean = dados.product?.has_co_production === true
 
     const origem: string | null = extractOrigem(dados.purchase, dados.commissions ?? [])
 
@@ -289,12 +290,15 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Moeda exótica: o valor síncrono (soma das commissions em USD) pode ficar incompleto
-    // quando há coprodução, porque o webhook desta conta só enxerga a fatia dela.
-    // Reconstrói o valor total em USD usando o percentual/fixo da taxa Hotmart (constantes
-    // por transação, iguais nas duas contas) aplicados sobre a taxa MARKETPLACE em USD,
-    // que já vem corretamente convertida no webhook original.
-    if (hotmartId && priceCurrency !== 'BRL' && priceCurrency !== 'USD' && taxaHotmart > 0) {
+    // Moeda exótica COM coprodução: o valor síncrono (soma das commissions em USD) fica
+    // incompleto porque o webhook desta conta só enxerga a própria fatia. Reconstrói o
+    // valor total em USD usando o percentual/fixo da taxa Hotmart aplicados sobre a taxa
+    // MARKETPLACE em USD, que já vem corretamente convertida no webhook original.
+    // Sem coprodução a soma síncrona já é o valor completo — rodar essa correção nesse caso
+    // já causou bug: o "fixed" da taxa não é distribuído igualmente entre itens de um
+    // mesmo carrinho (order bump), então a fórmula acerta com coprodução real mas erra
+    // por alguns centavos/dólares quando aplicada a vendas sem coprodução.
+    if (hotmartId && hasCoprod && priceCurrency !== 'BRL' && priceCurrency !== 'USD' && taxaHotmart > 0) {
       after(async () => {
         try {
           const item = await fetchSaleFromAnyAccount(hotmartId)
