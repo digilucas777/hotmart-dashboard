@@ -183,7 +183,7 @@ function PermissionsProjectList({
                       <input
                         type="checkbox"
                         className="sr-only"
-                        checked={perm[key] as boolean}
+                        checked={perm[key]}
                         onChange={e => onSetPerm(projeto.id, key, e.target.checked)}
                       />
                     </label>

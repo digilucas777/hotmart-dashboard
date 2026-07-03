@@ -5,6 +5,26 @@
 --   2. adiciona policies extras (somativas, não substituem as existentes)
 --      para liberar acesso a quem tem uma linha em user_dashboard_permissions;
 --   3. fecha o acesso público a whatsapp_connections (tokens de API).
+--
+-- Rollback:
+--   ALTER TABLE public.user_dashboard_permissions DROP COLUMN IF EXISTS pode_ver_vendas;
+--   ALTER TABLE public.user_dashboard_permissions DROP COLUMN IF EXISTS pode_adicionar_custo_manual;
+--   ALTER TABLE public.user_dashboard_permissions DROP COLUMN IF EXISTS pode_ver_conexao_whatsapp;
+--   ALTER TABLE public.user_dashboard_permissions DROP COLUMN IF EXISTS dados_visiveis_a_partir;
+--   DROP POLICY IF EXISTS "shared users select projetos" ON public.projetos;
+--   DROP POLICY IF EXISTS "shared users select produtos" ON public.produtos;
+--   DROP POLICY IF EXISTS "shared users select projeto_produtos" ON public.projeto_produtos;
+--   DROP POLICY IF EXISTS "shared users select projeto_produto_ofertas" ON public.projeto_produto_ofertas;
+--   DROP POLICY IF EXISTS "shared users select vendas" ON public.vendas;
+--   DROP POLICY IF EXISTS "shared users select custos_manuais" ON public.custos_manuais;
+--   DROP POLICY IF EXISTS "shared users insert custos_manuais" ON public.custos_manuais;
+--   DROP POLICY IF EXISTS "shared users select dashboard_widgets" ON public.dashboard_widgets;
+--   DROP POLICY IF EXISTS "shared users edit dashboard_widgets" ON public.dashboard_widgets;
+--   DROP POLICY IF EXISTS "shared users manage whatsapp_report_schedules" ON public.whatsapp_report_schedules;
+--   DROP POLICY IF EXISTS "admin manages whatsapp_connections" ON public.whatsapp_connections;
+--   CREATE POLICY "authenticated users access whatsapp_connections"
+--     ON public.whatsapp_connections FOR ALL
+--     USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
 
 -- ─── Novas colunas ──────────────────────────────────────────────────────────
 
@@ -16,6 +36,7 @@ ALTER TABLE public.user_dashboard_permissions
 
 -- ─── projetos: liberar SELECT para quem tem permissão compartilhada ────────
 
+DROP POLICY IF EXISTS "shared users select projetos" ON public.projetos;
 CREATE POLICY "shared users select projetos"
   ON public.projetos FOR SELECT
   USING (
@@ -29,6 +50,7 @@ CREATE POLICY "shared users select projetos"
 
 -- ─── produtos: liberar SELECT para quem tem permissão compartilhada ────────
 
+DROP POLICY IF EXISTS "shared users select produtos" ON public.produtos;
 CREATE POLICY "shared users select produtos"
   ON public.produtos FOR SELECT
   USING (
@@ -43,6 +65,7 @@ CREATE POLICY "shared users select produtos"
 
 -- ─── projeto_produtos / projeto_produto_ofertas: SELECT para viewers ───────
 
+DROP POLICY IF EXISTS "shared users select projeto_produtos" ON public.projeto_produtos;
 CREATE POLICY "shared users select projeto_produtos"
   ON public.projeto_produtos FOR SELECT
   USING (
@@ -54,6 +77,7 @@ CREATE POLICY "shared users select projeto_produtos"
     )
   );
 
+DROP POLICY IF EXISTS "shared users select projeto_produto_ofertas" ON public.projeto_produto_ofertas;
 CREATE POLICY "shared users select projeto_produto_ofertas"
   ON public.projeto_produto_ofertas FOR SELECT
   USING (
@@ -67,6 +91,7 @@ CREATE POLICY "shared users select projeto_produto_ofertas"
 
 -- ─── vendas: SELECT para viewers, com corte de data ────────────────────────
 
+DROP POLICY IF EXISTS "shared users select vendas" ON public.vendas;
 CREATE POLICY "shared users select vendas"
   ON public.vendas FOR SELECT
   USING (
@@ -86,6 +111,7 @@ CREATE POLICY "shared users select vendas"
 
 -- ─── custos_manuais: SELECT com corte de data + INSERT dedicado ───────────
 
+DROP POLICY IF EXISTS "shared users select custos_manuais" ON public.custos_manuais;
 CREATE POLICY "shared users select custos_manuais"
   ON public.custos_manuais FOR SELECT
   USING (
@@ -101,6 +127,7 @@ CREATE POLICY "shared users select custos_manuais"
     )
   );
 
+DROP POLICY IF EXISTS "shared users insert custos_manuais" ON public.custos_manuais;
 CREATE POLICY "shared users insert custos_manuais"
   ON public.custos_manuais FOR INSERT
   WITH CHECK (
@@ -114,6 +141,7 @@ CREATE POLICY "shared users insert custos_manuais"
 
 -- ─── dashboard_widgets: SELECT para viewers, escrita para editores ─────────
 
+DROP POLICY IF EXISTS "shared users select dashboard_widgets" ON public.dashboard_widgets;
 CREATE POLICY "shared users select dashboard_widgets"
   ON public.dashboard_widgets FOR SELECT
   USING (
@@ -125,6 +153,7 @@ CREATE POLICY "shared users select dashboard_widgets"
     )
   );
 
+DROP POLICY IF EXISTS "shared users edit dashboard_widgets" ON public.dashboard_widgets;
 CREATE POLICY "shared users edit dashboard_widgets"
   ON public.dashboard_widgets FOR ALL
   USING (
@@ -146,6 +175,7 @@ CREATE POLICY "shared users edit dashboard_widgets"
 
 -- ─── whatsapp_report_schedules: viewers podem configurar relatórios ────────
 
+DROP POLICY IF EXISTS "shared users manage whatsapp_report_schedules" ON public.whatsapp_report_schedules;
 CREATE POLICY "shared users manage whatsapp_report_schedules"
   ON public.whatsapp_report_schedules FOR ALL
   USING (
@@ -172,6 +202,7 @@ CREATE POLICY "shared users manage whatsapp_report_schedules"
 -- rota /api/relatorios/connection-id (service role) para obter só o ID.
 
 DROP POLICY IF EXISTS "authenticated users access whatsapp_connections" ON public.whatsapp_connections;
+DROP POLICY IF EXISTS "admin manages whatsapp_connections" ON public.whatsapp_connections;
 
 CREATE POLICY "admin manages whatsapp_connections"
   ON public.whatsapp_connections FOR ALL

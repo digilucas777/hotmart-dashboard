@@ -338,8 +338,6 @@ export default function RelatoriosPage() {
   const previewRef = useRef<HTMLDivElement>(null)
   const selectedProject = projetos.find(p => p.id === form.projeto_id)
 
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [allowedProjetoIds, setAllowedProjetoIds] = useState<Set<string> | null>(null)
   const [canSeeConnection, setCanSeeConnection] = useState(false)
 
   useEffect(() => {
@@ -352,7 +350,6 @@ export default function RelatoriosPage() {
         .eq('id', user.id)
         .maybeSingle()
       const admin = profile?.role === 'admin'
-      setIsAdmin(admin)
       if (admin) { setCanSeeConnection(true); return }
       const { data: perms } = await supabase
         .from('user_dashboard_permissions')
@@ -360,7 +357,6 @@ export default function RelatoriosPage() {
         .eq('user_id', user.id)
         .eq('pode_visualizar', true)
       const rows = (perms ?? []) as { projeto_id: string; pode_ver_conexao_whatsapp: boolean }[]
-      setAllowedProjetoIds(new Set(rows.map(r => r.projeto_id)))
       setCanSeeConnection(rows.some(r => r.pode_ver_conexao_whatsapp))
     }
     void loadAccess()
