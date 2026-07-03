@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Check, ChevronDown, ChevronUp, LayoutDashboard, Lock, Mail, Shield, Trash2, UserPlus, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, History, LayoutDashboard, Lock, Mail, Shield, Trash2, UserPlus, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 type UserProfile = {
@@ -74,6 +74,8 @@ const PERM_KEYS: { key: keyof Omit<PermRow, 'is_admin_dashboard' | 'dados_visive
 ]
 
 type DashboardEntry = { id: string; nome: string; data_criacao: string }
+
+type AccessEntry = { id: string; projeto_id: string; projeto_nome: string; acessado_em: string }
 
 type PendingUser = {
   id: string
@@ -218,6 +220,12 @@ export default function AdminPage() {
   const [userDashboards, setUserDashboards] = useState<Record<string, DashboardEntry[]>>({})
   const [loadingDashboards, setLoadingDashboards] = useState<string | null>(null)
 
+  // Expandable access log per user
+  const [expandedAccessesUser, setExpandedAccessesUser] = useState<string | null>(null)
+  const [userAccesses, setUserAccesses] = useState<Record<string, AccessEntry[]>>({})
+  const [loadingAccesses, setLoadingAccesses] = useState<string | null>(null)
+  const [lastSeen, setLastSeen] = useState<Record<string, string | null>>({})
+
   // Invite
   const [showInvite, setShowInvite] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
@@ -253,7 +261,7 @@ export default function AdminPage() {
       if (profile?.role !== 'admin') { setIsAdmin(false); return }
       setIsAdmin(true)
 
-      const [{ data: allUsers }, projetosRes, pendingRes] = await Promise.all([
+      const [{ data: allUsers }, projetosRes, pendingRes, lastSeenRes] = await Promise.all([
         supabase
           .from('user_profiles')
           .select('id, email, nome, created_at')
@@ -261,12 +269,16 @@ export default function AdminPage() {
           .order('created_at', { ascending: false }),
         fetch('/api/admin/dashboards').then(r => r.json() as Promise<{ dashboards?: Projeto[] }>),
         fetch('/api/admin/invite').then(r => r.json() as Promise<{ pending?: PendingUser[] }>),
+        fetch('/api/admin/last-seen').then(r => r.json() as Promise<{ lastSeen?: { id: string; last_sign_in_at: string | null }[] }>),
       ])
 
       setUsers((allUsers ?? []) as UserProfile[])
       const projetos = projetosRes.dashboards ?? []
       setAllProjetos(projetos)
       setPendingUsers(pendingRes.pending ?? [])
+      const lastSeenMap: Record<string, string | null> = {}
+      ;(lastSeenRes.lastSeen ?? []).forEach(entry => { lastSeenMap[entry.id] = entry.last_sign_in_at })
+      setLastSeen(lastSeenMap)
     }
     init()
   }, [router])
@@ -281,6 +293,18 @@ export default function AdminPage() {
     setUserDashboards(prev => ({ ...prev, [userId]: json.dashboards ?? [] }))
     setExpandedUser(userId)
     setLoadingDashboards(null)
+  }
+
+  async function toggleAccesses(userId: string) {
+    if (expandedAccessesUser === userId) { setExpandedAccessesUser(null); return }
+    if (userAccesses[userId]) { setExpandedAccessesUser(userId); return }
+
+    setLoadingAccesses(userId)
+    const res = await fetch(`/api/admin/access-logs?user_id=${encodeURIComponent(userId)}`)
+    const json = await res.json() as { accesses?: AccessEntry[] }
+    setUserAccesses(prev => ({ ...prev, [userId]: json.accesses ?? [] }))
+    setExpandedAccessesUser(userId)
+    setLoadingAccesses(null)
   }
 
   async function openEditPerms(u: UserProfile) {
@@ -505,6 +529,9 @@ export default function AdminPage() {
                     <Mail size={11} />
                     {user.email ?? '—'}
                   </p>
+                  <p className="mt-0.5 text-xs text-slate-600">
+                    Último acesso: {lastSeen[user.id] ? new Date(lastSeen[user.id]!).toLocaleString('pt-BR') : 'Nunca acessou'}
+                  </p>
                 </div>
                 <p className="shrink-0 text-xs text-slate-500">
                   {new Date(user.created_at).toLocaleDateString('pt-BR')}
@@ -525,6 +552,20 @@ export default function AdminPage() {
                   {loadingDashboards === user.id ? (
                     <div className="h-3 w-3 animate-spin rounded-full border border-cyan-400 border-t-transparent" />
                   ) : expandedUser === user.id ? (
+                    <ChevronUp size={13} />
+                  ) : (
+                    <ChevronDown size={13} />
+                  )}
+                </button>
+                <button
+                  onClick={() => toggleAccesses(user.id)}
+                  className="flex shrink-0 items-center gap-2 rounded-xl border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:border-cyan-300/30 hover:text-cyan-200"
+                >
+                  <History size={13} />
+                  Acessos
+                  {loadingAccesses === user.id ? (
+                    <div className="h-3 w-3 animate-spin rounded-full border border-cyan-400 border-t-transparent" />
+                  ) : expandedAccessesUser === user.id ? (
                     <ChevronUp size={13} />
                   ) : (
                     <ChevronDown size={13} />
@@ -557,6 +598,28 @@ export default function AdminPage() {
                             {new Date(db.data_criacao).toLocaleDateString('pt-BR')}
                           </span>
                         </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {expandedAccessesUser === user.id && (
+                <div className="border-t border-white/8 px-5 py-3">
+                  {!userAccesses[user.id] || userAccesses[user.id].length === 0 ? (
+                    <p className="text-xs text-slate-500">Nenhum acesso registrado.</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {userAccesses[user.id].map(access => (
+                        <div
+                          key={access.id}
+                          className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-sm text-slate-300"
+                        >
+                          <History size={13} className="text-cyan-400" />
+                          <span className="flex-1 truncate">{access.projeto_nome}</span>
+                          <span className="text-xs text-slate-600">
+                            {new Date(access.acessado_em).toLocaleString('pt-BR')}
+                          </span>
+                        </div>
                       ))}
                     </div>
                   )}

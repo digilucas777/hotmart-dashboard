@@ -957,7 +957,22 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         .maybeSingle()
       const role = (profile as { role?: string } | null)?.role ?? 'user'
       setUserRole(role)
-      if (role === 'admin') { setPermsLoaded(true); return }
+
+      const logAccess = async () => {
+        const { data: projetoRow } = await supabase
+          .from('projetos')
+          .select('nome')
+          .eq('id', projectId)
+          .maybeSingle()
+        const projetoNome = (projetoRow as { nome?: string } | null)?.nome ?? 'Dashboard'
+        void supabase.from('dashboard_access_log').insert({
+          user_id: user.id,
+          projeto_id: projectId,
+          projeto_nome: projetoNome,
+        })
+      }
+
+      if (role === 'admin') { setPermsLoaded(true); void logAccess(); return }
       const { data: perms } = await supabase
         .from('user_dashboard_permissions')
         .select('*')
@@ -970,6 +985,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       }
       setUserPerms(perms as UserPerms)
       setPermsLoaded(true)
+      void logAccess()
     }
     void loadPerms()
   }, [projectId, router])
