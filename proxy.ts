@@ -27,7 +27,7 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/pricing']
+  const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/pricing', '/auth/confirm']
   const isPublicRoute = publicRoutes.includes(request.nextUrl.pathname)
   const isAuthRoute = ['/login', '/register', '/forgot-password'].includes(request.nextUrl.pathname)
 
