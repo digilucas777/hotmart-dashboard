@@ -758,7 +758,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     void Promise.resolve().then(fetchVendas)
   }, [fetchVendas])
 
+  const custosRequestIdRef = useRef(0)
+
   const fetchCustosManuals = useCallback(async () => {
+    const requestId = ++custosRequestIdRef.current
     const { from, to } = getPeriodRange(period, customDateRange)
     const toLocalDate = (d: Date) =>
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -778,6 +781,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         .order('data', { ascending: false })
         .limit(10),
     ])
+    // Uma resposta atrasada de um período antigo não pode sobrescrever
+    // o resultado de um pedido mais novo que já chegou primeiro.
+    if (requestId !== custosRequestIdRef.current) return
     setCustoManualRaw((periodRes.data ?? []) as { valor: number; moeda: string }[])
     setCustoManualList((historyRes.data ?? []) as CustoManual[])
   }, [projectId, period, customDateRange])
