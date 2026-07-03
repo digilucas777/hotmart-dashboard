@@ -126,7 +126,7 @@ type MetricCfg = {
 }
 
 const METRIC_CONFIG: Record<string, MetricCfg> = {
-  meta_spend:             { label: 'Gasto Total',             icon: '💸', accentColor: '#f59e0b', format: 'currency_brl', isGoodWhenUp: false, baseValue: 500,   periodScaled: true  },
+  meta_spend:             { label: 'Gasto Total',             icon: '💸', accentColor: '#f59e0b', format: 'currency_brl', isGoodWhenUp: false, baseValue: 500,   periodScaled: false },
   meta_roas:              { label: 'ROAS (Meta Ads)',          icon: '📈', accentColor: '#6366f1', format: 'multiplier',   isGoodWhenUp: true,  baseValue: 3.2,   periodScaled: false },
   meta_roas_geral:        { label: 'ROAS (Geral)',             icon: '📊', accentColor: '#8b5cf6', format: 'multiplier',   isGoodWhenUp: true,  baseValue: 2.8,   periodScaled: false },
   meta_impressions:       { label: 'Impressões',               icon: '👁',  accentColor: '#6366f1', format: 'number',       isGoodWhenUp: true,  baseValue: 50000, periodScaled: true  },
