@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Check, ChevronDown, ChevronUp, LayoutDashboard, Lock, Mail, Shield, UserPlus, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, LayoutDashboard, Lock, Mail, Shield, Trash2, UserPlus, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 type UserProfile = {
@@ -225,6 +225,10 @@ export default function AdminPage() {
   const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([])
   const [resendingEmail, setResendingEmail] = useState<string | null>(null)
 
+  // Delete user
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; email: string } | null>(null)
+  const [deletingUser, setDeletingUser] = useState(false)
+
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -389,6 +393,25 @@ export default function AdminPage() {
     setResendingEmail(null)
   }
 
+  async function handleDeleteUser() {
+    if (!deleteTarget) return
+    setDeletingUser(true)
+    try {
+      const res = await fetch('/api/admin/delete-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: deleteTarget.id }),
+      })
+      if (res.ok) {
+        setUsers(prev => prev.filter(u => u.id !== deleteTarget.id))
+        setPendingUsers(prev => prev.filter(p => p.id !== deleteTarget.id))
+        setDeleteTarget(null)
+      }
+    } finally {
+      setDeletingUser(false)
+    }
+  }
+
   if (isAdmin === null) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#07080d]">
@@ -480,6 +503,14 @@ export default function AdminPage() {
                     <ChevronDown size={13} />
                   )}
                 </button>
+                <button
+                  onClick={() => setDeleteTarget({ id: user.id, email: user.email ?? user.nome ?? '' })}
+                  title="Excluir usuário"
+                  className="flex shrink-0 items-center gap-2 rounded-xl border border-red-400/25 bg-red-400/10 px-3 py-1.5 text-xs font-semibold text-red-300 transition-colors hover:border-red-400/50 hover:text-red-200"
+                >
+                  <Trash2 size={12} />
+                  Excluir
+                </button>
               </div>
               {expandedUser === user.id && (
                 <div className="border-t border-white/8 px-5 py-3">
@@ -533,6 +564,14 @@ export default function AdminPage() {
                 >
                   <Mail size={12} />
                   {resendingEmail === p.email ? 'Enviando...' : 'Reenviar convite'}
+                </button>
+                <button
+                  onClick={() => setDeleteTarget({ id: p.id, email: p.email })}
+                  title="Excluir convite"
+                  className="flex shrink-0 items-center gap-2 rounded-xl border border-red-400/25 bg-red-400/10 px-3 py-1.5 text-xs font-semibold text-red-300 transition-colors hover:border-red-400/50 hover:text-red-200"
+                >
+                  <Trash2 size={12} />
+                  Excluir
                 </button>
               </div>
             </div>
@@ -690,6 +729,41 @@ export default function AdminPage() {
                 className="h-11 flex-1 rounded-2xl bg-gradient-to-r from-cyan-500 to-violet-500 text-sm font-black text-white shadow-lg shadow-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {savingPerms ? 'Salvando...' : 'Salvar permissões'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete user confirmation modal */}
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm"
+          onClick={() => !deletingUser && setDeleteTarget(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-3xl border border-white/10 bg-[#10101d] p-5 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="font-black text-slate-100">Excluir usuário</h3>
+            <p className="mt-2 text-sm text-slate-400">
+              Tem certeza que deseja excluir <span className="font-semibold text-slate-200">{deleteTarget.email}</span>?
+              Essa ação não pode ser desfeita — o acesso e as permissões desse usuário serão apagados imediatamente.
+            </p>
+            <div className="mt-5 flex gap-2">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deletingUser}
+                className="h-11 flex-1 rounded-2xl border border-white/10 text-sm font-semibold text-slate-400 hover:text-white disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeleteUser}
+                disabled={deletingUser}
+                className="h-11 flex-1 rounded-2xl bg-red-500 text-sm font-black text-white shadow-lg shadow-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {deletingUser ? 'Excluindo...' : 'Excluir'}
               </button>
             </div>
           </div>
