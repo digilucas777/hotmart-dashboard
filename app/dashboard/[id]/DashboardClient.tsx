@@ -810,7 +810,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         })
         if (res.ok) {
           const { origem } = await res.json()
-          console.log('[SYNC ORIGEM]', row.hotmart_id, '→', origem ?? 'sem origem')
           if (origem) {
             await supabase.from('vendas').update({ origem }).eq('id', row.id)
             // Atualiza estado local imediatamente — sem re-fetch completo
@@ -885,43 +884,34 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     async function loadAfiliados() {
-      console.log('[AFILIADO] loadAfiliados iniciado, projectId:', projectId)
-
-      const { data: pp, error: ppError } = await supabase
+      const { data: pp } = await supabase
         .from('projeto_produtos')
         .select('produto_id')
         .eq('projeto_id', projectId)
-      console.log('[AFILIADO] projeto_produtos:', pp, 'erro:', ppError)
       const produtoIds = (pp ?? []).map((r: { produto_id: string }) => r.produto_id)
       if (produtoIds.length === 0) {
-        console.log('[AFILIADO] produtoIds vazio — saindo cedo')
         return
       }
 
-      const { data: prods, error: prodsError } = await supabase
+      const { data: prods } = await supabase
         .from('produtos')
         .select('hotmart_id')
         .in('id', produtoIds)
-      console.log('[AFILIADO] hotmartIds encontrados:', (prods ?? []).map((r: { hotmart_id: string }) => r.hotmart_id), 'erro:', prodsError)
       const hotmartIds = (prods ?? []).map((r: { hotmart_id: string }) => r.hotmart_id)
       if (hotmartIds.length === 0) {
-        console.log('[AFILIADO] hotmartIds vazio — saindo cedo')
         return
       }
 
-      const { data, error: dataError } = await supabase
+      const { data } = await supabase
         .from('vendas')
         .select('afiliado_nome')
         .in('hotmart_produto_id', hotmartIds)
         .not('afiliado_nome', 'is', null)
         .not('afiliado_nome', 'eq', '')
-      console.log('[AFILIADO] rows retornadas:', data, 'erro:', dataError)
-      console.log('[AFILIADO] rows raw:', JSON.stringify(data))
 
       const unique = Array.from(
         new Set((data ?? []).map((r: { afiliado_nome: string | null }) => r.afiliado_nome).filter((v): v is string => !!v && v.trim() !== '')),
       ).sort()
-      console.log('[AFILIADO] disponiveis:', unique)
       setAfiliadosDisponiveis(unique)
     }
     void loadAfiliados()
@@ -1029,7 +1019,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
     if (data) {
       const placed: WidgetConfig = { ...(data as WidgetConfig), col_start, row_start, col_span, row_span }
-      console.log('[ADD_WIDGET] inserido em posição:', placed.col_start, placed.row_start)
       setWidgets(prev => [...prev, placed])
       setSavedWidgets(prev => [...prev, placed])
     }
@@ -1230,9 +1219,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           .rpc('get_distinct_ofertas', { hotmart_ids: hotmartIds })
           .select()
       : { data: [] }
-    console.log('[OFERTAS DEBUG] hotmartIds:', hotmartIds)
-    console.log('[OFERTAS DEBUG] offerRows count:', (offerRows ?? []).length)
-    console.log('[OFERTAS DEBUG] offerRows xjdu2238:', (offerRows ?? []).filter((r: any) => r.oferta_codigo === 'xjdu2238'))
     const productIdByHotmartId = new Map(products.map(p => [p.hotmart_id, p.id]))
     const offersByProduct: Record<string, ProdutoOferta[]> = {}
     ;((offerRows ?? []) as Array<{
@@ -1299,7 +1285,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     Object.values(offersByProduct).forEach(offers => {
       offers.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
     })
-    console.log('[OFERTAS] por produto:', JSON.stringify(offersByProduct, null, 2))
     const offerCodesByProduct = ((selectedOffers ?? []) as ProjetoProdutoOfertaLink[]).reduce((acc, row) => {
       if (!acc[row.produto_id]) acc[row.produto_id] = []
       acc[row.produto_id]!.push(row.oferta_codigo)
