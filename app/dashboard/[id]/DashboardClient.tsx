@@ -87,7 +87,11 @@ type UserPerms = {
   pode_configurar_produtos: boolean
   pode_ver_produtos_ofertas: boolean
   pode_excluir_dashboard: boolean
+  pode_ver_vendas: boolean
+  pode_adicionar_custo_manual: boolean
+  pode_ver_conexao_whatsapp: boolean
   is_admin_dashboard: boolean
+  dados_visiveis_a_partir: string | null
 } | null
 
 type GridPlacement = {
@@ -673,8 +677,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         const products = (prodsRes.data ?? []) as { id: string; hotmart_id: string }[]
         const hotmartIds = products.map(r => r.hotmart_id)
         const offerLinks = (offersRes.data ?? []) as ProjetoProdutoOfertaLink[]
-        console.log('[DEBUG] projeto_produtos retornou:', produtoIds.length, 'produtos | hotmartIds:', hotmartIds.length, hotmartIds)
-        console.log('[DEBUG] productLinks todas_ofertas:', productLinks.map(l => ({ produto_id: l.produto_id, todas_ofertas: l.todas_ofertas })))
 
         if (hotmartIds.length === 0) {
           setVendas([])
@@ -706,7 +708,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
       const { from, to } = getPeriodRange(period, customDateRange)
       const previousRange = getPreviousPeriodRange(period, customDateRange)
-      console.log('[DEBUG] período atual from:', from.toISOString(), '| to:', to.toISOString())
 
       const now = new Date()
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -742,9 +743,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         fetchAllForPeriod(previousRange.from.toISOString(), previousRange.to.toISOString()),
         fetchAllForPeriod(combinedFrom.toISOString(), new Date(todayStart.getTime() + 86_400_000).toISOString()),
       ])
-
-      console.log('[DEBUG] currentData:', currentData.length, '| previousData:', previousData.length, '| combinedData:', combinedData.length)
-      console.log('[DEBUG] offerLinks:', offerLinks.length, '| approved USD:', currentData.filter(v => v.status === 'approved' && v.moeda === 'USD').length)
 
       const currentFiltered = filterRowsByOfferSelection(currentData, products, productLinks, offerLinks)
       setVendas(currentFiltered)
@@ -1487,6 +1485,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
   const isAdmin = userRole === 'admin'
   const canEditLayout = isAdmin || userPerms?.is_admin_dashboard || userPerms?.pode_editar_layout || false
+  const canAddCustoManual = isAdmin || userPerms?.is_admin_dashboard || userPerms?.pode_adicionar_custo_manual || false
   const canAddWidgets = isAdmin || userPerms?.is_admin_dashboard || userPerms?.pode_adicionar_widgets || false
   const canConfigureProducts = isAdmin || userPerms?.is_admin_dashboard || userPerms?.pode_configurar_produtos || false
   const canDeleteDashboard = isAdmin || userPerms?.is_admin_dashboard || userPerms?.pode_excluir_dashboard || false
@@ -1497,10 +1496,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
     if (afiliadosFilter.length > 0) {
       result = result.filter(v => v.afiliado_nome != null && afiliadosFilter.includes(v.afiliado_nome))
-      console.log('[AFILIADO FILTER] selecionados:', afiliadosFilter)
-    }
-    if (origensFilter.length > 0) {
-      console.log('[ORIGEM FILTER] selecionadas:', origensFilter, 'vendas antes:', vendas.length, 'depois:', result.length)
     }
     return result
   }, [vendas, origensFilter, afiliadosFilter])
@@ -1931,7 +1926,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 Configurar produtos
               </Button>
             )}
-            {!editMode && (
+            {!editMode && canAddCustoManual && (
               <Button
                 variant="outline"
                 size="sm"
