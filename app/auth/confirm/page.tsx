@@ -17,6 +17,21 @@ export default function AuthConfirmPage() {
   const [errorMsg, setErrorMsg] = useState('')
 
   useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search)
+    const code = searchParams.get('code')
+
+    if (code) {
+      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+        if (error) {
+          setErrorMsg('Não foi possível validar o convite. Solicite um novo.')
+          setStage('error')
+        } else {
+          setStage('form')
+        }
+      })
+      return
+    }
+
     const hash = window.location.hash.slice(1)
     const params = new URLSearchParams(hash)
     const accessToken = params.get('access_token')
