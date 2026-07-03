@@ -10,15 +10,19 @@ import {
   Download,
   FileText,
   MessageCircle,
+  Pencil,
   Phone,
   Plus,
   Save,
   Send,
+  Trash2,
+  X,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Projeto, Venda, WidgetDataSource } from '@/lib/types'
 import { formatBRL, formatUSD, getOfficialSaleAmount } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 
 type WhatsAppConnection = {
@@ -326,6 +330,10 @@ export default function RelatoriosPage() {
   const [exchangeRate, setExchangeRate] = useState(5.85)
   const [selectedTemplate, setSelectedTemplate] = useState<'recuperacao' | 'trafego' | null>(null)
   const [copied, setCopied] = useState(false)
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
 
   const previewRef = useRef<HTMLDivElement>(null)
   const selectedProject = projetos.find(p => p.id === form.projeto_id)
@@ -611,23 +619,107 @@ export default function RelatoriosPage() {
     if (!form.projeto_id || destinatarios.length === 0 || metricas.length === 0) return
     setSaving(true)
     try {
-      const { data } = await supabase
-        .from('whatsapp_report_schedules')
-        .insert({
-          ...form,
-          whatsapp_connection_id: form.whatsapp_connection_id || null,
-          destinatario: destinatarios[0],
-          destinatarios,
-          metricas,
-          mensagem: messageText,
-          timezone: 'America/Sao_Paulo',
-          ativo: true,
-        })
-        .select()
-        .single()
-      if (data) setSchedules(prev => [data as ReportSchedule, ...prev])
+      if (editingScheduleId) {
+        const { data } = await supabase
+          .from('whatsapp_report_schedules')
+          .update({
+            ...form,
+            whatsapp_connection_id: form.whatsapp_connection_id || null,
+            destinatario: destinatarios[0],
+            destinatarios,
+            metricas,
+            mensagem: messageText,
+          })
+          .eq('id', editingScheduleId)
+          .select()
+          .single()
+        if (data) {
+          setSchedules(prev => prev.map(s => (s.id === editingScheduleId ? (data as ReportSchedule) : s)))
+        }
+      } else {
+        const { data } = await supabase
+          .from('whatsapp_report_schedules')
+          .insert({
+            ...form,
+            whatsapp_connection_id: form.whatsapp_connection_id || null,
+            destinatario: destinatarios[0],
+            destinatarios,
+            metricas,
+            mensagem: messageText,
+            timezone: 'America/Sao_Paulo',
+            ativo: true,
+          })
+          .select()
+          .single()
+        if (data) setSchedules(prev => [data as ReportSchedule, ...prev])
+      }
+      setEditingScheduleId(null)
     } finally {
       setSaving(false)
+    }
+  }
+
+  function loadScheduleForEdit(schedule: ReportSchedule) {
+    setEditingScheduleId(schedule.id)
+    setSelectedTemplate(null)
+    setForm(prev => ({
+      ...prev,
+      nome: schedule.nome,
+      projeto_id: schedule.projeto_id,
+      whatsapp_connection_id: schedule.whatsapp_connection_id ?? '',
+      destinatario: (schedule.destinatarios && schedule.destinatarios.length > 0
+        ? schedule.destinatarios
+        : [schedule.destinatario]
+      ).join(', '),
+      frequencia: schedule.frequencia,
+      periodo: schedule.periodo,
+      horario: schedule.horario.slice(0, 5),
+      mensagem: schedule.mensagem,
+    }))
+    setMetricas(schedule.metricas as WidgetDataSource[])
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function startNewSchedule() {
+    setEditingScheduleId(null)
+    setSelectedTemplate(null)
+    setForm(prev => ({
+      ...prev,
+      nome: 'Relatório diário',
+      destinatario: '',
+      frequencia: 'daily',
+      periodo: 'today',
+      horario: '07:00',
+      mensagem: 'Bom dia! Segue o relatório de {projeto} referente a {periodo}:',
+    }))
+    setMetricas(['total_converted', 'total_brl', 'total_usd', 'sales_count', 'refunds_count'])
+  }
+
+  async function toggleScheduleActive(schedule: ReportSchedule) {
+    setTogglingId(schedule.id)
+    try {
+      const { data } = await supabase
+        .from('whatsapp_report_schedules')
+        .update({ ativo: !schedule.ativo })
+        .eq('id', schedule.id)
+        .select()
+        .single()
+      if (data) setSchedules(prev => prev.map(s => (s.id === schedule.id ? (data as ReportSchedule) : s)))
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
+  async function handleDeleteSchedule() {
+    if (!deleteId) return
+    setDeleting(true)
+    try {
+      await supabase.from('whatsapp_report_schedules').delete().eq('id', deleteId)
+      setSchedules(prev => prev.filter(s => s.id !== deleteId))
+      if (editingScheduleId === deleteId) startNewSchedule()
+    } finally {
+      setDeleting(false)
+      setDeleteId(null)
     }
   }
 
@@ -709,14 +801,14 @@ export default function RelatoriosPage() {
   const isConnected = connections.length > 0
 
   return (
-    <div className="flex h-screen flex-col bg-[#090912] text-slate-100">
+    <div className="flex min-h-screen flex-col bg-[#090912] text-slate-100 lg:h-screen lg:overflow-hidden">
       {/* ── Header ── */}
       <header
         className="shrink-0 border-b"
         style={{ borderColor: 'rgba(255,255,255,0.07)', background: 'rgba(11,11,20,0.95)' }}
       >
-        <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-2.5 px-6">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20">
+        <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-2.5 px-4 sm:px-6">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/20">
             <FileText size={15} className="text-indigo-400" />
           </div>
           <span className="text-sm font-bold text-slate-100">Relatórios</span>
@@ -724,8 +816,8 @@ export default function RelatoriosPage() {
       </header>
 
       {/* ── Content ── */}
-      <div className="flex flex-1 overflow-hidden">
-        <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col overflow-hidden px-6 py-4">
+      <div className="flex flex-1 flex-col lg:overflow-hidden">
+        <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col px-3 py-3 sm:px-6 sm:py-4 lg:overflow-hidden">
           {loading ? (
             <div className="flex flex-1 items-center justify-center">
               <Spinner size={28} />
@@ -756,7 +848,7 @@ export default function RelatoriosPage() {
                 </button>
 
                 {whatsappOpen && (
-                  <div className="border-t border-white/10 px-5 pb-5 pt-4" style={{ maxHeight: '220px', overflowY: 'auto' }}>
+                  <div className="border-t border-white/10 px-4 pb-5 pt-4 sm:px-5 lg:max-h-[220px] lg:overflow-y-auto">
                     <div className="grid gap-5 lg:grid-cols-2">
                       {/* QR Code / Evolution */}
                       <div>
@@ -822,10 +914,10 @@ export default function RelatoriosPage() {
               </div>
 
               {/* ── 3-col body ── */}
-              <div className="grid min-h-0 flex-1 gap-3" style={{ gridTemplateColumns: '3fr 3fr 4fr' }}>
+              <div className="grid flex-1 grid-cols-1 gap-4 lg:min-h-0 lg:grid-cols-[3fr_3fr_4fr] lg:gap-3">
 
                 {/* ── COL 1 — Agendamento + Métricas ── */}
-                <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
+                <div className="flex flex-col gap-3 lg:min-h-0 lg:overflow-y-auto">
 
                   {/* Bloco Agendamento */}
                   <div className="rounded-2xl border border-white/10 bg-[#151525] p-4 shadow-xl shadow-black/20">
@@ -958,7 +1050,7 @@ export default function RelatoriosPage() {
                 </div>
 
                 {/* ── COL 2 — Mensagem ── */}
-                <div className="flex min-h-0 flex-col overflow-y-auto">
+                <div className="flex flex-col lg:min-h-0 lg:overflow-y-auto">
                   <div className="flex flex-1 flex-col rounded-2xl border border-white/10 bg-[#151525] p-4 shadow-xl shadow-black/20">
                     <div className="mb-2 flex items-center justify-between">
                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Mensagem</p>
@@ -978,7 +1070,7 @@ export default function RelatoriosPage() {
                     <textarea
                       value={messageText}
                       onChange={e => setMessageText(e.target.value)}
-                      className="mb-3 min-h-0 flex-1 w-full rounded-xl border border-white/10 bg-[#121221] p-3 text-sm leading-relaxed text-slate-200 outline-none placeholder:text-slate-600 focus:border-indigo-500/60"
+                      className="mb-3 min-h-[160px] w-full flex-1 rounded-xl border border-white/10 bg-[#121221] p-3 text-sm leading-relaxed text-slate-200 outline-none placeholder:text-slate-600 focus:border-indigo-500/60 lg:min-h-0"
                       placeholder="Mensagem do WhatsApp"
                     />
 
@@ -1014,8 +1106,18 @@ export default function RelatoriosPage() {
                         className="w-full justify-center"
                       >
                         {saving ? <Spinner size={13} /> : <Save size={13} />}
-                        Salvar relatório
+                        {editingScheduleId ? 'Atualizar relatório' : 'Salvar relatório'}
                       </Button>
+                      {editingScheduleId && (
+                        <button
+                          type="button"
+                          onClick={startNewSchedule}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-400 hover:bg-white/10"
+                        >
+                          <X size={12} />
+                          Cancelar edição e criar novo
+                        </button>
+                      )}
                     </div>
 
                     {sendResult && (
@@ -1027,7 +1129,7 @@ export default function RelatoriosPage() {
                 </div>
 
                 {/* ── COL 3 — Prévia + Salvos ── */}
-                <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
+                <div className="flex flex-col gap-3 lg:min-h-0 lg:overflow-y-auto">
                   {/* Prévia WhatsApp */}
                   <div className="shrink-0 rounded-2xl border border-white/10 bg-[#151525] p-4 shadow-xl shadow-black/20">
                     <div className="mb-3 flex items-center justify-between">
@@ -1043,29 +1145,71 @@ export default function RelatoriosPage() {
                   </div>
 
                   {/* Relatórios salvos */}
-                  <div className="min-h-0 flex-1 rounded-2xl border border-white/10 bg-[#151525] p-4 shadow-xl shadow-black/20">
+                  <div className="rounded-2xl border border-white/10 bg-[#151525] p-4 shadow-xl shadow-black/20 lg:min-h-0 lg:flex-1">
                     <div className="mb-3 flex items-center justify-between">
                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Relatórios salvos</p>
-                      <Plus size={14} className="text-slate-500" />
+                      <button
+                        type="button"
+                        onClick={startNewSchedule}
+                        title="Novo relatório"
+                        className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200"
+                      >
+                        <Plus size={14} />
+                      </button>
                     </div>
                     {schedules.length === 0 ? (
                       <p className="rounded-xl border border-dashed border-white/10 py-8 text-center text-sm text-slate-600">
                         Nenhum relatório agendado ainda.
                       </p>
                     ) : (
-                      <div className="space-y-2 overflow-y-auto">
+                      <div className="space-y-2 lg:overflow-y-auto">
                         {schedules.map(schedule => (
-                          <div key={schedule.id} className="rounded-xl border border-white/8 bg-white/4 p-3">
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="text-sm font-semibold text-slate-200">{schedule.nome}</p>
-                              <span className="rounded-full bg-green-500/12 px-2 py-0.5 text-xs font-medium text-green-400">
-                                {schedule.ativo ? 'Ativo' : 'Pausado'}
-                              </span>
+                          <button
+                            key={schedule.id}
+                            type="button"
+                            onClick={() => loadScheduleForEdit(schedule)}
+                            className={`w-full rounded-xl border p-3 text-left transition-colors ${
+                              editingScheduleId === schedule.id
+                                ? 'border-indigo-500/50 bg-indigo-500/10'
+                                : 'border-white/8 bg-white/4 hover:bg-white/7'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-200">{schedule.nome}</p>
+                              <div className="flex shrink-0 items-center gap-1">
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={e => { e.stopPropagation(); toggleScheduleActive(schedule) }}
+                                  onKeyDown={e => { if (e.key === 'Enter') { e.stopPropagation(); toggleScheduleActive(schedule) } }}
+                                  className={`rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${
+                                    schedule.ativo ? 'bg-green-500/12 text-green-400 hover:bg-green-500/20' : 'bg-white/8 text-slate-400 hover:bg-white/15'
+                                  } ${togglingId === schedule.id ? 'opacity-50' : ''}`}
+                                >
+                                  {schedule.ativo ? 'Ativo' : 'Pausado'}
+                                </span>
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={e => { e.stopPropagation(); loadScheduleForEdit(schedule) }}
+                                  className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200"
+                                >
+                                  <Pencil size={12} />
+                                </span>
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={e => { e.stopPropagation(); setDeleteId(schedule.id) }}
+                                  className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-red-500/15 hover:text-red-400"
+                                >
+                                  <Trash2 size={12} />
+                                </span>
+                              </div>
                             </div>
                             <p className="mt-1 text-xs text-slate-500">
                               {FREQUENCIES.find(f => f.value === schedule.frequencia)?.label ?? schedule.frequencia} às {schedule.horario.slice(0, 5)}
                             </p>
-                          </div>
+                          </button>
                         ))}
                       </div>
                     )}
@@ -1077,6 +1221,23 @@ export default function RelatoriosPage() {
           )}
         </div>
       </div>
+
+      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Excluir relatório">
+        <div className="space-y-4">
+          <p className="text-sm text-slate-400">
+            Tem certeza que deseja excluir este relatório agendado? O envio automático dele será interrompido.
+          </p>
+          <div className="flex gap-2 pt-1">
+            <Button variant="ghost" className="flex-1" onClick={() => setDeleteId(null)}>
+              Cancelar
+            </Button>
+            <Button variant="danger" className="flex-1" onClick={handleDeleteSchedule} disabled={deleting}>
+              {deleting && <Spinner size={14} />}
+              Excluir
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
