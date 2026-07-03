@@ -3,8 +3,13 @@
 -- policies de RLS (só o dono do projeto tinha acesso). Esta migration:
 --   1. adiciona as colunas novas de permissão;
 --   2. adiciona policies extras (somativas, não substituem as existentes)
---      para liberar acesso a quem tem uma linha em user_dashboard_permissions;
---   3. fecha o acesso público a whatsapp_connections (tokens de API).
+--      para liberar acesso a quem tem uma linha em user_dashboard_permissions.
+--
+-- As policies de whatsapp_connections/whatsapp_report_schedules foram
+-- movidas para 037_gestor_trafego_whatsapp_policies.sql porque essas tabelas
+-- ainda não existem neste banco (a integração de WhatsApp não foi
+-- configurada) — rode a migration 037 só depois de criar essas tabelas
+-- (migration 010_whatsapp_reports.sql) quando for ativar WhatsApp.
 --
 -- Rollback:
 --   ALTER TABLE public.user_dashboard_permissions DROP COLUMN IF EXISTS pode_ver_vendas;
@@ -20,11 +25,6 @@
 --   DROP POLICY IF EXISTS "shared users insert custos_manuais" ON public.custos_manuais;
 --   DROP POLICY IF EXISTS "shared users select dashboard_widgets" ON public.dashboard_widgets;
 --   DROP POLICY IF EXISTS "shared users edit dashboard_widgets" ON public.dashboard_widgets;
---   DROP POLICY IF EXISTS "shared users manage whatsapp_report_schedules" ON public.whatsapp_report_schedules;
---   DROP POLICY IF EXISTS "admin manages whatsapp_connections" ON public.whatsapp_connections;
---   CREATE POLICY "authenticated users access whatsapp_connections"
---     ON public.whatsapp_connections FOR ALL
---     USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
 
 -- ─── Novas colunas ──────────────────────────────────────────────────────────
 
@@ -173,42 +173,6 @@ CREATE POLICY "shared users edit dashboard_widgets"
     )
   );
 
--- ─── whatsapp_report_schedules: viewers podem configurar relatórios ────────
-
-DROP POLICY IF EXISTS "shared users manage whatsapp_report_schedules" ON public.whatsapp_report_schedules;
-CREATE POLICY "shared users manage whatsapp_report_schedules"
-  ON public.whatsapp_report_schedules FOR ALL
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.user_dashboard_permissions udp
-      WHERE udp.projeto_id = whatsapp_report_schedules.projeto_id
-        AND udp.user_id = auth.uid()
-        AND udp.pode_visualizar = true
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.user_dashboard_permissions udp
-      WHERE udp.projeto_id = whatsapp_report_schedules.projeto_id
-        AND udp.user_id = auth.uid()
-        AND udp.pode_visualizar = true
-    )
-  );
-
--- ─── whatsapp_connections: fecha para "qualquer autenticado", abre só admin ─
--- Achado de segurança: hoje qualquer usuário logado lê access_token e
--- evolution_api_key de TODOS os projetos. Corrige para: só admin (dono).
--- A tela de Relatórios do gestor nunca lê esta tabela diretamente — usa a
--- rota /api/relatorios/connection-id (service role) para obter só o ID.
-
-DROP POLICY IF EXISTS "authenticated users access whatsapp_connections" ON public.whatsapp_connections;
-DROP POLICY IF EXISTS "admin manages whatsapp_connections" ON public.whatsapp_connections;
-
-CREATE POLICY "admin manages whatsapp_connections"
-  ON public.whatsapp_connections FOR ALL
-  USING (
-    EXISTS (SELECT 1 FROM public.user_profiles WHERE id = auth.uid() AND role = 'admin')
-  )
-  WITH CHECK (
-    EXISTS (SELECT 1 FROM public.user_profiles WHERE id = auth.uid() AND role = 'admin')
-  );
+-- As policies de whatsapp_report_schedules e whatsapp_connections ficam em
+-- 037_gestor_trafego_whatsapp_policies.sql — rode depois de criar essas
+-- tabelas (migration 010_whatsapp_reports.sql), quando for ativar WhatsApp.
