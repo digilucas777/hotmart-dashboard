@@ -181,7 +181,7 @@ export default function ProjectsPage() {
               <div
                 key={p.id}
                 draggable={true}
-                onDragStart={() => { console.log('[DRAG] started index:', i, 'projeto:', p.nome); setDragIndex(i) }}
+                onDragStart={() => setDragIndex(i)}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => {
                   if (dragIndex === null || dragIndex === i) return

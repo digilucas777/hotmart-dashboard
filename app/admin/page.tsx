@@ -251,7 +251,6 @@ export default function AdminPage() {
 
       setUsers((allUsers ?? []) as UserProfile[])
       const projetos = projetosRes.dashboards ?? []
-      console.log('[ADMIN] projetos carregados:', projetos)
       setAllProjetos(projetos)
       setPendingUsers(pendingRes.pending ?? [])
     }
