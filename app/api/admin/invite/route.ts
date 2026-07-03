@@ -10,7 +10,11 @@ type InvitePermission = {
   pode_configurar_produtos?: boolean
   pode_ver_produtos_ofertas?: boolean
   pode_excluir_dashboard?: boolean
+  pode_ver_vendas?: boolean
+  pode_adicionar_custo_manual?: boolean
+  pode_ver_conexao_whatsapp?: boolean
   is_admin_dashboard?: boolean
+  dados_visiveis_a_partir?: string | null
 }
 
 function makeAdminClient() {
@@ -91,7 +95,11 @@ export async function POST(request: Request) {
       pode_configurar_produtos: p.pode_configurar_produtos ?? false,
       pode_ver_produtos_ofertas: p.pode_ver_produtos_ofertas ?? false,
       pode_excluir_dashboard: p.pode_excluir_dashboard ?? false,
+      pode_ver_vendas: p.pode_ver_vendas ?? false,
+      pode_adicionar_custo_manual: p.pode_adicionar_custo_manual ?? false,
+      pode_ver_conexao_whatsapp: p.pode_ver_conexao_whatsapp ?? false,
       is_admin_dashboard: p.is_admin_dashboard ?? false,
+      dados_visiveis_a_partir: p.dados_visiveis_a_partir ?? null,
     }))
     await admin.from('user_dashboard_permissions').insert(rows)
   }
