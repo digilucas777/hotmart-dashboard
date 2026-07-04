@@ -291,6 +291,26 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    // Notificação push de venda — nunca pode atrasar nem quebrar a resposta
+    // do webhook, por isso roda em segundo plano (after) com seus próprios
+    // try/catch internos (ver lib/push.ts).
+    const categoria = resolveNotifCategory(evento, status, forma_pagamento)
+    const sendNotification = (valorNotificado: number) => {
+      if (!categoria || !hotmart_produto_id) return
+      after(async () => {
+        const projetos = await resolveProjetos(hotmart_produto_id)
+        await Promise.all(projetos.map(projeto => notifySale({
+          categoria,
+          projetoId: projeto.id,
+          projetoNome: projeto.nome,
+          valor: valorNotificado,
+          moeda,
+          formaPagamento: forma_pagamento,
+          hotmartId: transaction,
+        })))
+      })
+    }
+
     // Moeda exótica COM coprodução: o valor síncrono (soma das commissions em USD) fica
     // incompleto porque o webhook desta conta só enxerga a própria fatia. Reconstrói o
     // valor total em USD usando o percentual/fixo da taxa Hotmart aplicados sobre a taxa
@@ -299,6 +319,11 @@ export async function POST(req: NextRequest) {
     // já causou bug: o "fixed" da taxa não é distribuído igualmente entre itens de um
     // mesmo carrinho (order bump), então a fórmula acerta com coprodução real mas erra
     // por alguns centavos/dólares quando aplicada a vendas sem coprodução.
+    //
+    // A notificação de venda também depende dessa correção: notificar com o valor
+    // síncrono (incompleto) mostraria uma quantia errada — por isso, quando esse
+    // ajuste se aplica, a notificação só dispara aqui dentro, com o valor já corrigido,
+    // em vez de junto com a resposta do webhook.
     if (hotmartId && hasCoprod && priceCurrency !== 'BRL' && priceCurrency !== 'USD' && taxaHotmart > 0) {
       after(async () => {
         try {
@@ -308,11 +333,15 @@ export async function POST(req: NextRequest) {
           const fixed = Number(fee?.fixed)
           if (!fee || !(percentage > 0) || Number.isNaN(fixed)) {
             console.log(`[WEBHOOK EXOTIC FEE] ${hotmartId}: sem hotmart_fee.percentage/fixed na API, mantém valor síncrono`)
+            sendNotification(valorOperacionalFinal)
             return
           }
 
           const baseUsd = roundMoney((taxaHotmart - fixed) / (percentage / 100))
-          if (!(baseUsd > 0)) return
+          if (!(baseUsd > 0)) {
+            sendNotification(valorOperacionalFinal)
+            return
+          }
 
           const valorCorrigido = status === 'abandoned' ? 0 : roundMoney(baseUsd - taxaHotmart)
           await supabase.from('vendas').update({
@@ -321,29 +350,14 @@ export async function POST(req: NextRequest) {
             valor_operacional_final: valorCorrigido,
           }).eq('hotmart_id', hotmartId)
           console.log(`[WEBHOOK EXOTIC FEE] ${hotmartId}: base=${baseUsd} taxa=${taxaHotmart} valor=${valorCorrigido}`)
+          sendNotification(valorCorrigido)
         } catch (err) {
           console.error('[WEBHOOK EXOTIC FEE] erro:', err)
+          sendNotification(valorOperacionalFinal)
         }
       })
-    }
-
-    // Notificação push de venda — nunca pode atrasar nem quebrar a resposta
-    // do webhook, por isso roda em segundo plano (after) com seus próprios
-    // try/catch internos (ver lib/push.ts).
-    const categoria = resolveNotifCategory(evento, status, forma_pagamento)
-    if (categoria && hotmart_produto_id) {
-      after(async () => {
-        const projetos = await resolveProjetos(hotmart_produto_id)
-        await Promise.all(projetos.map(projeto => notifySale({
-          categoria,
-          projetoId: projeto.id,
-          projetoNome: projeto.nome,
-          valor: valorOperacionalFinal,
-          moeda,
-          formaPagamento: forma_pagamento,
-          hotmartId: transaction,
-        })))
-      })
+    } else {
+      sendNotification(valorOperacionalFinal)
     }
 
     return NextResponse.json({ ok: true })
