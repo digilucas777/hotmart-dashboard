@@ -60,13 +60,17 @@ export type NotifCategory =
   | 'reembolso'
   | 'venda_cancelada'
 
-const TITLES: Record<NotifCategory, string> = {
-  venda_realizada: 'Venda realizada!',
+const STATIC_TITLES: Record<Exclude<NotifCategory, 'venda_realizada'>, string> = {
   boleto_gerado: 'Boleto gerado',
   pix_gerado: 'Pix gerado',
   vendas_pendentes: 'Venda pendente',
   reembolso: 'Reembolso processado',
   venda_cancelada: 'Venda cancelada',
+}
+
+function buildTitle(categoria: NotifCategory, formaPagamento: string | null): string {
+  if (categoria === 'venda_realizada') return `Venda realizada com ${paymentLabel(formaPagamento)}`
+  return STATIC_TITLES[categoria]
 }
 
 export function resolveNotifCategory(
@@ -132,6 +136,19 @@ export async function notifySale(params: {
   try {
     if (!ensureVapidConfigured()) return
 
+    // Evita notificar duas vezes a mesma venda/projeto/categoria (a Hotmart
+    // às vezes manda mais de um webhook pro mesmo evento). Se já existe um
+    // registro, essa combinação já foi notificada — não envia de novo.
+    const { error: dedupError } = await supabase.from('notified_sale_events').insert({
+      hotmart_id: params.hotmartId,
+      projeto_id: params.projetoId,
+      categoria: params.categoria,
+    })
+    if (dedupError) {
+      if (dedupError.code === '23505') return // já notificado
+      console.error('[PUSH] falha ao registrar dedup, enviando mesmo assim:', dedupError.message)
+    }
+
     const { data: prefs } = await supabase
       .from('notification_preferences')
       .select('user_id')
@@ -152,8 +169,8 @@ export async function notifySale(params: {
       currency: params.moeda || 'BRL',
     }).format(params.valor)
 
-    const title = TITLES[params.categoria]
-    const body = `${params.projetoNome} — ${valorFormatado} via ${paymentLabel(params.formaPagamento)}`
+    const title = buildTitle(params.categoria, params.formaPagamento)
+    const body = `Dash Speed: ${params.projetoNome}\n${valorFormatado} • ${params.hotmartId}`
 
     await Promise.all(
       subs.map(async (sub: { id: string; endpoint: string; p256dh: string; auth_key: string }) => {
