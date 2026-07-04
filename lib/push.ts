@@ -6,11 +6,26 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 )
 
-webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT!,
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!,
-)
+let vapidConfigured = false
+
+// Configurado sob demanda (não no carregamento do módulo) — o Next.js
+// carrega este arquivo durante o build para analisar a rota do webhook,
+// e nesse momento as variáveis de ambiente de runtime podem não estar
+// presentes. Chamar isso só quando uma notificação é realmente enviada
+// evita quebrar o build por causa de configuração de push.
+function ensureVapidConfigured(): boolean {
+  if (vapidConfigured) return true
+  const subject = process.env.VAPID_SUBJECT
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+  const privateKey = process.env.VAPID_PRIVATE_KEY
+  if (!subject || !publicKey || !privateKey) {
+    console.error('[PUSH] VAPID_SUBJECT/NEXT_PUBLIC_VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY não configurados — notificação não enviada.')
+    return false
+  }
+  webpush.setVapidDetails(subject, publicKey, privateKey)
+  vapidConfigured = true
+  return true
+}
 
 const PAYMENT_LABELS: Record<string, string> = {
   CREDIT_CARD: 'Cartão de Crédito',
@@ -115,6 +130,8 @@ export async function notifySale(params: {
   hotmartId: string
 }) {
   try {
+    if (!ensureVapidConfigured()) return
+
     const { data: prefs } = await supabase
       .from('notification_preferences')
       .select('user_id')
