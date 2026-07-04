@@ -15,8 +15,8 @@ self.addEventListener('push', (event) => {
   const title = payload.title || 'Dash Speed'
   const options = {
     body: payload.body || '',
-    icon: payload.icon || '/favicon.svg',
-    badge: payload.badge || '/favicon.svg',
+    icon: payload.icon || '/icon-192.png',
+    badge: payload.badge || '/icon-192.png',
     data: { url: payload.url || '/vendas' },
     tag: payload.tag,
   }

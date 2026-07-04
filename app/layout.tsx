@@ -17,9 +17,16 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Hotmart Dashboard",
   description: "Dashboard de vendas Hotmart com análise em tempo real",
+  manifest: '/manifest.json',
   icons: {
     icon: '/favicon.svg',
     shortcut: '/favicon.svg',
+    apple: '/apple-touch-icon.png',
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Dash Speed',
   },
 };
 
