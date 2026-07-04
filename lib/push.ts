@@ -170,7 +170,7 @@ export async function notifySale(params: {
     }).format(params.valor)
 
     const title = buildTitle(params.categoria, params.formaPagamento)
-    const body = `Dash Speed: ${params.projetoNome}\n${valorFormatado} • ${params.hotmartId}`
+    const body = `Hotmart: ${params.projetoNome}\n${valorFormatado} • ${params.hotmartId}`
 
     const resultados = await Promise.all(
       subs.map(async (sub: { id: string; endpoint: string; p256dh: string; auth_key: string }) => {
