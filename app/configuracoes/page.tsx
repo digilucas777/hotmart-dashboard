@@ -10,8 +10,10 @@ import {
   Mail,
   Check,
   AlertCircle,
+  Bell,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import type { Projeto } from '@/lib/types'
 import { Spinner } from '@/components/ui/Spinner'
 import { Button } from '@/components/ui/Button'
 
@@ -21,6 +23,40 @@ type Configuracoes = {
   nome_proprietario: string | null
   email: string | null
   updated_at: string | null
+}
+
+type NotifPrefRow = {
+  venda_realizada: boolean
+  boleto_gerado: boolean
+  pix_gerado: boolean
+  vendas_pendentes: boolean
+  reembolso: boolean
+  venda_cancelada: boolean
+}
+
+const NOTIF_CATEGORIES: { key: keyof NotifPrefRow; label: string }[] = [
+  { key: 'venda_realizada', label: 'Venda realizada' },
+  { key: 'boleto_gerado', label: 'Boleto gerado' },
+  { key: 'pix_gerado', label: 'Pix gerado' },
+  { key: 'vendas_pendentes', label: 'Vendas pendentes' },
+  { key: 'reembolso', label: 'Reembolso' },
+  { key: 'venda_cancelada', label: 'Venda cancelada' },
+]
+
+const DEFAULT_NOTIF_PREF: NotifPrefRow = {
+  venda_realizada: false,
+  boleto_gerado: false,
+  pix_gerado: false,
+  vendas_pendentes: false,
+  reembolso: false,
+  venda_cancelada: false,
+}
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = window.atob(base64)
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)))
 }
 
 export default function ConfiguracoesPage() {
@@ -41,6 +77,14 @@ export default function ConfiguracoesPage() {
     text: string
   } | null>(null)
 
+  const [notifProjetos, setNotifProjetos] = useState<Projeto[]>([])
+  const [notifPrefs, setNotifPrefs] = useState<Record<string, NotifPrefRow>>({})
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('default')
+  const [pushSubscribed, setPushSubscribed] = useState(false)
+  const [activatingPush, setActivatingPush] = useState(false)
+  const [savingPrefs, setSavingPrefs] = useState(false)
+  const [prefsSaved, setPrefsSaved] = useState(false)
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return setLoading(false)
@@ -60,7 +104,118 @@ export default function ConfiguracoesPage() {
           setLoading(false)
         })
     })
+
+    if (typeof window !== 'undefined') {
+      if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+        setPushPermission('unsupported')
+      } else {
+        setPushPermission(Notification.permission)
+      }
+    }
+
+    async function loadNotifSettings() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle()
+      const isAdmin = (profile as { role?: string } | null)?.role === 'admin'
+
+      let projetos: Projeto[] = []
+      if (isAdmin) {
+        const { data } = await supabase.from('projetos').select('*').order('nome')
+        projetos = (data ?? []) as Projeto[]
+      } else {
+        const { data: perms } = await supabase
+          .from('user_dashboard_permissions')
+          .select('projeto_id')
+          .eq('user_id', user.id)
+          .eq('pode_visualizar', true)
+        const projetoIds = ((perms ?? []) as { projeto_id: string }[]).map(p => p.projeto_id)
+        if (projetoIds.length > 0) {
+          const { data } = await supabase.from('projetos').select('*').in('id', projetoIds).order('nome')
+          projetos = (data ?? []) as Projeto[]
+        }
+      }
+      setNotifProjetos(projetos)
+
+      const res = await fetch('/api/notifications/preferences')
+      const json = await res.json() as { preferences?: (NotifPrefRow & { projeto_id: string })[] }
+      const prefsMap: Record<string, NotifPrefRow> = {}
+      ;(json.preferences ?? []).forEach(p => {
+        prefsMap[p.projeto_id] = {
+          venda_realizada: p.venda_realizada,
+          boleto_gerado: p.boleto_gerado,
+          pix_gerado: p.pix_gerado,
+          vendas_pendentes: p.vendas_pendentes,
+          reembolso: p.reembolso,
+          venda_cancelada: p.venda_cancelada,
+        }
+      })
+      setNotifPrefs(prefsMap)
+    }
+    void loadNotifSettings()
   }, [])
+
+  const activatePush = async () => {
+    if (pushPermission === 'unsupported') return
+    setActivatingPush(true)
+    try {
+      const permission = await Notification.requestPermission()
+      setPushPermission(permission)
+      if (permission !== 'granted') return
+
+      const registration = await navigator.serviceWorker.register('/sw.js')
+      await navigator.serviceWorker.ready
+
+      const applicationServerKey = urlBase64ToUint8Array(
+        process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+      )
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: applicationServerKey as BufferSource,
+      })
+
+      await fetch('/api/notifications/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(subscription.toJSON()),
+      })
+      setPushSubscribed(true)
+    } finally {
+      setActivatingPush(false)
+    }
+  }
+
+  function toggleNotifPref(projetoId: string, key: keyof NotifPrefRow) {
+    setNotifPrefs(prev => ({
+      ...prev,
+      [projetoId]: {
+        ...(prev[projetoId] ?? DEFAULT_NOTIF_PREF),
+        [key]: !(prev[projetoId]?.[key] ?? false),
+      },
+    }))
+  }
+
+  const saveNotifPrefs = async () => {
+    setSavingPrefs(true)
+    setPrefsSaved(false)
+    const preferences = notifProjetos.map(p => ({
+      projeto_id: p.id,
+      ...(notifPrefs[p.id] ?? DEFAULT_NOTIF_PREF),
+    }))
+    await fetch('/api/notifications/preferences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ preferences }),
+    })
+    setSavingPrefs(false)
+    setPrefsSaved(true)
+    setTimeout(() => setPrefsSaved(false), 3000)
+  }
 
   const handleSave = async () => {
     if (!userId) return
@@ -268,6 +423,97 @@ export default function ConfiguracoesPage() {
                   {savingPassword && <Spinner size={14} />}
                   Alterar senha
                 </Button>
+              </div>
+            </section>
+
+            {/* Notificações */}
+            <section
+              className="rounded-2xl border p-6"
+              style={{ background: '#191929', borderColor: 'rgba(255,255,255,0.07)' }}
+            >
+              <div className="mb-5 flex items-center gap-2">
+                <Bell size={16} className="text-indigo-400" />
+                <h2 className="text-sm font-semibold text-slate-200">Notificações</h2>
+              </div>
+
+              <div className="space-y-4">
+                {pushPermission === 'unsupported' && (
+                  <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 px-3 py-2.5 text-xs text-amber-300">
+                    <AlertCircle size={12} />
+                    Seu navegador não suporta notificações push (comum no Safari do iPhone/iPad). Tente em outro navegador ou dispositivo.
+                  </div>
+                )}
+                {pushPermission === 'denied' && (
+                  <div className="flex items-center gap-2 rounded-xl bg-red-500/10 px-3 py-2.5 text-xs text-red-400">
+                    <AlertCircle size={12} />
+                    Você bloqueou as notificações neste navegador. Para ativar, permita notificações para este site nas configurações do navegador.
+                  </div>
+                )}
+                {pushPermission === 'granted' || pushSubscribed ? (
+                  <div className="flex items-center gap-2 rounded-xl bg-green-500/10 px-3 py-2.5 text-xs text-green-400">
+                    <Check size={12} />
+                    Notificações ativadas neste dispositivo
+                  </div>
+                ) : pushPermission !== 'unsupported' && pushPermission !== 'denied' ? (
+                  <Button onClick={activatePush} disabled={activatingPush} size="sm" variant="outline">
+                    {activatingPush ? <Spinner size={14} /> : <Bell size={14} />}
+                    Ativar notificações push
+                  </Button>
+                ) : null}
+
+                {notifProjetos.length === 0 ? (
+                  <p className="text-xs text-slate-500">Nenhum projeto disponível para configurar notificações.</p>
+                ) : (
+                  <div className="space-y-2 pt-1">
+                    {notifProjetos.map(projeto => {
+                      const pref = notifPrefs[projeto.id] ?? DEFAULT_NOTIF_PREF
+                      return (
+                        <div
+                          key={projeto.id}
+                          className="rounded-xl border p-3.5"
+                          style={{ background: '#111120', borderColor: 'rgba(255,255,255,0.07)' }}
+                        >
+                          <p className="mb-2 text-xs font-bold text-slate-200">{projeto.nome}</p>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {NOTIF_CATEGORIES.map(({ key, label }) => (
+                              <label key={key} className="flex cursor-pointer items-center gap-2">
+                                <span
+                                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                                    pref[key] ? 'border-cyan-400 bg-cyan-400/20' : 'border-white/15'
+                                  }`}
+                                >
+                                  {pref[key] && <Check size={10} className="text-cyan-400" />}
+                                </span>
+                                <span className="text-xs text-slate-400">{label}</span>
+                                <input
+                                  type="checkbox"
+                                  className="sr-only"
+                                  checked={pref[key]}
+                                  onChange={() => toggleNotifPref(projeto.id, key)}
+                                />
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {notifProjetos.length > 0 && (
+                  <div className="flex items-center gap-3 pt-1">
+                    <Button onClick={saveNotifPrefs} disabled={savingPrefs} size="sm">
+                      {savingPrefs ? <Spinner size={14} /> : prefsSaved ? <Check size={14} /> : <Save size={14} />}
+                      {savingPrefs ? 'Salvando...' : prefsSaved ? 'Salvo!' : 'Salvar preferências'}
+                    </Button>
+                    {prefsSaved && (
+                      <span className="flex items-center gap-1 text-xs text-green-400">
+                        <Check size={12} />
+                        Preferências salvas com sucesso
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </section>
           </div>

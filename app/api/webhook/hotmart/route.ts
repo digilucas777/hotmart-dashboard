@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { after } from 'next/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { notifySale, resolveNotifCategory, resolveProjeto } from '@/lib/push'
 
 
 const supabase = createClient(
@@ -323,6 +324,26 @@ export async function POST(req: NextRequest) {
         } catch (err) {
           console.error('[WEBHOOK EXOTIC FEE] erro:', err)
         }
+      })
+    }
+
+    // Notificação push de venda — nunca pode atrasar nem quebrar a resposta
+    // do webhook, por isso roda em segundo plano (after) com seus próprios
+    // try/catch internos (ver lib/push.ts).
+    const categoria = resolveNotifCategory(evento, status, forma_pagamento)
+    if (categoria && hotmart_produto_id) {
+      after(async () => {
+        const projeto = await resolveProjeto(hotmart_produto_id)
+        if (!projeto) return
+        await notifySale({
+          categoria,
+          projetoId: projeto.id,
+          projetoNome: projeto.nome,
+          valor: valorOperacionalFinal,
+          moeda,
+          formaPagamento: forma_pagamento,
+          hotmartId: transaction,
+        })
       })
     }
 
