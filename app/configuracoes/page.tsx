@@ -79,7 +79,13 @@ export default function ConfiguracoesPage() {
 
   const [notifProjetos, setNotifProjetos] = useState<Projeto[]>([])
   const [notifPrefs, setNotifPrefs] = useState<Record<string, NotifPrefRow>>({})
-  const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('default')
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>(() => {
+    if (typeof window === 'undefined') return 'default'
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      return 'unsupported'
+    }
+    return Notification.permission
+  })
   const [pushSubscribed, setPushSubscribed] = useState(false)
   const [activatingPush, setActivatingPush] = useState(false)
   const [savingPrefs, setSavingPrefs] = useState(false)
@@ -104,14 +110,6 @@ export default function ConfiguracoesPage() {
           setLoading(false)
         })
     })
-
-    if (typeof window !== 'undefined') {
-      if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-        setPushPermission('unsupported')
-      } else {
-        setPushPermission(Notification.permission)
-      }
-    }
 
     async function loadNotifSettings() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -440,7 +438,7 @@ export default function ConfiguracoesPage() {
                 {pushPermission === 'unsupported' && (
                   <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 px-3 py-2.5 text-xs text-amber-300">
                     <AlertCircle size={12} />
-                    Seu navegador não suporta notificações push (comum no Safari do iPhone/iPad). Tente em outro navegador ou dispositivo.
+                    No iPhone/iPad, notificações só funcionam depois de adicionar este site à Tela de Início (menu do navegador → &quot;Adicionar à Tela de Início&quot;) e abrir por esse ícone, em vez da aba do navegador. Depois de abrir por lá, volte nesta tela para ativar.
                   </div>
                 )}
                 {pushPermission === 'denied' && (
