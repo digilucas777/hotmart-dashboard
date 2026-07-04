@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Hotmart Dashboard",
+  title: "Dash Speed",
   description: "Dashboard de vendas Hotmart com análise em tempo real",
   manifest: '/manifest.json',
   icons: {
