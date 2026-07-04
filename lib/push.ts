@@ -172,23 +172,26 @@ export async function notifySale(params: {
     const title = buildTitle(params.categoria, params.formaPagamento)
     const body = `Dash Speed: ${params.projetoNome}\n${valorFormatado} • ${params.hotmartId}`
 
-    await Promise.all(
+    const resultados = await Promise.all(
       subs.map(async (sub: { id: string; endpoint: string; p256dh: string; auth_key: string }) => {
         try {
           await webpush.sendNotification(
             { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth_key } },
             JSON.stringify({ title, body, icon: '/icon-192.png', url: '/vendas', tag: `venda-${params.hotmartId}` }),
           )
+          return 'ok'
         } catch (err: unknown) {
           const statusCode = (err as { statusCode?: number } | null)?.statusCode
           if (statusCode === 404 || statusCode === 410) {
             await supabase.from('push_subscriptions').delete().eq('id', sub.id)
-          } else {
-            console.error('[PUSH] falha ao enviar:', err instanceof Error ? err.message : err)
+            return 'inscricao_removida'
           }
+          console.error('[PUSH] falha ao enviar:', err instanceof Error ? err.message : err)
+          return 'erro'
         }
       }),
     )
+    console.log(`[PUSH] ${params.hotmartId}/${params.categoria}: ${resultados.filter(r => r === 'ok').length}/${resultados.length} enviados (${resultados.join(', ')})`)
   } catch (err) {
     console.error('[PUSH] notifySale falhou:', err)
   }
