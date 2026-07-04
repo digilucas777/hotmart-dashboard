@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { after } from 'next/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { notifySale, resolveNotifCategory, resolveProjeto } from '@/lib/push'
+import { notifySale, resolveNotifCategory, resolveProjetos } from '@/lib/push'
 
 
 const supabase = createClient(
@@ -333,9 +333,8 @@ export async function POST(req: NextRequest) {
     const categoria = resolveNotifCategory(evento, status, forma_pagamento)
     if (categoria && hotmart_produto_id) {
       after(async () => {
-        const projeto = await resolveProjeto(hotmart_produto_id)
-        if (!projeto) return
-        await notifySale({
+        const projetos = await resolveProjetos(hotmart_produto_id)
+        await Promise.all(projetos.map(projeto => notifySale({
           categoria,
           projetoId: projeto.id,
           projetoNome: projeto.nome,
@@ -343,7 +342,7 @@ export async function POST(req: NextRequest) {
           moeda,
           formaPagamento: forma_pagamento,
           hotmartId: transaction,
-        })
+        })))
       })
     }
 

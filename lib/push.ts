@@ -94,30 +94,30 @@ export function resolveNotifCategory(
   return null
 }
 
-export async function resolveProjeto(
+// Um mesmo produto Hotmart pode estar vinculado a mais de um projeto (ex:
+// o mesmo produto rastreado em dois dashboards diferentes) — por isso
+// retorna uma lista, nunca um único projeto.
+export async function resolveProjetos(
   hotmartProdutoId: string | null,
-): Promise<{ id: string; nome: string } | null> {
-  if (!hotmartProdutoId) return null
+): Promise<{ id: string; nome: string }[]> {
+  if (!hotmartProdutoId) return []
   const { data: produto } = await supabase
     .from('produtos')
     .select('id')
     .eq('hotmart_id', hotmartProdutoId)
     .maybeSingle()
-  if (!produto) return null
+  if (!produto) return []
 
-  const { data: link } = await supabase
+  const { data: links } = await supabase
     .from('projeto_produtos')
     .select('projeto_id, projetos(nome)')
     .eq('produto_id', produto.id)
-    .maybeSingle()
-  const projetoId = (link as { projeto_id?: string } | null)?.projeto_id
-  if (!projetoId) return null
+  if (!links || links.length === 0) return []
 
-  const projetoNome = (link as { projetos?: { nome?: string } } | null)?.projetos?.nome
-  if (projetoNome) return { id: projetoId, nome: projetoNome }
-
-  const { data: projeto } = await supabase.from('projetos').select('nome').eq('id', projetoId).maybeSingle()
-  return { id: projetoId, nome: projeto?.nome ?? 'Dashboard' }
+  return (links as { projeto_id: string; projetos?: { nome?: string } | null }[]).map(link => ({
+    id: link.projeto_id,
+    nome: link.projetos?.nome ?? 'Dashboard',
+  }))
 }
 
 export async function notifySale(params: {
