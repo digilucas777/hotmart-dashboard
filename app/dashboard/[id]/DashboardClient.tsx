@@ -533,6 +533,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [custoForm, setCustoForm] = useState({ valor: '', moeda: 'USD', data: '', descricao: '' })
   const [savingCusto, setSavingCusto] = useState(false)
   const [deletingCustoId, setDeletingCustoId] = useState<string | null>(null)
+  const [custoParaExcluir, setCustoParaExcluir] = useState<CustoManual | null>(null)
 
   const [origensDisponiveis, setOrigensDisponiveis] = useState<string[]>([])
   const [origensFilter, setOrigensFilter] = useState<string[]>([])
@@ -1468,6 +1469,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setCustoForm({ valor: '', moeda: 'USD', data: '', descricao: '' })
     await fetchCustosManuals()
     setSavingCusto(false)
+    setSuccessToast('Custo adicionado')
+    setTimeout(() => setSuccessToast(null), 3000)
   }
 
   async function deleteCusto(id: string) {
@@ -1475,6 +1478,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     await supabase.from('custos_manuais').delete().eq('id', id)
     await fetchCustosManuals()
     setDeletingCustoId(null)
+    setCustoParaExcluir(null)
+    setSuccessToast('Custo excluído')
+    setTimeout(() => setSuccessToast(null), 3000)
   }
 
   const handleDashboardDragEnd = useCallback(async (event: DragEndEvent) => {
@@ -2234,11 +2240,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                         <td className="py-1.5 pr-2 text-slate-400">{c.descricao ?? '—'}</td>
                         <td className="py-1.5 text-right">
                           <button
-                            onClick={() => {
-                              if (window.confirm('Tem certeza que deseja excluir este custo?')) {
-                                void deleteCusto(c.id)
-                              }
-                            }}
+                            onClick={() => setCustoParaExcluir(c)}
                             disabled={deletingCustoId === c.id}
                             className="text-slate-600 hover:text-red-400 disabled:opacity-40 transition-colors"
                           >
@@ -2252,6 +2254,41 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               </div>
             </div>
           )}
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!custoParaExcluir}
+        onClose={() => setCustoParaExcluir(null)}
+        title="Excluir custo"
+        maxWidth="max-w-sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--dash-muted)]">
+            {custoParaExcluir && (
+              <>
+                Tem certeza que deseja excluir o custo de{' '}
+                <span className="font-semibold text-slate-200">
+                  {custoParaExcluir.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} {custoParaExcluir.moeda}
+                </span>{' '}
+                ({custoParaExcluir.data})? Esta ação não pode ser desfeita.
+              </>
+            )}
+          </p>
+          <div className="flex gap-2 pt-1">
+            <Button variant="ghost" className="flex-1" onClick={() => setCustoParaExcluir(null)}>
+              Cancelar
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={() => custoParaExcluir && void deleteCusto(custoParaExcluir.id)}
+              disabled={!!deletingCustoId}
+              style={{ background: 'rgba(239,68,68,0.2)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.3)' }}
+            >
+              {deletingCustoId ? <Spinner size={13} /> : <Trash2 size={14} />}
+              Excluir
+            </Button>
+          </div>
         </div>
       </Modal>
 
