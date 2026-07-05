@@ -78,7 +78,11 @@ export function resolveNotifCategory(
   status: string,
   formaPagamento: string | null,
 ): NotifCategory | null {
-  if (status === 'approved') return 'venda_realizada'
+  // PURCHASE_COMPLETE chega dias depois (quando a garantia de 7 dias termina)
+  // para a MESMA venda que já virou PURCHASE_APPROVED antes — mapeia pro mesmo
+  // status "approved" pro dashboard (a venda continua aprovada), mas não deve
+  // gerar uma nova notificação de "venda realizada" pra uma venda antiga.
+  if (status === 'approved' && evento === 'PURCHASE_APPROVED') return 'venda_realizada'
   if (status === 'refunded') return 'reembolso'
   if (status === 'cancelled') return 'venda_cancelada'
 
@@ -135,6 +139,16 @@ export async function notifySale(params: {
 }) {
   try {
     if (!ensureVapidConfigured()) return
+
+    // A Hotmart às vezes manda um webhook de venda aprovada sem os dados de
+    // preço/comissão (payload incompleto) — nesse caso o valor calculado vem
+    // zerado. Não registra no dedup (pra não bloquear a notificação de verdade
+    // quando o webhook correto chegar) nem envia uma notificação de venda com
+    // R$/US$ 0,00, que só confunde.
+    if (params.categoria === 'venda_realizada' && !(params.valor > 0)) {
+      console.error(`[PUSH] ${params.hotmartId}: valor zerado ou inválido (${params.valor}), notificação de venda_realizada ignorada`)
+      return
+    }
 
     // Evita notificar duas vezes a mesma venda/projeto/categoria (a Hotmart
     // às vezes manda mais de um webhook pro mesmo evento). Se já existe um
