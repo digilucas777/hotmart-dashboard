@@ -88,6 +88,27 @@ async function fetchSaleFromAnyAccount(transactionId: string): Promise<any | nul
   return null
 }
 
+async function fetchCommissionsItem(token: string, transactionId: string): Promise<any | null> {
+  const res = await fetch(
+    `https://developers.hotmart.com/payments/api/v1/sales/commissions?transaction=${encodeURIComponent(transactionId)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!res.ok) return null
+  const data = await res.json()
+  return data?.items?.[0] ?? null
+}
+
+async function fetchCommissionsFromAnyAccount(transactionId: string): Promise<any | null> {
+  for (const account of HOTMART_ACCOUNTS) {
+    if (!account.id || !account.secret) continue
+    const token = await getHotmartToken(account.id, account.secret)
+    if (!token) continue
+    const item = await fetchCommissionsItem(token, transactionId)
+    if (item) return item
+  }
+  return null
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -311,14 +332,17 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Moeda exótica COM coprodução: o valor síncrono (soma das commissions em USD) fica
-    // incompleto porque o webhook desta conta só enxerga a própria fatia. Reconstrói o
-    // valor total em USD usando o percentual/fixo da taxa Hotmart aplicados sobre a taxa
-    // MARKETPLACE em USD, que já vem corretamente convertida no webhook original.
-    // Sem coprodução a soma síncrona já é o valor completo — rodar essa correção nesse caso
-    // já causou bug: o "fixed" da taxa não é distribuído igualmente entre itens de um
-    // mesmo carrinho (order bump), então a fórmula acerta com coprodução real mas erra
-    // por alguns centavos/dólares quando aplicada a vendas sem coprodução.
+    // Moeda exótica COM coprodução: o valor síncrono (soma das commissions do payload do
+    // webhook) fica incompleto porque o webhook desta conta só enxerga a própria fatia.
+    // Busca o breakdown completo (produtor + coprodutor + afiliado, já convertido para USD
+    // pela Hotmart) via GET /sales/commissions — o mesmo endpoint que scripts/_report-
+    // aprovadas-liquido-usd.ts já usa com sucesso para obter o valor líquido real.
+    // (Tentativa anterior reconstruía o bruto a partir do percentual/fixo da taxa Hotmart;
+    // essa fórmula se mostrou pouco confiável — o "fixed" não é distribuído igualmente entre
+    // itens de um mesmo carrinho, então o resultado variava bastante do valor real da Hotmart.)
+    // A taxa MARKETPLACE não aparece em /sales/commissions (não é uma comissão paga a
+    // alguém), por isso mantém a taxaHotmart já calculada de forma síncrona a partir do
+    // payload original do webhook — essa parte sempre foi confiável.
     //
     // A notificação de venda também depende dessa correção: notificar com o valor
     // síncrono (incompleto) mostraria uma quantia errada — por isso, quando esse
@@ -327,29 +351,42 @@ export async function POST(req: NextRequest) {
     if (hotmartId && hasCoprod && priceCurrency !== 'BRL' && priceCurrency !== 'USD' && taxaHotmart > 0) {
       after(async () => {
         try {
-          const item = await fetchSaleFromAnyAccount(hotmartId)
-          const fee = item?.purchase?.hotmart_fee
-          const percentage = Number(fee?.percentage)
-          const fixed = Number(fee?.fixed)
-          if (!fee || !(percentage > 0) || Number.isNaN(fixed)) {
-            console.log(`[WEBHOOK EXOTIC FEE] ${hotmartId}: sem hotmart_fee.percentage/fixed na API, mantém valor síncrono`)
+          const item = await fetchCommissionsFromAnyAccount(hotmartId)
+          const commissionsApi = (item?.commissions ?? []) as any[]
+          if (commissionsApi.length === 0) {
+            console.log(`[WEBHOOK EXOTIC FEE] ${hotmartId}: sem resposta de /sales/commissions, mantém valor síncrono`)
             sendNotification(valorOperacionalFinal)
             return
           }
 
-          const baseUsd = roundMoney((taxaHotmart - fixed) / (percentage / 100))
-          if (!(baseUsd > 0)) {
-            sendNotification(valorOperacionalFinal)
-            return
+          let produtorCorrigido = 0
+          let coprodutorCorrigido = 0
+          let afiliadoCorrigido = 0
+          for (const c of commissionsApi) {
+            const source = String(c?.commission?.source ?? c?.source ?? '').toUpperCase()
+            const currency = c?.commission?.currency_code ?? c?.currency_code
+            const value = Number(c?.commission?.value ?? c?.value ?? 0)
+            if (currency && currency !== 'USD') {
+              console.error(`[WEBHOOK EXOTIC FEE] ${hotmartId}: comissao em moeda inesperada ${currency}`)
+              continue
+            }
+            if (source.includes('COPRODUC')) coprodutorCorrigido += value
+            else if (source.includes('AFFILIATE') || source.includes('AFILIADO')) afiliadoCorrigido += value
+            else if (source === 'PRODUCER' || source === 'SELLER' || source === 'VENDOR' || source.includes('OWNER')) produtorCorrigido += value
           }
 
-          const valorCorrigido = status === 'abandoned' ? 0 : roundMoney(baseUsd - taxaHotmart)
+          const valorCorrigido = status === 'abandoned' ? 0 : roundMoney(produtorCorrigido + coprodutorCorrigido + afiliadoCorrigido)
+          const brutoCorrigido = roundMoney(valorCorrigido + taxaHotmart)
           await supabase.from('vendas').update({
-            valor_bruto: baseUsd,
+            valor_bruto: brutoCorrigido,
             valor: valorCorrigido,
             valor_operacional_final: valorCorrigido,
+            comissao_produtor: roundMoney(produtorCorrigido),
+            comissao_coprodutor: roundMoney(coprodutorCorrigido),
+            comissao_afiliado: roundMoney(afiliadoCorrigido),
+            valor_recebido: roundMoney(produtorCorrigido),
           }).eq('hotmart_id', hotmartId)
-          console.log(`[WEBHOOK EXOTIC FEE] ${hotmartId}: base=${baseUsd} taxa=${taxaHotmart} valor=${valorCorrigido}`)
+          console.log(`[WEBHOOK EXOTIC FEE] ${hotmartId}: bruto=${brutoCorrigido} taxa=${taxaHotmart} valor=${valorCorrigido}`)
           sendNotification(valorCorrigido)
         } catch (err) {
           console.error('[WEBHOOK EXOTIC FEE] erro:', err)
