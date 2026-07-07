@@ -263,6 +263,16 @@ export function computeWidgetData(
     arr.filter(v => v.moeda === 'BRL').reduce((s, v) => s + getOfficialSaleAmount(v), 0) +
     arr.filter(v => v.moeda === 'USD').reduce((s, v) => s + getOfficialSaleAmount(v), 0) * exchangeRate
 
+  // Mostra por moeda em vez de converter tudo pra BRL: produtos do Pedro são majoritariamente
+  // em USD, então converter uma venda ocasional em BRL pra somar com dólar confundia mais do que ajudava.
+  const sumByCurrencyLabel = (arr: Venda[]) => {
+    const brl = arr.filter(v => v.moeda === 'BRL').reduce((s, v) => s + getOfficialSaleAmount(v), 0)
+    const usd = arr.filter(v => v.moeda === 'USD').reduce((s, v) => s + getOfficialSaleAmount(v), 0)
+    const brlPart = brl > 0 ? `${formatBRL(brl)} BRL` : ''
+    const usdPart = usd > 0 ? `${formatUSD(usd)} USD` : ''
+    return [brlPart, usdPart].filter(Boolean).join(' + ')
+  }
+
   switch (dataSource) {
     case 'total_converted':
       return { kind: 'metric', value: formatBRL(totalConverted), subValue: `Taxa: R$ ${exchangeRate.toFixed(2)}/USD` }
@@ -277,9 +287,9 @@ export function computeWidgetData(
     case 'avg_ticket':
       return { kind: 'metric', value: formatBRL(avgTicket), subValue: approved.length > 0 ? `${approved.length} aprovadas` : 'Sem vendas' }
     case 'refunds_count':
-      return { kind: 'metric', value: String(refunded.length), subValue: refunded.length > 0 ? formatBRL(sumConverted(refunded)) : '—' }
+      return { kind: 'metric', value: String(refunded.length), subValue: refunded.length > 0 ? sumByCurrencyLabel(refunded) : '—' }
     case 'chargebacks_count':
-      return { kind: 'metric', value: String(chargebacks.length), subValue: chargebacks.length > 0 ? formatBRL(sumConverted(chargebacks)) : '—' }
+      return { kind: 'metric', value: String(chargebacks.length), subValue: chargebacks.length > 0 ? sumByCurrencyLabel(chargebacks) : '—' }
     case 'pending_count':
       return { kind: 'metric', value: String(pending.length), subValue: pending.length > 0 ? formatBRL(sumConverted(pending)) : '—' }
     case 'cancelled_count':
