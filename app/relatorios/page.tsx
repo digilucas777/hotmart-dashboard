@@ -78,6 +78,7 @@ const HOTMART_METRICS: { value: WidgetDataSource; label: string }[] = [
   { value: 'approval_rate', label: 'Taxa de aprovação' },
   { value: 'avg_ticket', label: 'Ticket médio' },
   { value: 'refunds_count', label: 'Reembolsos' },
+  { value: 'chargebacks_count', label: 'Chargebacks' },
   { value: 'pending_count', label: 'Pendentes' },
   { value: 'cancelled_count', label: 'Cancelados' },
   { value: 'top_produtos', label: 'Top 5 Produtos' },
@@ -229,6 +230,7 @@ function buildPeriodoLabel(period: string, customFrom?: string, customTo?: strin
 function buildMetricValue(vendas: Venda[], metric: WidgetDataSource, insights?: MetaInsights | null, isMetaConnected?: boolean, exchangeRate = 5.85, custoManualBRL = 0) {
   const approved = vendas.filter(v => v.status === 'approved')
   const refunded = vendas.filter(v => v.status === 'refunded')
+  const chargebacks = vendas.filter(v => v.status === 'chargeback')
   const pending = vendas.filter(v => v.status === 'pending')
   const cancelled = vendas.filter(v => v.status === 'cancelled')
   const totalBRL = approved.filter(v => v.moeda === 'BRL').reduce((sum, v) => sum + getOfficialSaleAmount(v), 0)
@@ -246,6 +248,7 @@ function buildMetricValue(vendas: Venda[], metric: WidgetDataSource, insights?: 
   if (metric === 'approval_rate') return vendas.length > 0 ? `${((approved.length / vendas.length) * 100).toFixed(1)}%` : '0.0%'
   if (metric === 'avg_ticket') return approved.length > 0 ? formatBRL(totalConverted / approved.length) : formatBRL(0)
   if (metric === 'refunds_count') return String(refunded.length)
+  if (metric === 'chargebacks_count') return String(chargebacks.length)
   if (metric === 'pending_count') return String(pending.length)
   if (metric === 'cancelled_count') return String(cancelled.length)
 

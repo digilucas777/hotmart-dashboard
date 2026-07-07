@@ -91,6 +91,7 @@ const METRIC_SOURCES: { value: WidgetDataSource; label: string }[] = [
   { value: 'approval_rate',   label: 'Taxa de Aprovação' },
   { value: 'avg_ticket',      label: 'Ticket Médio' },
   { value: 'refunds_count',   label: 'Reembolsos' },
+  { value: 'chargebacks_count', label: 'Chargebacks' },
   { value: 'pending_count',   label: 'Pendentes' },
   { value: 'cancelled_count', label: 'Cancelados' },
   { value: 'lucro_usd',       label: 'Lucro USD (Faturamento USD − Gasto Meta)' },

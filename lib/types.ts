@@ -1,4 +1,4 @@
-export type Status = 'approved' | 'refunded' | 'cancelled' | 'pending' | 'abandoned'
+export type Status = 'approved' | 'refunded' | 'cancelled' | 'pending' | 'abandoned' | 'chargeback'
 
 export type Venda = {
   id: string
@@ -98,6 +98,7 @@ export type WidgetDataSource =
   | 'approval_rate'
   | 'avg_ticket'
   | 'refunds_count'
+  | 'chargebacks_count'
   | 'pending_count'
   | 'cancelled_count'
   | 'revenue_by_day'

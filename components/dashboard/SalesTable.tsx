@@ -17,6 +17,7 @@ import type { Venda } from '@/lib/types'
 const STATUS_VARIANT: Record<string, BadgeVariant> = {
   approved: 'success',
   refunded: 'danger',
+  chargeback: 'danger',
   cancelled: 'warning',
   pending: 'info',
   abandoned: 'default',
@@ -27,6 +28,7 @@ const STATUS_FILTERS = [
   { value: 'approved', label: 'Aprovados' },
   { value: 'pending', label: 'Pendentes' },
   { value: 'refunded', label: 'Reembolsados' },
+  { value: 'chargeback', label: 'Chargeback' },
   { value: 'cancelled', label: 'Cancelado' },
   { value: 'abandoned', label: 'Abandono' },
 ]
