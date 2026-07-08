@@ -79,7 +79,6 @@ export async function GET(request: Request) {
     const data = await res.json()
     const item = (data?.items ?? [])[0]
     const purchaseData = item?.purchase
-    const origemObj = purchaseData?.origin
     const origem = extractOrigem(purchaseData, item?.commissions ?? [])
 
     return Response.json({ origem })

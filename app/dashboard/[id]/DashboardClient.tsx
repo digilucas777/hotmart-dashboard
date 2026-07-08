@@ -164,10 +164,6 @@ function normalizeRowSpan(widget: WidgetConfig) {
   return raw
 }
 
-function normalizeColSpan(span: number) {
-  return Math.min(GRID_COLUMNS, Math.max(2, Math.round(span)))
-}
-
 function withGridDefaults(widget: WidgetConfig, index: number): WidgetConfig {
   const colSpan = widget.col_span ?? widthToSpan(widget.width)
   const rowSpan = normalizeRowSpan(widget)
@@ -261,60 +257,6 @@ function resolveOverlaps(layout: WidgetConfig[], activeId: string) {
   return next
 }
 
-// Treats all widgets in activeIds as fixed; pushes non-active widgets down on overlap.
-function resolveOverlapsMulti(layout: WidgetConfig[], activeIds: Set<string>) {
-  const fixed = layoutBounds(layout.filter(w => activeIds.has(w.id)))
-  const next = layout.map(w => ({ ...w }))
-  const others = next
-    .filter(w => !activeIds.has(w.id))
-    .sort((a, b) => ((a.row_start ?? 1) - (b.row_start ?? 1)) || ((a.col_start ?? 1) - (b.col_start ?? 1)))
-
-  const placed = [...fixed]
-  for (const widget of others) {
-    const colSpan = widget.col_span ?? widthToSpan(widget.width)
-    const rowSpan = normalizeRowSpan(widget)
-    const box = { col: widget.col_start ?? 1, row: widget.row_start ?? 1, colSpan, rowSpan }
-    while (placed.some(p => collidesBounds(box, p))) box.row += 1
-    widget.row_start = box.row
-    widget.row_span = rowSpan
-    placed.push({ id: widget.id, ...box })
-  }
-  return next
-}
-
-// After any drop, pull every bottom-most widget up to touch the nearest widget above it,
-// eliminating trailing empty space at the end of the grid.
-function applyBottomMagnet(layout: WidgetConfig[]): WidgetConfig[] {
-  if (layout.length === 0) return layout
-  const maxRowEnd = Math.max(...layout.map(w => (w.row_start ?? 1) + normalizeRowSpan(w)))
-  const bottomIds = new Set(
-    layout
-      .filter(w => (w.row_start ?? 1) + normalizeRowSpan(w) === maxRowEnd)
-      .map(w => w.id),
-  )
-  let result = layout
-  for (const id of bottomIds) {
-    const widget = result.find(w => w.id === id)
-    if (!widget) continue
-    const rowStart = widget.row_start ?? 1
-    const colStart = widget.col_start ?? 1
-    const colSpan = widget.col_span ?? widthToSpan(widget.width)
-    const above = result
-      .filter(w => {
-        if (bottomIds.has(w.id)) return false
-        const wCol = w.col_start ?? 1
-        const wSpan = w.col_span ?? widthToSpan(w.width)
-        return wCol < colStart + colSpan && wCol + wSpan > colStart
-      })
-      .map(w => (w.row_start ?? 1) + normalizeRowSpan(w))
-    const newRowStart = above.length > 0 ? Math.max(...above) : 1
-    if (newRowStart < rowStart) {
-      result = result.map(w => w.id === id ? { ...w, row_start: newRowStart } : w)
-    }
-  }
-  return result
-}
-
 function compactLayout(widgets: WidgetConfig[]) {
   // Sort by visual position first so compacting preserves the user's intended order.
   const sorted = [...widgets].sort(
@@ -392,30 +334,13 @@ function persistLocalLayout(projectId: string, widgets: WidgetConfig[]) {
   )
 }
 
-function minColSpanForType(type?: string): number {
-  if (type === 'pie') return 3
-  if (type === 'line' || type === 'bar') return 4
-  if (type === 'table' || type === 'combined') return 5
-  return 2
-}
-
-function minRowSpanForType(type?: string): number {
-  if (type === 'metric') return METRIC_SNAP_ROWS[0]
-  if (type === 'pie') return 14
-  if (type === 'line' || type === 'bar') return 11
-  if (type === 'table' || type === 'combined') return 15
-  return 9
-}
-
 function SortableDashboardOption({
   option,
   active,
-  isAdmin,
   onClick,
 }: {
   option: Projeto
   active: boolean
-  isAdmin: boolean
   onClick: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: option.id })
@@ -1120,7 +1045,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       return resolveOverlaps([...prev, newWidget], newWidget.id)
       // savedWidgets não atualizado aqui: mantém hasUnsavedLayout=true para o botão Salvar
     })
-  }, [widgets, projectId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [widgets, projectId])
 
   const updateWidget = useCallback(async (
     id: string,
@@ -1202,6 +1127,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         setSelectedWidgetIds(new Set())
       } else {
         setLayoutError(message)
+        setTimeout(() => setLayoutError(null), 4000)
       }
     } finally {
       setSavingLayout(false)
@@ -1570,17 +1496,19 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       const label = code ? code : 'Unknown'
       const current = groups.get(label) ?? { label, count: 0, revenue: 0 }
       current.count += 1
-      current.revenue += getOfficialSaleAmount(venda)
+      const amount = getOfficialSaleAmount(venda)
+      current.revenue += venda.moeda === 'USD' ? amount * exchangeRate : amount
       groups.set(label, current)
     }
     return Array.from(groups.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 5)
-  }, [displayVendas])
+  }, [displayVendas, exchangeRate])
   const insights = useMemo(() => {
     const approved = displayVendas.filter(v => v.status === 'approved')
     const topCountry = countryRanking[0]?.label
     const topProduct = Object.entries(approved.reduce<Record<string, number>>((acc, venda) => {
       const key = venda.produto || 'Produto'
-      acc[key] = (acc[key] ?? 0) + getOfficialSaleAmount(venda)
+      const amount = getOfficialSaleAmount(venda)
+      acc[key] = (acc[key] ?? 0) + (venda.moeda === 'USD' ? amount * exchangeRate : amount)
       return acc
     }, {})).sort((a, b) => b[1] - a[1])[0]?.[0]
     return [
@@ -1588,7 +1516,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       topCountry ? `${topCountry} lidera em receita entre os países.` : 'Mapa de países pronto para novas vendas.',
       topProduct ? `${topProduct} lidera o faturamento.` : 'Produtos aparecerão aqui assim que houver dados.',
     ]
-  }, [countryRanking, displayVendas])
+  }, [countryRanking, displayVendas, exchangeRate])
   void nowTick
   const filteredProducts = useMemo(() => {
     let list = allProducts
@@ -1696,7 +1624,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                             key={option.id}
                             option={option}
                             active={active}
-                            isAdmin={isAdmin}
                             onClick={() => {
                               setShowDashboardSwitcher(false)
                               if (!active) {
@@ -1722,7 +1649,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       </header>
 
       <main className="dashboard-main mx-auto max-w-[1400px] px-6 py-6">
-        <div className="dashboard-toolbar mb-5 flex flex-col gap-1.5 overflow-visible rounded-xl border border-[var(--dash-border)] bg-[rgba(12,14,24,0.88)] p-1.5 shadow-sm backdrop-blur-sm lg:flex-row lg:items-center lg:justify-between">
+        <div className="dashboard-toolbar relative z-20 mb-5 flex flex-col gap-1.5 overflow-visible rounded-xl border border-[var(--dash-border)] bg-[rgba(12,14,24,0.88)] p-1.5 shadow-sm backdrop-blur-sm lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0 lg:flex-1">
             <PeriodFilter
               value={period}
@@ -1960,6 +1887,18 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 Inserir custo
               </Button>
             )}
+            {!editMode && canDeleteDashboard && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowDeleteDashboard(true)}
+                title="Excluir este dashboard"
+                className="shrink-0 border-red-400/30 bg-red-500/10 text-red-300"
+              >
+                <Trash2 size={13} />
+                Excluir dashboard
+              </Button>
+            )}
           </div>
         </div>
         {widgetError && (
@@ -2154,6 +2093,13 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl bg-amber-500/90 px-4 py-3 text-sm font-medium text-white shadow-lg backdrop-blur-sm">
           <span>⚠</span>
           <span>Edição disponível apenas no desktop</span>
+        </div>
+      )}
+
+      {layoutError && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl bg-rose-500/90 px-4 py-3 text-sm font-medium text-white shadow-lg backdrop-blur-sm">
+          <span>⚠</span>
+          <span>{layoutError}</span>
         </div>
       )}
 

@@ -61,6 +61,12 @@ export function PeriodFilter({
   const [draftTo, setDraftTo] = useState(customTo)
   const mounted = useMounted()
   const [calendarAnchor, setCalendarAnchor] = useState<Date>(() => new Date())
+  const [nowTs, setNowTs] = useState<number | null>(null)
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowTs(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const customRange = useMemo(() => {
     if (value !== 'custom' || !customFrom || !customTo) return undefined
@@ -74,8 +80,8 @@ export function PeriodFilter({
   }, [customRange, value])
 
   const updatedLabel = (() => {
-    if (!updatedAt) return 'Sincronizando'
-    const secs = Math.max(0, Math.floor((Date.now() - updatedAt.getTime()) / 1000))
+    if (nowTs === null || !updatedAt) return 'Sincronizando'
+    const secs = Math.max(0, Math.floor((nowTs - updatedAt.getTime()) / 1000))
     if (secs < 60) return `Atualizado há ${secs}s`
     const mins = Math.floor(secs / 60)
     if (mins < 60) return `Atualizado há ${mins}min`

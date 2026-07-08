@@ -78,11 +78,16 @@ export default function VendasPage() {
   }, [period, customFrom, customTo])
 
   useEffect(() => {
-    fetch('/api/exchange-rate')
+    const toLocalDate = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const { from, to } = getPeriodRange(period, customDateRange)
+    const fromStr = toLocalDate(from)
+    const toStr = toLocalDate(new Date(to.getTime() - 1))
+    fetch(`/api/exchange-rate?from=${fromStr}&to=${toStr}`)
       .then(r => r.json())
       .then((d: { rate: number }) => setExchangeRate(d.rate ?? 5.85))
       .catch(() => {})
-  }, [])
+  }, [period, customDateRange])
 
   useEffect(() => {
     supabase
