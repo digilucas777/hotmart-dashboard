@@ -42,6 +42,8 @@ export type Projeto = {
   status?: string | null
   data_criacao?: string | null
   ordem?: number | null
+  user_id?: string | null
+  deleted_at?: string | null
 }
 
 export type Produto = {

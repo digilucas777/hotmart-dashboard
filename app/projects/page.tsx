@@ -24,6 +24,8 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [allowedProjetoIds, setAllowedProjetoIds] = useState<Set<string> | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null)
 
   const [showCreate, setShowCreate] = useState(false)
   const [createNome, setCreateNome] = useState('')
@@ -37,6 +39,7 @@ export default function ProjectsPage() {
 
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [deleteEmailInput, setDeleteEmailInput] = useState('')
 
   const [dragIndex, setDragIndex] = useState<number | null>(null)
 
@@ -45,6 +48,7 @@ export default function ProjectsPage() {
     const { data } = await supabase
       .from('projetos')
       .select('*')
+      .is('deleted_at', null)
       .order('ordem', { ascending: true })
       .order('data_criacao', { ascending: false })
     setProjetos((data ?? []) as Projeto[])
@@ -57,6 +61,8 @@ export default function ProjectsPage() {
     async function loadUserPerms() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
+      setCurrentUserId(user.id)
+      setCurrentUserEmail(user.email ?? null)
       const { data: profile } = await supabase
         .from('user_profiles')
         .select('role')
@@ -111,10 +117,10 @@ export default function ProjectsPage() {
   const handleDelete = async () => {
     if (!deleteId) return
     setDeleting(true)
-    await supabase.from('projeto_produtos').delete().eq('projeto_id', deleteId)
-    await supabase.from('projetos').delete().eq('id', deleteId)
+    await supabase.from('projetos').update({ deleted_at: new Date().toISOString() }).eq('id', deleteId)
     setDeleting(false)
     setDeleteId(null)
+    setDeleteEmailInput('')
     fetchProjetos()
   }
 
@@ -122,6 +128,7 @@ export default function ProjectsPage() {
   const visibleProjetos = isAdmin || allowedProjetoIds === null
     ? projetos
     : projetos.filter(p => allowedProjetoIds.has(p.id))
+  const deleteTarget = deleteId ? projetos.find(p => p.id === deleteId) : null
 
   return (
     <div className="min-h-screen" style={{ background: '#0b0b14' }}>
@@ -136,12 +143,21 @@ export default function ProjectsPage() {
             </div>
             <span className="text-sm font-bold text-slate-100">Hotmart Dashboard</span>
           </div>
-          {isAdmin && (
-            <Button onClick={() => setShowCreate(true)} size="sm">
-              <Plus size={14} />
-              Novo Projeto
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            <Link
+              href="/projects/lixeira"
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-300"
+            >
+              <Trash2 size={13} />
+              Lixeira
+            </Link>
+            {isAdmin && (
+              <Button onClick={() => setShowCreate(true)} size="sm">
+                <Plus size={14} />
+                Novo Projeto
+              </Button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -215,22 +231,28 @@ export default function ProjectsPage() {
                 </div>
 
                 {/* Action buttons */}
-                {(isAdmin) && (
+                {(isAdmin || p.user_id === currentUserId) && (
                   <div className="absolute right-2 top-2 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                    <button
-                      onClick={() => openEdit(p)}
-                      title="Editar"
-                      className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-white/10 hover:text-slate-300"
-                    >
-                      <Pencil size={11} />
-                    </button>
-                    <button
-                      onClick={() => setDeleteId(p.id)}
-                      title="Excluir"
-                      className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-red-500/15 hover:text-red-400"
-                    >
-                      <Trash2 size={11} />
-                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={() => openEdit(p)}
+                        title="Editar"
+                        className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-white/10 hover:text-slate-300"
+                      >
+                        <Pencil size={11} />
+                      </button>
+                    )}
+                    {/* Excluir é restrito ao dono do projeto (p.user_id), mesmo pra admins — ação
+                        sensível o suficiente pra não ficar liberada por cargo. */}
+                    {p.user_id === currentUserId && (
+                      <button
+                        onClick={() => setDeleteId(p.id)}
+                        title="Excluir"
+                        className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-red-500/15 hover:text-red-400"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -349,14 +371,43 @@ export default function ProjectsPage() {
       </Modal>
 
       {/* Delete Modal */}
-      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Excluir Projeto">
+      <Modal
+        open={!!deleteId}
+        onClose={() => { setDeleteId(null); setDeleteEmailInput('') }}
+        title="Excluir Projeto"
+      >
         <div className="space-y-4">
           <p className="text-sm text-slate-400">
-            Tem certeza que deseja excluir este projeto? Os dados de vendas e produtos não serão afetados.
+            &ldquo;{deleteTarget?.nome}&rdquo; vai pra lixeira e some da sua lista agora, mas só é
+            apagado <strong>de vez depois de 10 dias</strong> — nesse período dá pra restaurar em
+            Lixeira. Passado esse prazo, não tem mais volta.
           </p>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">
+              Digite seu e-mail ({currentUserEmail}) pra confirmar
+            </label>
+            <input
+              type="email"
+              autoFocus
+              value={deleteEmailInput}
+              onChange={e => setDeleteEmailInput(e.target.value)}
+              placeholder={currentUserEmail ?? ''}
+              className="w-full rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 outline-none ring-1 ring-white/10 focus:ring-red-500/60"
+              style={{ background: '#111120' }}
+            />
+          </div>
           <div className="flex gap-2 pt-1">
-            <Button variant="ghost" className="flex-1" onClick={() => setDeleteId(null)}>Cancelar</Button>
-            <Button variant="danger" className="flex-1" onClick={handleDelete} disabled={deleting}>
+            <Button variant="ghost" className="flex-1" onClick={() => { setDeleteId(null); setDeleteEmailInput('') }}>Cancelar</Button>
+            <Button
+              variant="danger"
+              className="flex-1"
+              onClick={handleDelete}
+              disabled={
+                deleting ||
+                !currentUserEmail ||
+                deleteEmailInput.trim().toLowerCase() !== currentUserEmail.toLowerCase()
+              }
+            >
               {deleting && <Spinner size={14} />}
               Excluir
             </Button>

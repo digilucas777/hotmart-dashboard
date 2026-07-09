@@ -441,7 +441,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [userRole, setUserRole] = useState<string | null>(null)
   const [userPerms, setUserPerms] = useState<UserPerms>(null)
   const [permsLoaded, setPermsLoaded] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null)
   const [showDeleteDashboard, setShowDeleteDashboard] = useState(false)
+  const [deleteEmailInput, setDeleteEmailInput] = useState('')
+  const [deletingDashboard, setDeletingDashboard] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const exportGridRef = useRef<HTMLDivElement>(null)
   // Cache de configuração de produtos — evita 2 queries sequenciais a cada troca de período
@@ -882,6 +886,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     async function loadPerms() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
+      setCurrentUserId(user.id)
+      setCurrentUserEmail(user.email ?? null)
       const { data: profile } = await supabase
         .from('user_profiles')
         .select('role')
@@ -1084,10 +1090,19 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   }, [savedWidgets])
 
   const handleDeleteDashboard = useCallback(async () => {
-    await supabase.from('projeto_produtos').delete().eq('projeto_id', projectId)
-    await supabase.from('projetos').delete().eq('id', projectId)
+    if (!currentUserId || !projeto?.user_id || projeto.user_id !== currentUserId) return
+    setDeletingDashboard(true)
+    const { error } = await supabase
+      .from('projetos')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', projectId)
+    setDeletingDashboard(false)
+    if (error) {
+      setLayoutError('Não foi possível excluir o dashboard: ' + error.message)
+      return
+    }
     router.push('/projects')
-  }, [projectId, router])
+  }, [projectId, router, currentUserId, projeto])
 
   const saveLayout = useCallback(async () => {
     setSavingLayout(true)
@@ -1429,11 +1444,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const hasUnsavedLayout = !sameLayout(widgets, savedWidgets)
 
   const isAdmin = userRole === 'admin'
+  const isOwner = !!projeto?.user_id && !!currentUserId && projeto.user_id === currentUserId
   const canEditLayout = isAdmin || userPerms?.is_admin_dashboard || userPerms?.pode_editar_layout || false
   const canAddCustoManual = isAdmin || userPerms?.is_admin_dashboard || userPerms?.pode_adicionar_custo_manual || false
   const canAddWidgets = isAdmin || userPerms?.is_admin_dashboard || userPerms?.pode_adicionar_widgets || false
   const canConfigureProducts = isAdmin || userPerms?.is_admin_dashboard || userPerms?.pode_configurar_produtos || false
-  const canDeleteDashboard = isAdmin || userPerms?.is_admin_dashboard || userPerms?.pode_excluir_dashboard || false
+  // Excluir dashboard é irreversível o suficiente (mesmo com soft-delete) pra ficar restrito só ao dono —
+  // não basta ser admin ou ter a flag pode_excluir_dashboard.
+  const canDeleteDashboard = isOwner
   const displayVendas = useMemo(() => {
     let result = vendas
     if (origensFilter.length > 0) {
@@ -2278,25 +2296,46 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
       <Modal
         open={showDeleteDashboard}
-        onClose={() => setShowDeleteDashboard(false)}
+        onClose={() => { setShowDeleteDashboard(false); setDeleteEmailInput('') }}
         title="Excluir dashboard"
         maxWidth="max-w-sm"
       >
         <div className="space-y-4">
           <p className="text-sm text-[var(--dash-muted)]">
-            Tem certeza? O dashboard &ldquo;{projeto?.nome}&rdquo; será excluído permanentemente. Os dados de vendas não serão afetados.
+            O dashboard &ldquo;{projeto?.nome}&rdquo; vai pra lixeira e some da sua lista agora, mas
+            só é apagado <strong>de vez depois de 10 dias</strong> — nesse período dá pra restaurar
+            em <em>Projetos → Lixeira</em>. Passado esse prazo, não tem mais volta.
           </p>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-[var(--dash-muted)]">
+              Digite seu e-mail (<span className="font-mono">{currentUserEmail}</span>) pra confirmar
+            </label>
+            <input
+              type="email"
+              autoFocus
+              value={deleteEmailInput}
+              onChange={e => setDeleteEmailInput(e.target.value)}
+              placeholder={currentUserEmail ?? ''}
+              className="w-full rounded-xl px-4 py-2.5 text-sm outline-none ring-1 ring-white/10 focus:ring-red-500/60"
+              style={{ background: 'var(--dash-input-bg, #111120)', color: 'var(--dash-text, #e2e8f0)' }}
+            />
+          </div>
           <div className="flex gap-2 pt-1">
-            <Button variant="ghost" className="flex-1" onClick={() => setShowDeleteDashboard(false)}>
+            <Button variant="ghost" className="flex-1" onClick={() => { setShowDeleteDashboard(false); setDeleteEmailInput('') }}>
               Cancelar
             </Button>
             <Button
               className="flex-1"
               onClick={handleDeleteDashboard}
+              disabled={
+                deletingDashboard ||
+                !currentUserEmail ||
+                deleteEmailInput.trim().toLowerCase() !== currentUserEmail.toLowerCase()
+              }
               style={{ background: 'rgba(239,68,68,0.2)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.3)' }}
             >
               <Trash2 size={14} />
-              Excluir
+              {deletingDashboard ? 'Excluindo...' : 'Excluir'}
             </Button>
           </div>
         </div>

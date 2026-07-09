@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/purge-dashboards",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}
