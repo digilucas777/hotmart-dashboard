@@ -410,7 +410,7 @@ function mapStatus(evento: string): string {
     PURCHASE_REFUNDED: 'refunded',
     PURCHASE_CANCELED: 'cancelled',
     PURCHASE_COMPLETE: 'approved',
-    PURCHASE_PROTEST: 'refunded',
+    PURCHASE_PROTEST: 'disputed',
     PURCHASE_CHARGEBACK: 'chargeback',
     PURCHASE_DELAYED: 'pending',
     PURCHASE_OUT_OF_SHOPPING_CART: 'abandoned',

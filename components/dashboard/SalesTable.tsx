@@ -18,6 +18,7 @@ const STATUS_VARIANT: Record<string, BadgeVariant> = {
   approved: 'success',
   refunded: 'danger',
   chargeback: 'danger',
+  disputed: 'warning',
   cancelled: 'warning',
   pending: 'info',
   abandoned: 'default',
@@ -29,6 +30,7 @@ const STATUS_FILTERS = [
   { value: 'pending', label: 'Pendentes' },
   { value: 'refunded', label: 'Reembolsados' },
   { value: 'chargeback', label: 'Chargeback' },
+  { value: 'disputed', label: 'Reclamado' },
   { value: 'cancelled', label: 'Cancelado' },
   { value: 'abandoned', label: 'Abandono' },
 ]

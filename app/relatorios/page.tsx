@@ -79,6 +79,7 @@ const HOTMART_METRICS: { value: WidgetDataSource; label: string }[] = [
   { value: 'avg_ticket', label: 'Ticket médio' },
   { value: 'refunds_count', label: 'Reembolsos' },
   { value: 'chargebacks_count', label: 'Chargebacks' },
+  { value: 'disputed_count', label: 'Reclamado + Parcialmente Reembolsado' },
   { value: 'pending_count', label: 'Pendentes' },
   { value: 'cancelled_count', label: 'Cancelados' },
   { value: 'top_produtos', label: 'Top 5 Produtos' },
@@ -231,6 +232,7 @@ function buildMetricValue(vendas: Venda[], metric: WidgetDataSource, insights?: 
   const approved = vendas.filter(v => v.status === 'approved')
   const refunded = vendas.filter(v => v.status === 'refunded')
   const chargebacks = vendas.filter(v => v.status === 'chargeback')
+  const disputed = vendas.filter(v => v.status === 'disputed')
   const pending = vendas.filter(v => v.status === 'pending')
   const cancelled = vendas.filter(v => v.status === 'cancelled')
   const totalBRL = approved.filter(v => v.moeda === 'BRL').reduce((sum, v) => sum + getOfficialSaleAmount(v), 0)
@@ -249,6 +251,7 @@ function buildMetricValue(vendas: Venda[], metric: WidgetDataSource, insights?: 
   if (metric === 'avg_ticket') return approved.length > 0 ? formatBRL(totalConverted / approved.length) : formatBRL(0)
   if (metric === 'refunds_count') return String(refunded.length)
   if (metric === 'chargebacks_count') return String(chargebacks.length)
+  if (metric === 'disputed_count') return String(disputed.length)
   if (metric === 'pending_count') return String(pending.length)
   if (metric === 'cancelled_count') return String(cancelled.length)
 

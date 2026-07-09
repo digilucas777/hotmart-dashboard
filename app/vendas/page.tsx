@@ -15,6 +15,8 @@ const STATUS_OPTIONS = [
   { value: 'approved', label: 'Aprovado' },
   { value: 'pending', label: 'Pendente' },
   { value: 'refunded', label: 'Reembolsado' },
+  { value: 'chargeback', label: 'Chargeback' },
+  { value: 'disputed', label: 'Reclamado' },
   { value: 'cancelled', label: 'Cancelado' },
   { value: 'abandoned', label: 'Abandono' },
 ]

@@ -102,6 +102,7 @@ export function statusLabel(status: string): string {
     pending: 'Pendente',
     abandoned: 'Abandono',
     chargeback: 'Chargeback',
+    disputed: 'Reclamado',
   }
   return map[status] ?? status
 }
@@ -250,6 +251,7 @@ export function computeWidgetData(
   const approved = vendas.filter(v => v.status === 'approved')
   const refunded = vendas.filter(v => v.status === 'refunded')
   const chargebacks = vendas.filter(v => v.status === 'chargeback')
+  const disputed = vendas.filter(v => v.status === 'disputed')
   const pending = vendas.filter(v => v.status === 'pending')
   const cancelled = vendas.filter(v => v.status === 'cancelled')
 
@@ -290,6 +292,8 @@ export function computeWidgetData(
       return { kind: 'metric', value: String(refunded.length), subValue: refunded.length > 0 ? sumByCurrencyLabel(refunded) : '—' }
     case 'chargebacks_count':
       return { kind: 'metric', value: String(chargebacks.length), subValue: chargebacks.length > 0 ? sumByCurrencyLabel(chargebacks) : '—' }
+    case 'disputed_count':
+      return { kind: 'metric', value: String(disputed.length), subValue: disputed.length > 0 ? sumByCurrencyLabel(disputed) : '—' }
     case 'pending_count':
       return { kind: 'metric', value: String(pending.length), subValue: pending.length > 0 ? formatBRL(sumConverted(pending)) : '—' }
     case 'cancelled_count':
@@ -480,7 +484,7 @@ export function computeWidgetData(
     }
     case 'by_status': {
       const statusMap: Record<string, string> = {
-        approved: 'Aprovado', refunded: 'Reembolsado', cancelled: 'Cancelado', pending: 'Pendente', abandoned: 'Abandono', chargeback: 'Chargeback',
+        approved: 'Aprovado', refunded: 'Reembolsado', cancelled: 'Cancelado', pending: 'Pendente', abandoned: 'Abandono', chargeback: 'Chargeback', disputed: 'Reclamado',
       }
       const groups: Record<string, number> = {}
       vendas.forEach(v => {
@@ -568,6 +572,8 @@ export function computeComparableMetric(
       return vendas.filter(v => v.status === 'refunded').length
     case 'chargebacks_count':
       return vendas.filter(v => v.status === 'chargeback').length
+    case 'disputed_count':
+      return vendas.filter(v => v.status === 'disputed').length
     case 'pending_count':
       return vendas.filter(v => v.status === 'pending').length
     case 'cancelled_count':
