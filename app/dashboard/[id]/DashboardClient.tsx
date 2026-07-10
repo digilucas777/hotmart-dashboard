@@ -728,27 +728,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     void fetchCustosManuals()
   }, [fetchCustosManuals])
 
-  // O Chrome/Android costuma descartar abas em segundo plano por pressão de
-  // memória — ao reabrir, a aba faz um remount completo (ou volta do bfcache),
-  // e sem isso o dashboard ficava com os dados zerados do estado inicial até
-  // um F5 manual. Rebusca silenciosamente assim que a aba volta a ficar visível.
-  useEffect(() => {
-    function handleResume() {
-      if (document.visibilityState !== 'visible') return
-      void fetchVendas()
-      void fetchCustosManuals()
-    }
-    function handlePageShow(e: PageTransitionEvent) {
-      if (e.persisted) handleResume()
-    }
-    document.addEventListener('visibilitychange', handleResume)
-    window.addEventListener('pageshow', handlePageShow)
-    return () => {
-      document.removeEventListener('visibilitychange', handleResume)
-      window.removeEventListener('pageshow', handlePageShow)
-    }
-  }, [fetchVendas, fetchCustosManuals])
-
   const fetchHotmartOrigens = useCallback(async () => {
     const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000).toISOString()
     const { data } = await supabase
