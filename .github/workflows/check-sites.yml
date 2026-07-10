@@ -1,0 +1,15 @@
+name: Checar sites monitorados
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar endpoint de checagem
+        run: |
+          curl -sf -X GET "https://hotmart-dashboard-woad.vercel.app/api/cron/check-sites" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

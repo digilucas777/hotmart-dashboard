@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   LogOut,
   ShieldCheck,
+  Radio,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { icon: LayoutGrid, label: 'Dashboards', href: '/dashboard' },
   { icon: ShoppingCart, label: 'Vendas', href: '/vendas' },
   { icon: FileText, label: 'Relatórios', href: '/relatorios' },
+  { icon: Radio, label: 'Sites', href: '/sites' },
   { icon: Plug, label: 'Integrações', href: '/integracoes' },
   { icon: Settings, label: 'Configurações', href: '/configuracoes' },
 ]

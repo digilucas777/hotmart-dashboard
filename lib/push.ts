@@ -225,3 +225,69 @@ export async function notifySale(params: {
     console.error('[PUSH] notifySale falhou:', err)
   }
 }
+
+const SITE_STATUS_LABELS: Record<string, string> = {
+  fora_do_ar: 'está fora do ar',
+  erro_servidor: 'está retornando erro de servidor',
+  nao_encontrada: 'está retornando página não encontrada',
+  lento: 'está lento (mais de 10s pra responder)',
+}
+
+async function sendPushToUser(userId: string, payload: { title: string; body: string; url: string; tag: string }) {
+  const { data: subs } = await supabase.from('push_subscriptions').select('*').eq('user_id', userId)
+  if (!subs || subs.length === 0) return
+
+  await Promise.all(
+    subs.map(async (sub: { id: string; endpoint: string; p256dh: string; auth_key: string }) => {
+      try {
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth_key } },
+          JSON.stringify({ title: payload.title, body: payload.body, icon: '/icon-192.png', url: payload.url, tag: payload.tag }),
+        )
+      } catch (err: unknown) {
+        const statusCode = (err as { statusCode?: number } | null)?.statusCode
+        if (statusCode === 404 || statusCode === 410) {
+          await supabase.from('push_subscriptions').delete().eq('id', sub.id)
+        } else {
+          console.error('[PUSH][sites] falha ao enviar:', err instanceof Error ? err.message : err)
+        }
+      }
+    }),
+  )
+}
+
+export async function notifySiteIssue(params: {
+  userId: string
+  siteName: string
+  url: string
+  status: 'fora_do_ar' | 'erro_servidor' | 'nao_encontrada' | 'lento'
+  statusCode: number | null
+  tempoMs: number | null
+}) {
+  try {
+    if (!ensureVapidConfigured()) return
+    const detalhe = params.statusCode ? ` (HTTP ${params.statusCode})` : ''
+    await sendPushToUser(params.userId, {
+      title: `⚠️ ${params.siteName} ${SITE_STATUS_LABELS[params.status]}`,
+      body: `${params.url}${detalhe}`,
+      url: '/sites',
+      tag: `site-${params.url}`,
+    })
+  } catch (err) {
+    console.error('[PUSH] notifySiteIssue falhou:', err)
+  }
+}
+
+export async function notifySiteRecovered(params: { userId: string; siteName: string; url: string }) {
+  try {
+    if (!ensureVapidConfigured()) return
+    await sendPushToUser(params.userId, {
+      title: `✅ ${params.siteName} voltou ao ar`,
+      body: params.url,
+      url: '/sites',
+      tag: `site-${params.url}`,
+    })
+  } catch (err) {
+    console.error('[PUSH] notifySiteRecovered falhou:', err)
+  }
+}
