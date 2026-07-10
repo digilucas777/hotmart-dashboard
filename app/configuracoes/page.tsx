@@ -87,6 +87,19 @@ export default function ConfiguracoesPage() {
     return Notification.permission
   })
   const [pushSubscribed, setPushSubscribed] = useState(false)
+  // No iOS, push só entrega de verdade se o site foi instalado na Tela de Início e
+  // aberto por esse ícone — pela aba comum do Safari, o navegador pode até aceitar a
+  // inscrição sem erro nenhum e a notificação simplesmente nunca chega no aparelho,
+  // sem nenhum aviso do lado do servidor. Detecta isso pra reforçar o aviso sempre
+  // visível, mesmo que a inscrição pareça "ativada".
+  const [isIosNotStandalone] = useState(() => {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
+    const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches ||
+      (navigator as Navigator & { standalone?: boolean }).standalone === true
+    return isIos && !isStandalone
+  })
   const [activatingPush, setActivatingPush] = useState(false)
   const [savingPrefs, setSavingPrefs] = useState(false)
   const [prefsSaved, setPrefsSaved] = useState(false)
@@ -435,7 +448,24 @@ export default function ConfiguracoesPage() {
               </div>
 
               <div className="space-y-4">
-                {pushPermission === 'unsupported' && (
+                {isIosNotStandalone && (
+                  <div className="flex items-start gap-2.5 rounded-xl border-2 border-amber-500/40 bg-amber-500/15 px-3.5 py-3 text-xs text-amber-200">
+                    <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-semibold text-amber-100">
+                        Você está pelo navegador, não pelo app instalado
+                      </p>
+                      <p className="mt-1">
+                        No iPhone/iPad, notificações só chegam de verdade quando o site é aberto
+                        pelo ícone da <strong>Tela de Início</strong> — pela aba comum do Safari, a
+                        notificação pode parecer ativada e simplesmente nunca chegar, sem nenhum
+                        aviso de erro. Toque em Compartilhar → &quot;Adicionar à Tela de Início&quot;,
+                        depois abra o site por esse ícone antes de ativar as notificações.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {pushPermission === 'unsupported' && !isIosNotStandalone && (
                   <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 px-3 py-2.5 text-xs text-amber-300">
                     <AlertCircle size={12} />
                     No iPhone/iPad, notificações só funcionam depois de adicionar este site à Tela de Início (menu do navegador → &quot;Adicionar à Tela de Início&quot;) e abrir por esse ícone, em vez da aba do navegador. Depois de abrir por lá, volte nesta tela para ativar.

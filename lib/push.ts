@@ -206,6 +206,21 @@ export async function notifySale(params: {
       }),
     )
     console.log(`[PUSH] ${params.hotmartId}/${params.categoria}: ${resultados.filter(r => r === 'ok').length}/${resultados.length} enviados (${resultados.join(', ')})`)
+
+    // Se TODAS as tentativas falharam de verdade (rede, chave errada, timeout — não
+    // 404/410 de inscrição morta), desfaz o registro de dedup que inserimos antes de
+    // tentar enviar. Sem isso, uma falha real de envio ficava marcada como "notificado"
+    // pra sempre, e um webhook duplicado da Hotmart pra mesma venda (que às vezes chega
+    // de propósito, ex. PURCHASE_APPROVED + PURCHASE_COMPLETE) nunca teria uma segunda
+    // chance de tentar de novo.
+    if (resultados.length > 0 && resultados.every(r => r === 'erro')) {
+      await supabase
+        .from('notified_sale_events')
+        .delete()
+        .eq('hotmart_id', params.hotmartId)
+        .eq('projeto_id', params.projetoId)
+        .eq('categoria', params.categoria)
+    }
   } catch (err) {
     console.error('[PUSH] notifySale falhou:', err)
   }
