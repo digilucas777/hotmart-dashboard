@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, Pause, Play, Radio, ExternalLink, ShieldCheck, Pencil, RefreshCw, AlertTriangle } from 'lucide-react'
+import { Plus, Trash2, Pause, Play, Radio, ExternalLink, ShieldCheck, Pencil, RefreshCw, AlertTriangle, ChevronDown, ChevronRight, GripVertical } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -24,6 +24,7 @@ type MonitoredSite = {
   user_id: string
   nome: string
   dominio: string | null
+  ordem: number
   pages: MonitoredPage[]
 }
 
@@ -51,6 +52,25 @@ function tempoRelativo(iso: string | null): string {
   const h = Math.floor(min / 60)
   if (h < 24) return `há ${h}h`
   return `há ${Math.floor(h / 24)}d`
+}
+
+// Resumo compacto pra quando a lista de páginas do site está oculta.
+function summarizePages(pages: MonitoredPage[]): { emoji: string; label: string; count: number }[] {
+  const counts: Record<string, number> = {}
+  for (const page of pages) {
+    const chave = !page.ativo ? 'pausado' : !page.ultima_checagem_em ? 'nunca' : (page.ultimo_status ?? 'nunca')
+    counts[chave] = (counts[chave] ?? 0) + 1
+  }
+  const LABELS: Record<string, { emoji: string; label: string }> = {
+    ...STATUS_INFO,
+    pausado: { emoji: '⏸️', label: 'pausada' },
+    nunca: { emoji: '⚪', label: 'nunca checada' },
+  }
+  return Object.entries(counts).map(([chave, count]) => ({
+    emoji: LABELS[chave]?.emoji ?? '⚪',
+    label: LABELS[chave]?.label ?? chave,
+    count,
+  }))
 }
 
 // Aceita URLs completas ou caminhos soltos (separados por vírgula ou linha) que
@@ -99,13 +119,43 @@ export default function SitesPage() {
   const [checkingSiteId, setCheckingSiteId] = useState<string | null>(null)
   const [checkingAll, setCheckingAll] = useState(false)
 
+  const [expandedSites, setExpandedSites] = useState<Set<string>>(new Set())
+  function toggleExpanded(siteId: string) {
+    setExpandedSites(prev => {
+      const next = new Set(prev)
+      if (next.has(siteId)) next.delete(siteId)
+      else next.add(siteId)
+      return next
+    })
+  }
+
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+
+  function handleDrop(dropIndex: number) {
+    if (dragIndex === null || dragIndex === dropIndex) {
+      setDragIndex(null)
+      setDragOverIndex(null)
+      return
+    }
+    const reordered = [...sites]
+    const [moved] = reordered.splice(dragIndex, 1)
+    reordered.splice(dropIndex, 0, moved)
+    setSites(reordered)
+    setDragIndex(null)
+    setDragOverIndex(null)
+    void Promise.all(
+      reordered.map((s, i) => supabase.from('monitored_sites').update({ ordem: i }).eq('id', s.id)),
+    )
+  }
+
   const fetchSites = useCallback(async (uid: string) => {
     setLoading(true)
     const { data } = await supabase
       .from('monitored_sites')
       .select('*, monitored_pages(*)')
       .eq('user_id', uid)
-      .order('created_at', { ascending: false })
+      .order('ordem', { ascending: true })
     const mapped = ((data ?? []) as (MonitoredSite & { monitored_pages: MonitoredPage[] })[]).map(s => ({
       ...s,
       pages: s.monitored_pages ?? [],
@@ -147,10 +197,12 @@ export default function SitesPage() {
   async function handleCreateSite() {
     if (!siteName.trim() || !userId) return
     setCreating(true)
+    const proximaOrdem = sites.length > 0 ? Math.max(...sites.map(s => s.ordem)) + 1 : 0
     await supabase.from('monitored_sites').insert({
       user_id: userId,
       nome: siteName.trim(),
       dominio: siteDomain.trim() || null,
+      ordem: proximaOrdem,
     })
     setCreating(false)
     setShowCreateSite(false)
@@ -282,12 +334,47 @@ export default function SitesPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {sites.map(site => (
-              <div key={site.id} className="rounded-xl border p-4" style={{ background: '#191929', borderColor: 'rgba(255,255,255,0.07)' }}>
+            {sites.map((site, index) => (
+              <div
+                key={site.id}
+                onDragOver={e => { e.preventDefault(); setDragOverIndex(index) }}
+                onDragLeave={() => setDragOverIndex(prev => (prev === index ? null : prev))}
+                onDrop={e => { e.preventDefault(); handleDrop(index) }}
+                className="rounded-xl border p-4 transition-colors"
+                style={{
+                  background: '#191929',
+                  borderColor: dragOverIndex === index && dragIndex !== null && dragIndex !== index
+                    ? 'rgba(99,102,241,0.6)'
+                    : 'rgba(255,255,255,0.07)',
+                  opacity: dragIndex === index ? 0.4 : 1,
+                }}
+              >
                 <div className="mb-3 flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-100">{site.nome}</h3>
-                    {site.dominio && <p className="text-xs text-slate-500">{site.dominio}</p>}
+                  <div className="flex min-w-0 items-center gap-1">
+                    <span
+                      draggable
+                      onDragStart={() => setDragIndex(index)}
+                      onDragEnd={() => { setDragIndex(null); setDragOverIndex(null) }}
+                      className="cursor-grab p-1 text-slate-600 hover:text-slate-400 active:cursor-grabbing"
+                      title="Arrastar pra reordenar"
+                    >
+                      <GripVertical size={15} />
+                    </span>
+                    <button
+                      onClick={() => toggleExpanded(site.id)}
+                      className="flex min-w-0 items-center gap-2 text-left"
+                      disabled={site.pages.length === 0}
+                    >
+                    {site.pages.length > 0 && (
+                      expandedSites.has(site.id)
+                        ? <ChevronDown size={15} className="shrink-0 text-slate-500" />
+                        : <ChevronRight size={15} className="shrink-0 text-slate-500" />
+                    )}
+                    <span className="min-w-0">
+                      <h3 className="truncate text-sm font-bold text-slate-100">{site.nome}</h3>
+                      {site.dominio && <p className="truncate text-xs text-slate-500">{site.dominio}</p>}
+                    </span>
+                    </button>
                   </div>
                   <div className="flex items-center gap-1">
                     <button
@@ -324,6 +411,16 @@ export default function SitesPage() {
 
                 {site.pages.length === 0 ? (
                   <p className="text-xs text-slate-600">Nenhuma página cadastrada nesse site ainda.</p>
+                ) : !expandedSites.has(site.id) ? (
+                  <button
+                    onClick={() => toggleExpanded(site.id)}
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 hover:text-slate-300"
+                  >
+                    <span>{site.pages.length} página{site.pages.length > 1 ? 's' : ''}</span>
+                    {summarizePages(site.pages).map(s => (
+                      <span key={s.label}>{s.emoji} {s.count} {s.label}</span>
+                    ))}
+                  </button>
                 ) : (
                   <div className="space-y-1.5">
                     {site.pages.map(page => {
