@@ -79,7 +79,7 @@ export async function POST(request: Request) {
   const admin = makeAdminClient()
   if (!admin) return NextResponse.json({ error: 'service key not configured' }, { status: 500 })
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://hotmart-dashboard-woad.vercel.app'
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://dashspeed.site'
   const { data: inviteData, error } = await admin.auth.admin.inviteUserByEmail(email.trim(), {
     redirectTo: `${siteUrl}/auth/confirm`,
   })
