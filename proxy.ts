@@ -1,7 +1,21 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+const OLD_HOST = 'hotmart-dashboard-woad.vercel.app'
+const NEW_ORIGIN = 'https://www.dashspeed.site'
+
 export async function proxy(request: NextRequest) {
+  // Domínio antigo da Vercel foi substituído pelo domínio próprio — qualquer
+  // navegação (usuário logado ou não) que chegar pelo host antigo é mandada
+  // pro domínio novo. Não afeta /api/* (fora do matcher abaixo), então
+  // integrações (cron do GitHub Actions, webhook da Hotmart) continuam
+  // batendo direto na URL antiga sem redirecionamento.
+  const host = request.headers.get('host') ?? ''
+  if (host === OLD_HOST) {
+    const url = new URL(`${request.nextUrl.pathname}${request.nextUrl.search}`, NEW_ORIGIN)
+    return NextResponse.redirect(url, 308)
+  }
+
   // O Next.js carrega em segundo plano ("prefetch") os links do menu assim que
   // a pagina abre — varias requisicoes de prefetch chegam ao mesmo tempo e, se
   // cada uma tentasse renovar a sessao do Supabase, competiriam pelo mesmo
