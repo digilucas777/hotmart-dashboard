@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Bell,
-  Clock3,
   Copy,
   Edit3,
   ExternalLink,
@@ -18,10 +17,10 @@ import {
   LogOut,
   Plug,
   Plus,
+  Radio,
   Settings,
   ShieldCheck,
   ShoppingCart,
-  Sparkles,
   Trash2,
   UserRound,
   X,
@@ -75,6 +74,7 @@ export function UserAppShell() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [dashboards, setDashboards] = useState<Projeto[]>([])
   const [widgetsCount, setWidgetsCount] = useState(0)
+  const [siteStats, setSiteStats] = useState<{ total: number; ok: number; problema: number } | null>(null)
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
@@ -122,6 +122,14 @@ export function UserAppShell() {
     setWidgetsCount(count ?? 0)
   }
 
+  async function loadSiteStats() {
+    const { data } = await supabase.from('monitored_pages').select('ativo, ultimo_status')
+    const pages = (data ?? []) as { ativo: boolean; ultimo_status: string | null }[]
+    const ativas = pages.filter(p => p.ativo)
+    const problema = ativas.filter(p => p.ultimo_status && p.ultimo_status !== 'ok').length
+    setSiteStats({ total: ativas.length, ok: ativas.length - problema, problema })
+  }
+
   useEffect(() => {
     let active = true
 
@@ -143,6 +151,7 @@ export function UserAppShell() {
     Promise.resolve().then(loadDashboards).finally(() => {
       if (active) setLoading(false)
     })
+    void loadSiteStats()
 
     return () => {
       active = false
@@ -380,9 +389,6 @@ export function UserAppShell() {
     [dashboards.length, widgetsCount],
   )
 
-  const recentDashboards = dashboards.slice(0, 3)
-  const lastEdited = dashboards[0]
-
   return (
     <div className="min-h-screen bg-[#07080d] text-white">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-white/10 bg-[#0b0d14]/90 p-5 backdrop-blur-2xl lg:block">
@@ -460,7 +466,7 @@ export function UserAppShell() {
           <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.04] p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-lg font-black">Meus Dashboards</h2>
+                <h2 className="text-lg font-black">Todos os dashboards</h2>
                 <p className="mt-1 text-sm text-slate-400">Crie, abra e edite os dashboards que já usam a estrutura atual.</p>
               </div>
               <button
@@ -543,30 +549,40 @@ export function UserAppShell() {
                       {dashboard.descricao || (index === 0 ? 'Dashboard principal da operação' : 'Dashboard pronto para configurar')}
                     </p>
 
-                    <div className="mt-4 grid gap-1.5 grid-cols-2">
-                      <Link href={`/dashboard/${dashboard.id}`} className="col-span-2 inline-flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-400 to-violet-500 px-2 py-1 text-xs font-black text-white">
+                    <div className="mt-4 space-y-2">
+                      <Link
+                        href={`/dashboard/${dashboard.id}`}
+                        className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-400 to-violet-500 text-sm font-black text-white transition-transform hover:-translate-y-0.5"
+                      >
                         Abrir
-                        <ExternalLink size={11} />
+                        <ExternalLink size={13} />
                       </Link>
-                      <button onClick={() => openEditDashboard(dashboard)} className="inline-flex items-center justify-center gap-1 rounded-xl border border-white/10 px-2 py-1 text-xs font-bold text-slate-300 hover:border-cyan-300/40 hover:text-white">
-                        <Edit3 size={11} />
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => duplicateDashboard(dashboard)}
-                        disabled={duplicatingId === dashboard.id}
-                        className="inline-flex items-center justify-center gap-1 rounded-xl border border-white/10 px-2 py-1 text-xs font-bold text-slate-300 hover:border-violet-300/40 hover:text-white disabled:opacity-60"
-                      >
-                        {duplicatingId === dashboard.id ? <Loader2 size={11} className="animate-spin" /> : <Copy size={11} />}
-                        Duplicar
-                      </button>
-                      <button
-                        onClick={() => setDeleteTarget(dashboard)}
-                        className="col-span-2 inline-flex items-center justify-center gap-1 rounded-xl border border-white/10 px-2 py-1 text-xs font-bold text-slate-400 hover:border-red-300/35 hover:bg-red-500/10 hover:text-red-200"
-                      >
-                        <Trash2 size={11} />
-                        Excluir
-                      </button>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          onClick={() => openEditDashboard(dashboard)}
+                          title="Editar"
+                          className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/10 text-xs font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white"
+                        >
+                          <Edit3 size={13} />
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => duplicateDashboard(dashboard)}
+                          disabled={duplicatingId === dashboard.id}
+                          title="Duplicar"
+                          className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/10 text-xs font-bold text-slate-300 transition-colors hover:border-violet-300/40 hover:text-white disabled:opacity-60"
+                        >
+                          {duplicatingId === dashboard.id ? <Loader2 size={13} className="animate-spin" /> : <Copy size={13} />}
+                          Duplicar
+                        </button>
+                        <button
+                          onClick={() => setDeleteTarget(dashboard)}
+                          title="Excluir"
+                          className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/10 text-xs font-bold text-slate-400 transition-colors hover:border-red-300/35 hover:bg-red-500/10 hover:text-red-200"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -574,88 +590,65 @@ export function UserAppShell() {
             )}
           </section>
 
-          <section className="mt-8 grid gap-4 xl:grid-cols-3">
+          <section className="mt-8 grid gap-4 lg:grid-cols-2">
             <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-black/20">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-400/10 text-cyan-200">
-                  <Clock3 size={20} />
+                <div
+                  className={`flex h-11 w-11 items-center justify-center rounded-2xl ${
+                    siteStats && siteStats.problema > 0 ? 'bg-red-400/10 text-red-300' : 'bg-emerald-400/10 text-emerald-200'
+                  }`}
+                >
+                  <Radio size={20} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-black">Atividade recente</h2>
-                  <p className="text-sm text-slate-500">Resumo rápido da conta</p>
+                  <h2 className="text-lg font-black">Sites monitorados</h2>
+                  <p className="text-sm text-slate-500">Checagem automática de hora em hora</p>
                 </div>
               </div>
-              <div className="mt-5 space-y-3">
-                {(recentDashboards.length ? recentDashboards : [{ id: 'empty', nome: 'Nenhuma atividade ainda', descricao: 'Crie ou abra um dashboard para começar.' } as Projeto]).map((dashboard, index) => (
-                  <div key={dashboard.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-bold">{dashboard.nome}</p>
-                      <p className="text-xs text-slate-500">{index === 0 && lastEdited ? 'Último dashboard editado' : 'Dashboard recente'}</p>
+
+              {!siteStats || siteStats.total === 0 ? (
+                <Link
+                  href="/sites"
+                  className="mt-5 flex flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-white/15 px-4 py-6 text-center transition-colors hover:border-cyan-300/30"
+                >
+                  <p className="text-sm font-semibold text-slate-300">Nenhum site cadastrado ainda</p>
+                  <p className="text-xs text-slate-500">Clique para monitorar as páginas dos seus anúncios</p>
+                </Link>
+              ) : (
+                <>
+                  <div className="mt-5 grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                      <p className="text-2xl font-black text-emerald-300">{siteStats.ok}</p>
+                      <p className="text-xs text-slate-500">No ar</p>
                     </div>
-                    <span className="rounded-full bg-cyan-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-cyan-200">
-                      {index === 0 ? 'Novo' : 'Ativo'}
-                    </span>
+                    <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                      <p className={`text-2xl font-black ${siteStats.problema > 0 ? 'text-red-300' : 'text-slate-600'}`}>{siteStats.problema}</p>
+                      <p className="text-xs text-slate-500">Com problema</p>
+                    </div>
                   </div>
-                ))}
-              </div>
+                  <Link
+                    href="/sites"
+                    className="mt-3 flex h-10 items-center justify-center gap-1.5 rounded-2xl border border-white/10 text-xs font-bold text-slate-300 transition-colors hover:border-cyan-300/35 hover:text-white"
+                  >
+                    Ver detalhes
+                    <ExternalLink size={12} />
+                  </Link>
+                </>
+              )}
             </div>
 
-            <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-black/20">
+            <Link href="/integracoes" className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 transition-colors hover:border-cyan-300/30">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-400/10 text-violet-200">
-                  <Sparkles size={20} />
+                  <Plug size={20} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-black">Dashboards em foco</h2>
-                  <p className="text-sm text-slate-500">Mais acessados e recentes</p>
+                  <h2 className="text-lg font-black">Conectar integrações</h2>
+                  <p className="text-sm text-slate-500">WhatsApp e próximas fontes de dados</p>
                 </div>
               </div>
-              <div className="mt-5 space-y-3">
-                {recentDashboards.length ? recentDashboards.map((dashboard, index) => (
-                  <Link key={dashboard.id} href={`/dashboard/${dashboard.id}`} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 transition-colors hover:border-cyan-300/35">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400/30 to-violet-500/30 text-sm font-black">
-                      {index + 1}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-bold">{dashboard.nome}</p>
-                      <p className="text-xs text-slate-500">{dashboard.descricao || 'Pronto para abrir'}</p>
-                    </div>
-                  </Link>
-                )) : (
-                  <p className="rounded-2xl border border-dashed border-white/10 p-4 text-sm text-slate-500">Os dashboards mais acessados aparecem aqui.</p>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-black/20">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-200">
-                  <ShieldCheck size={20} />
-                </div>
-                <div>
-                  <h2 className="text-lg font-black">Status integrações</h2>
-                  <p className="text-sm text-slate-500">Meta Ads em preparação</p>
-                </div>
-              </div>
-              <div className="mt-5 grid gap-3">
-                {['Meta Ads', 'Business Manager', 'Contas de anúncios'].map((item, index) => (
-                  <Link key={item} href="/integracoes" className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3 transition-colors hover:border-cyan-300/35">
-                    <span className="text-sm font-bold">{item}</span>
-                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${index === 0 ? 'bg-cyan-400/10 text-cyan-200' : 'bg-white/5 text-slate-400'}`}>
-                      {index === 0 ? 'Pronto' : 'Em breve'}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section className="mt-8 grid gap-4 lg:grid-cols-2">
-            <Link href="/integracoes" className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 transition-colors hover:border-cyan-300/30">
-              <h2 className="text-lg font-black">Conectar integrações</h2>
-              <p className="mt-2 text-sm text-slate-400">Abra a área de integrações para conectar WhatsApp e preparar as próximas fontes de dados.</p>
+              <p className="mt-4 text-sm text-slate-400">Abra a área de integrações para conectar o WhatsApp e preparar as próximas fontes de dados.</p>
             </Link>
-            {/* billing preparado card hidden */}
           </section>
         </main>
       </div>
