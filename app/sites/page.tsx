@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, Pause, Play, Radio, ExternalLink, ShieldCheck } from 'lucide-react'
+import { Plus, Trash2, Pause, Play, Radio, ExternalLink, ShieldCheck, Pencil, RefreshCw, AlertTriangle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -26,6 +26,8 @@ type MonitoredSite = {
   dominio: string | null
   pages: MonitoredPage[]
 }
+
+type ConfirmDelete = { kind: 'site' | 'page'; id: string; label: string }
 
 const STATUS_INFO: Record<string, { emoji: string; label: string; cor: string }> = {
   ok: { emoji: '🟢', label: 'No ar', cor: 'text-green-400' },
@@ -51,6 +53,23 @@ function tempoRelativo(iso: string | null): string {
   return `há ${Math.floor(h / 24)}d`
 }
 
+// Aceita URLs completas ou caminhos soltos (separados por vírgula ou linha) que
+// são combinados com o domínio do site, ex: domínio "cursosjoy.site" + entrada
+// "pv-b, pv-white, pressel" vira 3 URLs: https://cursosjoy.site/pv-b, etc.
+function buildPageUrls(input: string, dominio: string | null): string[] {
+  const partes = input.split(/[,\n]/).map(s => s.trim()).filter(Boolean)
+  const base = (dominio ?? '').replace(/^https?:\/\//i, '').replace(/\/+$/, '')
+  const urls = partes
+    .map(parte => {
+      if (/^https?:\/\//i.test(parte)) return parte
+      if (!base) return null
+      const caminho = parte.replace(/^\/+/, '')
+      return caminho ? `https://${base}/${caminho}` : `https://${base}`
+    })
+    .filter((v): v is string => !!v)
+  return Array.from(new Set(urls))
+}
+
 export default function SitesPage() {
   const router = useRouter()
   const [userId, setUserId] = useState<string | null>(null)
@@ -68,6 +87,17 @@ export default function SitesPage() {
   const [addPageSiteId, setAddPageSiteId] = useState<string | null>(null)
   const [pageUrl, setPageUrl] = useState('')
   const [addingPage, setAddingPage] = useState(false)
+
+  const [editSite, setEditSite] = useState<MonitoredSite | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editDomain, setEditDomain] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+
+  const [confirmDelete, setConfirmDelete] = useState<ConfirmDelete | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  const [checkingSiteId, setCheckingSiteId] = useState<string | null>(null)
+  const [checkingAll, setCheckingAll] = useState(false)
 
   const fetchSites = useCallback(async (uid: string) => {
     setLoading(true)
@@ -131,23 +161,45 @@ export default function SitesPage() {
 
   async function handleAddPage() {
     if (!pageUrl.trim() || !addPageSiteId || !userId) return
+    const site = sites.find(s => s.id === addPageSiteId)
+    const urls = buildPageUrls(pageUrl, site?.dominio ?? null)
+    if (urls.length === 0) return
     setAddingPage(true)
-    await supabase.from('monitored_pages').insert({ site_id: addPageSiteId, url: pageUrl.trim() })
+    await supabase.from('monitored_pages').insert(urls.map(url => ({ site_id: addPageSiteId, url })))
     setAddingPage(false)
     setAddPageSiteId(null)
     setPageUrl('')
     void fetchSites(userId)
   }
 
-  async function handleDeleteSite(id: string) {
-    if (!userId) return
-    await supabase.from('monitored_sites').delete().eq('id', id)
+  function openEditSite(site: MonitoredSite) {
+    setEditSite(site)
+    setEditName(site.nome)
+    setEditDomain(site.dominio ?? '')
+  }
+
+  async function handleEditSite() {
+    if (!editSite || !editName.trim() || !userId) return
+    setSavingEdit(true)
+    await supabase
+      .from('monitored_sites')
+      .update({ nome: editName.trim(), dominio: editDomain.trim() || null })
+      .eq('id', editSite.id)
+    setSavingEdit(false)
+    setEditSite(null)
     void fetchSites(userId)
   }
 
-  async function handleDeletePage(id: string) {
-    if (!userId) return
-    await supabase.from('monitored_pages').delete().eq('id', id)
+  async function handleConfirmDelete() {
+    if (!confirmDelete || !userId) return
+    setDeleting(true)
+    if (confirmDelete.kind === 'site') {
+      await supabase.from('monitored_sites').delete().eq('id', confirmDelete.id)
+    } else {
+      await supabase.from('monitored_pages').delete().eq('id', confirmDelete.id)
+    }
+    setDeleting(false)
+    setConfirmDelete(null)
     void fetchSites(userId)
   }
 
@@ -155,6 +207,32 @@ export default function SitesPage() {
     if (!userId) return
     await supabase.from('monitored_pages').update({ ativo: !page.ativo }).eq('id', page.id)
     void fetchSites(userId)
+  }
+
+  async function handleCheckNow(siteId: string) {
+    if (!userId) return
+    setCheckingSiteId(siteId)
+    try {
+      await fetch('/api/sites/check-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ siteId }),
+      })
+    } finally {
+      setCheckingSiteId(null)
+      void fetchSites(userId)
+    }
+  }
+
+  async function handleCheckAll() {
+    if (!userId) return
+    setCheckingAll(true)
+    try {
+      await fetch('/api/sites/check-now', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    } finally {
+      setCheckingAll(false)
+      void fetchSites(userId)
+    }
   }
 
   return (
@@ -167,10 +245,18 @@ export default function SitesPage() {
             </div>
             <span className="text-sm font-bold text-slate-100">Sites monitorados</span>
           </div>
-          <Button onClick={() => setShowCreateSite(true)} size="sm">
-            <Plus size={14} />
-            Novo site
-          </Button>
+          <div className="flex items-center gap-2">
+            {sites.length > 0 && (
+              <Button onClick={handleCheckAll} size="sm" variant="outline" disabled={checkingAll}>
+                {checkingAll ? <Spinner size={14} /> : <RefreshCw size={14} />}
+                Checar tudo agora
+              </Button>
+            )}
+            <Button onClick={() => setShowCreateSite(true)} size="sm">
+              <Plus size={14} />
+              Novo site
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -205,14 +291,29 @@ export default function SitesPage() {
                   </div>
                   <div className="flex items-center gap-1">
                     <button
+                      onClick={() => handleCheckNow(site.id)}
+                      className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+                      title="Checar agora"
+                      disabled={checkingSiteId === site.id}
+                    >
+                      {checkingSiteId === site.id ? <Spinner size={14} /> : <RefreshCw size={14} />}
+                    </button>
+                    <button
+                      onClick={() => openEditSite(site)}
+                      className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+                      title="Editar site"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
                       onClick={() => setAddPageSiteId(site.id)}
                       className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
-                      title="Adicionar página"
+                      title="Adicionar página(s)"
                     >
                       <Plus size={14} />
                     </button>
                     <button
-                      onClick={() => handleDeleteSite(site.id)}
+                      onClick={() => setConfirmDelete({ kind: 'site', id: site.id, label: site.nome })}
                       className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-red-500/15 hover:text-red-400"
                       title="Excluir site"
                     >
@@ -254,7 +355,7 @@ export default function SitesPage() {
                             {page.ativo ? <Pause size={12} /> : <Play size={12} />}
                           </button>
                           <button
-                            onClick={() => handleDeletePage(page.id)}
+                            onClick={() => setConfirmDelete({ kind: 'page', id: page.id, label: page.url })}
                             className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-red-500/15 hover:text-red-400"
                             title="Excluir página"
                           >
@@ -332,6 +433,9 @@ export default function SitesPage() {
               className="w-full rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 outline-none ring-1 ring-white/10 focus:ring-indigo-500/60"
               style={{ background: '#111120' }}
             />
+            <p className="mt-1 text-[11px] text-slate-600">
+              Cadastrando o domínio, você pode adicionar várias páginas de uma vez só depois (ex: pv-b, pv-white, pressel).
+            </p>
           </div>
           <div className="flex gap-2 pt-1">
             <Button variant="ghost" className="flex-1" onClick={() => setShowCreateSite(false)}>Cancelar</Button>
@@ -343,26 +447,113 @@ export default function SitesPage() {
         </div>
       </Modal>
 
-      <Modal open={!!addPageSiteId} onClose={() => setAddPageSiteId(null)} title="Adicionar página">
+      <Modal open={!!editSite} onClose={() => setEditSite(null)} title="Editar site">
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-500">URL completa *</label>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">Nome *</label>
             <input
               autoFocus
-              type="url"
-              placeholder="https://cursosjoy.site/qz-wl-vs-nv/"
-              value={pageUrl}
-              onChange={e => setPageUrl(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleAddPage()}
+              type="text"
+              value={editName}
+              onChange={e => setEditName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleEditSite()}
+              className="w-full rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 outline-none ring-1 ring-white/10 focus:ring-indigo-500/60"
+              style={{ background: '#111120' }}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">Domínio (opcional)</label>
+            <input
+              type="text"
+              placeholder="cursosjoy.site"
+              value={editDomain}
+              onChange={e => setEditDomain(e.target.value)}
               className="w-full rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 outline-none ring-1 ring-white/10 focus:ring-indigo-500/60"
               style={{ background: '#111120' }}
             />
           </div>
           <div className="flex gap-2 pt-1">
+            <Button variant="ghost" className="flex-1" onClick={() => setEditSite(null)}>Cancelar</Button>
+            <Button className="flex-1" onClick={handleEditSite} disabled={!editName.trim() || savingEdit}>
+              {savingEdit && <Spinner size={14} />}
+              Salvar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={!!addPageSiteId} onClose={() => setAddPageSiteId(null)} title="Adicionar página(s)">
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">
+              URL completa, ou vários caminhos separados por vírgula/linha *
+            </label>
+            <textarea
+              autoFocus
+              rows={3}
+              placeholder={'pv-b, pv-white, pressel\nou\nhttps://cursosjoy.site/qz-wl-vs-nv/'}
+              value={pageUrl}
+              onChange={e => setPageUrl(e.target.value)}
+              className="w-full resize-none rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 outline-none ring-1 ring-white/10 focus:ring-indigo-500/60"
+              style={{ background: '#111120' }}
+            />
+            {(() => {
+              const site = sites.find(s => s.id === addPageSiteId)
+              if (!site?.dominio) {
+                return (
+                  <p className="mt-1 text-[11px] text-amber-500">
+                    Esse site não tem domínio cadastrado — só aceita URLs completas (com https://). Edite o site pra adicionar um domínio e poder colar só os caminhos.
+                  </p>
+                )
+              }
+              const preview = buildPageUrls(pageUrl, site.dominio)
+              if (preview.length === 0) return null
+              return (
+                <div className="mt-1.5 space-y-0.5">
+                  {preview.map(u => (
+                    <p key={u} className="truncate text-[11px] text-slate-500">→ {u}</p>
+                  ))}
+                </div>
+              )
+            })()}
+          </div>
+          <div className="flex gap-2 pt-1">
             <Button variant="ghost" className="flex-1" onClick={() => setAddPageSiteId(null)}>Cancelar</Button>
-            <Button className="flex-1" onClick={handleAddPage} disabled={!pageUrl.trim() || addingPage}>
+            <Button
+              className="flex-1"
+              onClick={handleAddPage}
+              disabled={!pageUrl.trim() || addingPage || buildPageUrls(pageUrl, sites.find(s => s.id === addPageSiteId)?.dominio ?? null).length === 0}
+            >
               {addingPage && <Spinner size={14} />}
               Adicionar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={!!confirmDelete} onClose={() => setConfirmDelete(null)} title="Confirmar exclusão">
+        <div className="space-y-4">
+          <div className="flex gap-3 rounded-xl border border-red-500/20 bg-red-500/10 p-3">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-400" />
+            <p className="text-sm text-slate-200">
+              {confirmDelete?.kind === 'site' ? (
+                <>
+                  Tem certeza que quer excluir o site <span className="font-semibold">&quot;{confirmDelete.label}&quot;</span>?
+                  Todas as páginas cadastradas nele também serão excluídas e a checagem automática vai parar imediatamente. Essa ação não pode ser desfeita.
+                </>
+              ) : (
+                <>
+                  Tem certeza que quer excluir a página <span className="break-all font-semibold">{confirmDelete?.label}</span>?
+                  A checagem automática dela vai parar imediatamente. Essa ação não pode ser desfeita.
+                </>
+              )}
+            </p>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button variant="ghost" className="flex-1" onClick={() => setConfirmDelete(null)}>Cancelar</Button>
+            <Button variant="danger" className="flex-1" onClick={handleConfirmDelete} disabled={deleting}>
+              {deleting && <Spinner size={14} />}
+              Excluir
             </Button>
           </div>
         </div>
