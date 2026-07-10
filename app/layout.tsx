@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL('https://www.dashspeed.site'),
   title: "Dash Speed",
-  description: "Dashboard de vendas Hotmart com análise em tempo real",
+  description: "Dashboard de vendas com análise em tempo real",
   manifest: '/manifest.json',
   icons: {
     icon: '/favicon.svg',
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'Dash Speed',
-    description: 'Dashboard de vendas Hotmart com análise em tempo real',
+    description: 'Dashboard de vendas com análise em tempo real',
     siteName: 'Dash Speed',
     locale: 'pt_BR',
     type: 'website',
@@ -39,7 +39,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Dash Speed',
-    description: 'Dashboard de vendas Hotmart com análise em tempo real',
+    description: 'Dashboard de vendas com análise em tempo real',
   },
 };
 

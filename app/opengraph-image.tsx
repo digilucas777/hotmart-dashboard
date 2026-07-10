@@ -1,6 +1,6 @@
 import { ImageResponse } from 'next/og'
 
-export const alt = 'Dash Speed — Dashboard de vendas Hotmart com análise em tempo real'
+export const alt = 'Dash Speed — Dashboard de vendas com análise em tempo real'
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
@@ -36,7 +36,7 @@ export default async function Image() {
           Dash Speed
         </div>
         <div style={{ display: 'flex', fontSize: 32, color: '#94a3b8' }}>
-          Dashboard de vendas Hotmart com análise em tempo real
+          Dashboard de vendas com análise em tempo real
         </div>
       </div>
     ),
