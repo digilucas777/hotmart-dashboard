@@ -1925,18 +1925,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 Inserir custo
               </Button>
             )}
-            {!editMode && canDeleteDashboard && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowDeleteDashboard(true)}
-                title="Excluir este dashboard"
-                className="shrink-0 border-red-400/30 bg-red-500/10 text-red-300"
-              >
-                <Trash2 size={13} />
-                Excluir dashboard
-              </Button>
-            )}
           </div>
         </div>
         {widgetError && (
@@ -2080,6 +2068,25 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           </div>
         )}
       </main>
+
+      {/* Zona de risco: de propósito longe do resto da toolbar (não deve ficar ao lado
+          de ações rotineiras como "Inserir custo") — só o dono do dashboard vê isso. */}
+      {!editMode && canDeleteDashboard && (
+        <div className="mx-auto mb-10 mt-16 max-w-[1400px] px-6">
+          <div className="rounded-xl border border-red-500/20 px-4 py-3">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-red-400/70">
+              Zona de risco
+            </p>
+            <button
+              onClick={() => setShowDeleteDashboard(true)}
+              className="flex items-center gap-1.5 text-xs font-medium text-red-400/80 transition-colors hover:text-red-300"
+            >
+              <Trash2 size={12} />
+              Excluir este dashboard
+            </button>
+          </div>
+        </div>
+      )}
 
       <AddWidgetModal
         open={showAddWidget}
