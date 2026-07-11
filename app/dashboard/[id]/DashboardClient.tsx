@@ -464,6 +464,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [deletingCustoId, setDeletingCustoId] = useState<string | null>(null)
   const [custoParaExcluir, setCustoParaExcluir] = useState<CustoManual | null>(null)
   const [custoSalvoOk, setCustoSalvoOk] = useState(false)
+  const [custoActionError, setCustoActionError] = useState<string | null>(null)
 
   const [origensDisponiveis, setOrigensDisponiveis] = useState<string[]>([])
   const [origensFilter, setOrigensFilter] = useState<string[]>([])
@@ -1405,25 +1406,37 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     const valor = parseCurrencyInput(custoForm.valor)
     if (!custoForm.data || isNaN(valor) || valor <= 0) return
     setSavingCusto(true)
-    await supabase.from('custos_manuais').insert({
+    setCustoActionError(null)
+    const { error } = await supabase.from('custos_manuais').insert({
       projeto_id: projectId,
       data: custoForm.data,
       valor,
       moeda: custoForm.moeda,
       descricao: custoForm.descricao.trim() || null,
     })
+    setSavingCusto(false)
+    if (error) {
+      setCustoActionError('Não foi possível salvar o custo. Você pode não ter permissão para isso.')
+      return
+    }
     setCustoForm({ valor: '', moeda: 'USD', data: '', descricao: '' })
     await fetchCustosManuals()
-    setSavingCusto(false)
     setCustoSalvoOk(true)
     setTimeout(() => setCustoSalvoOk(false), 3000)
   }
 
   async function deleteCusto(id: string) {
     setDeletingCustoId(id)
-    await supabase.from('custos_manuais').delete().eq('id', id)
-    await fetchCustosManuals()
+    setCustoActionError(null)
+    // RLS bloqueia silenciosamente sem gerar `error` em deletes sem permissão —
+    // por isso é preciso conferir `count` pra saber se alguma linha foi mesmo apagada.
+    const { error, count } = await supabase.from('custos_manuais').delete({ count: 'exact' }).eq('id', id)
     setDeletingCustoId(null)
+    if (error || !count) {
+      setCustoActionError('Não foi possível excluir o custo. Você pode não ter permissão para isso.')
+      return
+    }
+    await fetchCustosManuals()
     setCustoParaExcluir(null)
     setSuccessToast('Custo excluído')
     setTimeout(() => setSuccessToast(null), 3000)
@@ -2184,8 +2197,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               <span>Custo adicionado</span>
             </div>
           )}
+          {custoActionError && (
+            <div className="flex items-center gap-2 rounded-lg bg-red-500/15 px-3 py-2 text-sm font-medium text-red-300">
+              <span>⚠</span>
+              <span>{custoActionError}</span>
+            </div>
+          )}
           <div className="flex gap-2 pt-1">
-            <Button variant="ghost" className="flex-1" onClick={() => { setShowCustoModal(false); setCustoSalvoOk(false) }}>
+            <Button variant="ghost" className="flex-1" onClick={() => { setShowCustoModal(false); setCustoSalvoOk(false); setCustoActionError(null) }}>
               Cancelar
             </Button>
             <Button
@@ -2222,7 +2241,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                         <td className="py-1.5 pr-2 text-slate-400">{c.descricao ?? '—'}</td>
                         <td className="py-1.5 text-right">
                           <button
-                            onClick={() => setCustoParaExcluir(c)}
+                            onClick={() => { setCustoActionError(null); setCustoParaExcluir(c) }}
                             disabled={deletingCustoId === c.id}
                             className="text-slate-600 hover:text-red-400 disabled:opacity-40 transition-colors"
                           >
@@ -2241,7 +2260,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
       <Modal
         open={!!custoParaExcluir}
-        onClose={() => setCustoParaExcluir(null)}
+        onClose={() => { setCustoParaExcluir(null); setCustoActionError(null) }}
         title="Excluir custo"
         maxWidth="max-w-sm"
       >
@@ -2257,8 +2276,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               </>
             )}
           </p>
+          {custoActionError && (
+            <div className="flex items-center gap-2 rounded-lg bg-red-500/15 px-3 py-2 text-sm font-medium text-red-300">
+              <span>⚠</span>
+              <span>{custoActionError}</span>
+            </div>
+          )}
           <div className="flex gap-2 pt-1">
-            <Button variant="ghost" className="flex-1" onClick={() => setCustoParaExcluir(null)}>
+            <Button variant="ghost" className="flex-1" onClick={() => { setCustoParaExcluir(null); setCustoActionError(null) }}>
               Cancelar
             </Button>
             <Button
