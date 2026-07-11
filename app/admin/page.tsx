@@ -69,7 +69,7 @@ const PERM_KEYS: { key: keyof Omit<PermRow, 'is_admin_dashboard' | 'dados_visive
   { key: 'pode_ver_produtos_ofertas', label: 'Ver produtos e ofertas' },
   { key: 'pode_excluir_dashboard', label: 'Excluir dashboard' },
   { key: 'pode_ver_vendas', label: 'Ver aba Vendas' },
-  { key: 'pode_adicionar_custo_manual', label: 'Adicionar custo manual' },
+  { key: 'pode_adicionar_custo_manual', label: 'Inserir/excluir custo manual' },
   { key: 'pode_ver_conexao_whatsapp', label: 'Ver conexão WhatsApp' },
 ]
 
