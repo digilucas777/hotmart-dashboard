@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Bell,
@@ -74,7 +74,6 @@ export function UserAppShell() {
   const [userId, setUserId] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [dashboards, setDashboards] = useState<Projeto[]>([])
-  const [widgetsCount, setWidgetsCount] = useState(0)
   const [siteStats, setSiteStats] = useState<{ total: number; ok: number; problema: number } | null>(null)
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -107,20 +106,7 @@ export function UserAppShell() {
       return
     }
 
-    const projects = (data ?? []) as Projeto[]
-    setDashboards(projects)
-
-    if (projects.length === 0) {
-      setWidgetsCount(0)
-      return
-    }
-
-    const { count } = await supabase
-      .from('dashboard_widgets')
-      .select('id', { count: 'exact', head: true })
-      .in('projeto_id', projects.map(project => project.id))
-
-    setWidgetsCount(count ?? 0)
+    setDashboards((data ?? []) as Projeto[])
   }
 
   async function loadSiteStats() {
@@ -381,15 +367,6 @@ export function UserAppShell() {
     await loadDashboards()
   }
 
-  const stats = useMemo(
-    () => [
-      ['Dashboards ativos', String(dashboards.length), dashboards.length === 1 ? '1 dashboard criado na sua conta' : 'Dashboards criados na sua conta'],
-      ['Widgets salvos', String(widgetsCount), 'Widgets configurados nos seus dashboards'],
-      ['Integrações', 'Em breve', 'Meta Ads, Google Ads, Hotmart, Kiwify e Shopify'],
-    ],
-    [dashboards.length, widgetsCount],
-  )
-
   return (
     <div className="min-h-screen bg-[#07080d] text-white">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-white/10 bg-[#0b0d14]/90 p-5 backdrop-blur-2xl lg:block">
@@ -448,16 +425,6 @@ export function UserAppShell() {
         </header>
 
         <main className="px-4 py-8 sm:px-6">
-          <section className="grid gap-4 lg:grid-cols-3">
-            {stats.map(([label, value, description]) => (
-              <div key={label} className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-black/20">
-                <p className="text-sm text-slate-500">{label}</p>
-                <p className="mt-3 text-3xl font-black">{loading && label !== 'Integrações' ? <Loader2 className="animate-spin" size={28} /> : value}</p>
-                <p className="mt-2 text-sm text-slate-400">{description}</p>
-              </div>
-            ))}
-          </section>
-
           {error && (
             <div className="mt-6 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
               {error}
