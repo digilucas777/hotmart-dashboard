@@ -424,14 +424,14 @@ export function UserAppShell() {
           </div>
         </header>
 
-        <main className="px-4 py-8 sm:px-6">
+        <main className="px-4 py-4 sm:px-6 sm:py-8">
           {error && (
             <div className="mt-6 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
               {error}
             </div>
           )}
 
-          <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.04] p-6">
+          <section className="mt-4 rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 sm:mt-8">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-lg font-black">Todos os dashboards</h2>
@@ -439,7 +439,7 @@ export function UserAppShell() {
               </div>
               <button
                 onClick={() => setShowCreate(true)}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-5 py-3 text-sm font-black text-white shadow-[0_0_30px_rgba(0,212,255,0.2)] transition-transform hover:-translate-y-0.5"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-300/30 bg-white/[0.04] px-5 py-3 text-sm font-black text-cyan-100 transition-colors hover:border-cyan-300/50 hover:bg-white/[0.08]"
               >
                 <Plus size={16} />
                 Novo dashboard
