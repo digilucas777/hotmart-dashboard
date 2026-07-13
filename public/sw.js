@@ -17,7 +17,7 @@ self.addEventListener('push', (event) => {
     body: payload.body || '',
     icon: payload.icon || '/icon-192.png',
     badge: payload.badge || '/icon-192.png',
-    data: { url: payload.url || '/vendas' },
+    data: { url: payload.url || '/dashboard' },
     tag: payload.tag,
   }
 
@@ -26,7 +26,7 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const targetUrl = event.notification.data?.url || '/vendas'
+  const targetUrl = event.notification.data?.url || '/dashboard'
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {

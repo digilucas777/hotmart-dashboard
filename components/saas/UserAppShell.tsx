@@ -33,6 +33,7 @@ const navItems = [
   { label: 'Dashboards', icon: LayoutGrid, href: '/dashboard' },
   { label: 'Vendas', icon: ShoppingCart, href: '/vendas' },
   { label: 'Relatórios', icon: FileText, href: '/relatorios' },
+  { label: 'Sites', icon: Radio, href: '/sites' },
   { label: 'Integrações', icon: Plug, href: '/integracoes' },
   { label: 'Configurações', icon: Settings, href: '/configuracoes' },
 ]

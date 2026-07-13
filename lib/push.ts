@@ -191,7 +191,7 @@ export async function notifySale(params: {
         try {
           await webpush.sendNotification(
             { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth_key } },
-            JSON.stringify({ title, body, icon: '/icon-192.png', url: '/vendas', tag: `venda-${params.hotmartId}` }),
+            JSON.stringify({ title, body, icon: '/icon-192.png', url: `/dashboard/${params.projetoId}`, tag: `venda-${params.hotmartId}` }),
           )
           return 'ok'
         } catch (err: unknown) {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, Pause, Play, Radio, ExternalLink, ShieldCheck, Pencil, RefreshCw, AlertTriangle, ChevronDown, ChevronRight, GripVertical } from 'lucide-react'
+import { Plus, Trash2, Pause, Play, Radio, ExternalLink, ShieldCheck, Pencil, RefreshCw, AlertTriangle, ChevronDown, ChevronRight, GripVertical, Copy, Check } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -118,6 +118,13 @@ export default function SitesPage() {
 
   const [checkingSiteId, setCheckingSiteId] = useState<string | null>(null)
   const [checkingAll, setCheckingAll] = useState(false)
+
+  const [copiedPageId, setCopiedPageId] = useState<string | null>(null)
+  async function handleCopyUrl(pageId: string, url: string) {
+    await navigator.clipboard.writeText(url)
+    setCopiedPageId(pageId)
+    setTimeout(() => setCopiedPageId(prev => (prev === pageId ? null : prev)), 2000)
+  }
 
   const [expandedSites, setExpandedSites] = useState<Set<string>>(new Set())
   function toggleExpanded(siteId: string) {
@@ -445,6 +452,13 @@ export default function SitesPage() {
                             </p>
                           </div>
                           <button
+                            onClick={() => handleCopyUrl(page.id, page.url)}
+                            className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+                            title={copiedPageId === page.id ? 'Copiado!' : 'Copiar URL'}
+                          >
+                            {copiedPageId === page.id ? <Check size={12} /> : <Copy size={12} />}
+                          </button>
+                          <button
                             onClick={() => handleTogglePage(page)}
                             className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
                             title={page.ativo ? 'Pausar checagem' : 'Retomar checagem'}
@@ -492,7 +506,14 @@ export default function SitesPage() {
                           <div key={page.id} className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs" style={{ background: 'rgba(255,255,255,0.03)' }}>
                             <span>{info.emoji}</span>
                             <span className="truncate text-slate-400">{page.url}</span>
-                            <span className={`ml-auto shrink-0 ${info.cor}`}>{info.label}</span>
+                            <span className={`shrink-0 ${info.cor}`}>{info.label}</span>
+                            <button
+                              onClick={() => handleCopyUrl(page.id, page.url)}
+                              className="ml-auto shrink-0 rounded-lg p-1 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+                              title={copiedPageId === page.id ? 'Copiado!' : 'Copiar URL'}
+                            >
+                              {copiedPageId === page.id ? <Check size={11} /> : <Copy size={11} />}
+                            </button>
                           </div>
                         )
                       })}
