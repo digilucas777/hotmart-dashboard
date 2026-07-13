@@ -73,6 +73,17 @@ function summarizePages(pages: MonitoredPage[]): { emoji: string; label: string;
   }))
 }
 
+// Mostra só o caminho da URL (sem o domínio) já que o domínio já aparece no
+// cartão do site — copiar/abrir continuam usando a URL completa (page.url).
+function pagePath(url: string): string {
+  try {
+    const u = new URL(url)
+    return `${u.pathname}${u.search}${u.hash}` || '/'
+  } catch {
+    return url
+  }
+}
+
 // Aceita URLs completas ou caminhos soltos (separados por vírgula ou linha) que
 // são combinados com o domínio do site, ex: domínio "cursosjoy.site" + entrada
 // "pv-b, pv-white, pressel" vira 3 URLs: https://cursosjoy.site/pv-b, etc.
@@ -440,8 +451,8 @@ export default function SitesPage() {
                         >
                           <span className="text-base">{page.ativo ? info.emoji : '⏸️'}</span>
                           <div className="min-w-0 flex-1">
-                            <a href={page.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 truncate text-xs font-medium text-slate-200 hover:text-indigo-300">
-                              {page.url}
+                            <a href={page.url} target="_blank" rel="noreferrer" title={page.url} className="flex items-center gap-1 truncate text-xs font-medium text-slate-200 hover:text-indigo-300">
+                              {pagePath(page.url)}
                               <ExternalLink size={10} className="shrink-0" />
                             </a>
                             <p className={`text-[11px] ${page.ativo ? info.cor : 'text-slate-600'}`}>
@@ -505,7 +516,7 @@ export default function SitesPage() {
                         return (
                           <div key={page.id} className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs" style={{ background: 'rgba(255,255,255,0.03)' }}>
                             <span>{info.emoji}</span>
-                            <span className="truncate text-slate-400">{page.url}</span>
+                            <span className="truncate text-slate-400" title={page.url}>{pagePath(page.url)}</span>
                             <span className={`shrink-0 ${info.cor}`}>{info.label}</span>
                             <button
                               onClick={() => handleCopyUrl(page.id, page.url)}
