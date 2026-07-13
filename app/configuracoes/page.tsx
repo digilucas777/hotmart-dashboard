@@ -86,7 +86,14 @@ export default function ConfiguracoesPage() {
     }
     return Notification.permission
   })
+  // Só true depois de confirmar uma inscrição de verdade (getSubscription) — não basta
+  // Notification.permission estar 'granted', porque essa permissão fica salva no
+  // navegador mesmo depois de remover e readicionar o ícone da Tela de Início no
+  // iOS, e nesse caso a inscrição antiga pode ter ficado órfã (o navegador cria um
+  // novo contexto isolado). Confiar só na permissão escondia o botão de reativar
+  // mesmo sem nenhuma inscrição válida por trás.
   const [pushSubscribed, setPushSubscribed] = useState(false)
+  const [pushError, setPushError] = useState('')
   // No iOS, push só entrega de verdade se o site foi instalado na Tela de Início e
   // aberto por esse ícone — pela aba comum do Safari, o navegador pode até aceitar a
   // inscrição sem erro nenhum e a notificação simplesmente nunca chega no aparelho,
@@ -103,6 +110,14 @@ export default function ConfiguracoesPage() {
   const [activatingPush, setActivatingPush] = useState(false)
   const [savingPrefs, setSavingPrefs] = useState(false)
   const [prefsSaved, setPrefsSaved] = useState(false)
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+    navigator.serviceWorker.getRegistration('/sw.js')
+      .then(registration => registration?.pushManager.getSubscription() ?? null)
+      .then(subscription => setPushSubscribed(!!subscription))
+      .catch(() => setPushSubscribed(false))
+  }, [])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -174,6 +189,7 @@ export default function ConfiguracoesPage() {
   const activatePush = async () => {
     if (pushPermission === 'unsupported') return
     setActivatingPush(true)
+    setPushError('')
     try {
       const permission = await Notification.requestPermission()
       setPushPermission(permission)
@@ -190,12 +206,20 @@ export default function ConfiguracoesPage() {
         applicationServerKey: applicationServerKey as BufferSource,
       })
 
-      await fetch('/api/notifications/subscribe', {
+      const res = await fetch('/api/notifications/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(subscription.toJSON()),
       })
+      if (!res.ok) throw new Error('Não foi possível salvar a inscrição no servidor.')
       setPushSubscribed(true)
+    } catch (err) {
+      setPushSubscribed(false)
+      setPushError(
+        err instanceof Error && err.name === 'NotAllowedError'
+          ? 'Permissão de notificação negada pelo navegador.'
+          : 'Não foi possível ativar as notificações. Tente remover e readicionar o site à Tela de Início, depois tente de novo.',
+      )
     } finally {
       setActivatingPush(false)
     }
@@ -477,7 +501,7 @@ export default function ConfiguracoesPage() {
                     Você bloqueou as notificações neste navegador. Para ativar, permita notificações para este site nas configurações do navegador.
                   </div>
                 )}
-                {pushPermission === 'granted' || pushSubscribed ? (
+                {pushSubscribed ? (
                   <div className="flex items-center gap-2 rounded-xl bg-green-500/10 px-3 py-2.5 text-xs text-green-400">
                     <Check size={12} />
                     Notificações ativadas neste dispositivo
@@ -488,6 +512,12 @@ export default function ConfiguracoesPage() {
                     Ativar notificações push
                   </Button>
                 ) : null}
+                {pushError && (
+                  <div className="flex items-center gap-2 rounded-xl bg-red-500/10 px-3 py-2.5 text-xs text-red-400">
+                    <AlertCircle size={12} />
+                    {pushError}
+                  </div>
+                )}
 
                 {notifProjetos.length === 0 ? (
                   <p className="text-xs text-slate-500">Nenhum projeto disponível para configurar notificações.</p>
