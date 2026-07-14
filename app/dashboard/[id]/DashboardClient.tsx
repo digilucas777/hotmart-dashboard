@@ -29,6 +29,7 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type Modifier,
 } from '@dnd-kit/core'
 import {
   SortableContext,
@@ -339,6 +340,11 @@ function persistLocalLayout(projectId: string, widgets: WidgetConfig[]) {
     }))),
   )
 }
+
+// Trava o arrasto da lista de troca de dashboard só no eixo vertical — sem isso, um gesto de
+// scroll no mobile (nunca perfeitamente vertical) faz o dnd-kit interpretar um leve
+// deslocamento em X como início de um drag, e o item "treme" pros lados ao rolar a lista.
+const restrictToVerticalAxis: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
 function SortableDashboardOption({
   option,
@@ -1627,10 +1633,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               </div>
             )}
             {dashboardOptions.length > 0 && (
-              <div ref={dashboardSwitcherRef} className="relative">
+              <div ref={dashboardSwitcherRef} className="relative min-w-0 flex-1 sm:flex-none">
                 <button
                   onClick={() => setShowDashboardSwitcher(prev => !prev)}
-                  className="flex min-w-0 items-center gap-2.5 rounded-xl border border-[var(--dash-border)] bg-[var(--dash-panel)] px-3 py-2 text-left shadow-md shadow-black/10 transition-colors hover:border-[var(--dash-border-strong)] sm:min-w-60"
+                  className="flex w-full min-w-0 items-center gap-2.5 rounded-xl border border-[var(--dash-border)] bg-[var(--dash-panel)] px-3 py-2 text-left shadow-md shadow-black/10 transition-colors hover:border-[var(--dash-border-strong)] sm:w-auto sm:min-w-60"
                   title="Trocar dashboard"
                 >
                   <div className="grid h-8 w-10 shrink-0 grid-cols-3 items-end gap-1 rounded-lg bg-gradient-to-br from-cyan-400/20 to-violet-500/20 p-1.5">
@@ -1648,11 +1654,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 {showDashboardSwitcher && (
                   <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowDashboardSwitcher(false)} />
-                  <div className="absolute right-0 top-full z-50 mt-3 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-[var(--dash-border)] bg-[var(--dash-panel)] p-2 shadow-2xl shadow-black/35 backdrop-blur-2xl">
+                  <div className="absolute left-0 top-full z-50 mt-3 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-[var(--dash-border)] bg-[var(--dash-panel)] p-2 shadow-2xl shadow-black/35 backdrop-blur-2xl">
                     <div className="px-3 py-2">
                       <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--dash-faint)]">Trocar dashboard</p>
                     </div>
-                    <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={isAdmin ? handleDashboardDragEnd : () => {}}>
+                    <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={isAdmin ? handleDashboardDragEnd : () => {}} modifiers={[restrictToVerticalAxis]}>
                     <SortableContext items={dashboardOptions.map(p => p.id)} strategy={verticalListSortingStrategy}>
                     <div className="max-h-80 space-y-1 overflow-y-auto pr-1">
                       {dashboardOptions.map(option => {
@@ -1704,11 +1710,13 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               <button
                 type="button"
                 onClick={() => setShowOrigensDropdown(v => !v)}
-                className="flex h-8 items-center gap-1.5 rounded-lg border border-[var(--dash-border)] bg-[var(--dash-panel)] px-3 text-xs font-medium text-[var(--dash-text)] transition-colors hover:border-[var(--dash-border-strong)]"
+                className="flex min-h-8 max-w-[220px] items-center gap-1.5 rounded-lg border border-[var(--dash-border)] bg-[var(--dash-panel)] px-3 py-1.5 text-xs font-medium text-[var(--dash-text)] transition-colors hover:border-[var(--dash-border-strong)]"
               >
-                {origensFilter.length === 0
-                  ? 'Origem: Todas'
-                  : `Origem: ${origensFilter.join(', ')}`}
+                <span className="min-w-0 flex-1 whitespace-normal break-words text-left">
+                  {origensFilter.length === 0
+                    ? 'Origem: Todas'
+                    : `Origem: ${origensFilter.join(', ')}`}
+                </span>
                 <ChevronDown size={13} className={`shrink-0 text-[var(--dash-muted)] transition-transform ${showOrigensDropdown ? 'rotate-180' : ''}`} />
               </button>
               {showOrigensDropdown && (
@@ -1734,12 +1742,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                             prev.includes(origem) ? prev.filter(o => o !== origem) : [...prev, origem],
                           )
                         }
-                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-[var(--dash-text)] transition-colors hover:bg-white/5"
+                        className="flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-[var(--dash-text)] transition-colors hover:bg-white/5"
                       >
-                        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${checked ? 'border-cyan-400 bg-cyan-400/20' : 'border-[var(--dash-border)]'}`}>
+                        <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${checked ? 'border-cyan-400 bg-cyan-400/20' : 'border-[var(--dash-border)]'}`}>
                           {checked && <Check size={10} className="text-cyan-400" />}
                         </span>
-                        {origem}
+                        <span className="min-w-0 flex-1 whitespace-normal break-words">{origem}</span>
                       </button>
                     )
                   })}
@@ -1752,11 +1760,13 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               <button
                 type="button"
                 onClick={() => setShowAfiliadosDropdown(v => !v)}
-                className="flex h-8 items-center gap-1.5 rounded-lg border border-[var(--dash-border)] bg-[var(--dash-panel)] px-3 text-xs font-medium text-[var(--dash-text)] transition-colors hover:border-[var(--dash-border-strong)]"
+                className="flex min-h-8 max-w-[220px] items-center gap-1.5 rounded-lg border border-[var(--dash-border)] bg-[var(--dash-panel)] px-3 py-1.5 text-xs font-medium text-[var(--dash-text)] transition-colors hover:border-[var(--dash-border-strong)]"
               >
-                {afiliadosFilter.length === 0
-                  ? 'Afiliado: Todos'
-                  : `Afiliado: ${afiliadosFilter.join(', ')}`}
+                <span className="min-w-0 flex-1 whitespace-normal break-words text-left">
+                  {afiliadosFilter.length === 0
+                    ? 'Afiliado: Todos'
+                    : `Afiliado: ${afiliadosFilter.join(', ')}`}
+                </span>
                 <ChevronDown size={13} className={`shrink-0 text-[var(--dash-muted)] transition-transform ${showAfiliadosDropdown ? 'rotate-180' : ''}`} />
               </button>
               {showAfiliadosDropdown && (
@@ -1782,12 +1792,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                             prev.includes(afiliado) ? prev.filter(a => a !== afiliado) : [...prev, afiliado],
                           )
                         }
-                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-[var(--dash-text)] transition-colors hover:bg-white/5"
+                        className="flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-[var(--dash-text)] transition-colors hover:bg-white/5"
                       >
-                        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${checked ? 'border-cyan-400 bg-cyan-400/20' : 'border-[var(--dash-border)]'}`}>
+                        <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${checked ? 'border-cyan-400 bg-cyan-400/20' : 'border-[var(--dash-border)]'}`}>
                           {checked && <Check size={10} className="text-cyan-400" />}
                         </span>
-                        {afiliado}
+                        <span className="min-w-0 flex-1 whitespace-normal break-words">{afiliado}</span>
                       </button>
                     )
                   })}
