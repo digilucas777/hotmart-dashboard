@@ -1616,14 +1616,16 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             >
               <Rocket size={18} />
             </Link>
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dash-faint)]">
-                Dashboard
-              </p>
-              <h1 className="max-w-[180px] truncate text-base font-extrabold text-[var(--dash-text)] sm:max-w-xs sm:text-lg">
-                {projeto?.nome ?? '...'}
-              </h1>
-            </div>
+            {dashboardOptions.length === 0 && (
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dash-faint)]">
+                  Dashboard
+                </p>
+                <h1 className="max-w-[180px] truncate text-base font-extrabold text-[var(--dash-text)] sm:max-w-xs sm:text-lg">
+                  {projeto?.nome ?? '...'}
+                </h1>
+              </div>
+            )}
             {dashboardOptions.length > 0 && (
               <div ref={dashboardSwitcherRef} className="relative">
                 <button
