@@ -2,16 +2,21 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, Pause, Play, Radio, ExternalLink, ShieldCheck, Pencil, RefreshCw, AlertTriangle, ChevronDown, ChevronRight, GripVertical, Copy, Check } from 'lucide-react'
+import { Plus, Trash2, Pause, Play, Radio, ExternalLink, ShieldCheck, Pencil, RefreshCw, AlertTriangle, ChevronDown, ChevronRight, GripVertical, Copy, Check, Search, FolderPlus, Folder } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 
+const CLOAKER_MARKER_SNIPPET = '<!-- pagina:black -->'
+
 type MonitoredPage = {
   id: string
   site_id: string
   url: string
+  nome: string | null
+  ordem: number
+  pasta_id: string | null
   ativo: boolean
   ultimo_status: string | null
   ultimo_status_code: number | null
@@ -21,6 +26,13 @@ type MonitoredPage = {
   ultimo_status_cloaker: string | null
 }
 
+type MonitoredPageFolder = {
+  id: string
+  site_id: string
+  nome: string
+  ordem: number
+}
+
 type MonitoredSite = {
   id: string
   user_id: string
@@ -28,9 +40,41 @@ type MonitoredSite = {
   dominio: string | null
   ordem: number
   pages: MonitoredPage[]
+  folders: MonitoredPageFolder[]
 }
 
 type ConfirmDelete = { kind: 'site' | 'page'; id: string; label: string }
+
+// Ação que muda configuração (ativar/desativar cloacker, pausar/retomar) —
+// sempre passa por um card de confirmação centralizado antes de executar.
+type ConfirmPageAction =
+  | { kind: 'cloaker-on'; page: MonitoredPage }
+  | { kind: 'cloaker-off'; page: MonitoredPage }
+  | { kind: 'pause'; page: MonitoredPage }
+  | { kind: 'resume'; page: MonitoredPage }
+
+const CONFIRM_ACTION_TEXT: Record<ConfirmPageAction['kind'], { title: string; body: (label: string) => string; confirmLabel: string }> = {
+  'cloaker-on': {
+    title: 'Ativar verificação de cloacker',
+    body: label => `Ativar a verificação de cloacker pra "${label}"? A marcação foi encontrada na página — a partir de agora você recebe um alerta se ela sumir (ex: o cloacker parar de servir a página black).`,
+    confirmLabel: 'Ativar',
+  },
+  'cloaker-off': {
+    title: 'Desativar verificação de cloacker',
+    body: label => `Desativar a verificação de cloacker pra "${label}"? Você para de receber alertas sobre a marcação nessa página.`,
+    confirmLabel: 'Desativar',
+  },
+  pause: {
+    title: 'Pausar checagem',
+    body: label => `Pausar a checagem automática de "${label}"? Ela para de ser monitorada até você retomar.`,
+    confirmLabel: 'Pausar',
+  },
+  resume: {
+    title: 'Retomar checagem',
+    body: label => `Retomar a checagem automática de "${label}"?`,
+    confirmLabel: 'Retomar',
+  },
+}
 
 const STATUS_INFO: Record<string, { emoji: string; label: string; cor: string }> = {
   ok: { emoji: '🟢', label: 'No ar', cor: 'text-green-400' },
@@ -103,6 +147,20 @@ function buildPageUrls(input: string, dominio: string | null): string[] {
   return Array.from(new Set(urls))
 }
 
+// Agrupa as páginas de um site pelas pastas cadastradas, mantendo uma seção
+// "sem pasta" pro que não foi organizado ainda (ordem entre as seções segue a
+// ordem das pastas; a ordem dentro de cada seção segue MonitoredPage.ordem).
+function groupPagesByFolder(site: MonitoredSite): { folder: MonitoredPageFolder | null; pages: MonitoredPage[] }[] {
+  const groups: { folder: MonitoredPageFolder | null; pages: MonitoredPage[] }[] = site.folders.map(folder => ({
+    folder,
+    pages: site.pages.filter(p => p.pasta_id === folder.id),
+  }))
+  const folderIds = new Set(site.folders.map(f => f.id))
+  const semPasta = site.pages.filter(p => !p.pasta_id || !folderIds.has(p.pasta_id))
+  groups.push({ folder: null, pages: semPasta })
+  return groups.filter(g => g.pages.length > 0)
+}
+
 export default function SitesPage() {
   const router = useRouter()
   const [userId, setUserId] = useState<string | null>(null)
@@ -139,6 +197,32 @@ export default function SitesPage() {
     setTimeout(() => setCopiedPageId(prev => (prev === pageId ? null : prev)), 2000)
   }
 
+  const [copiedMarker, setCopiedMarker] = useState(false)
+  async function handleCopyMarker() {
+    await navigator.clipboard.writeText(CLOAKER_MARKER_SNIPPET)
+    setCopiedMarker(true)
+    setTimeout(() => setCopiedMarker(false), 2000)
+  }
+
+  const [checkingMarkerPageId, setCheckingMarkerPageId] = useState<string | null>(null)
+  const [markerResult, setMarkerResult] = useState<{ page: MonitoredPage; found: boolean } | null>(null)
+  const [checkingPageId, setCheckingPageId] = useState<string | null>(null)
+
+  const [confirmAction, setConfirmAction] = useState<ConfirmPageAction | null>(null)
+  const [confirmingAction, setConfirmingAction] = useState(false)
+
+  const [editPage, setEditPage] = useState<MonitoredPage | null>(null)
+  const [editPageNome, setEditPageNome] = useState('')
+  const [editPageFolderId, setEditPageFolderId] = useState<string | null>(null)
+  const [savingEditPage, setSavingEditPage] = useState(false)
+
+  const [showCreateFolder, setShowCreateFolder] = useState<string | null>(null)
+  const [folderName, setFolderName] = useState('')
+  const [creatingFolder, setCreatingFolder] = useState(false)
+
+  const [pageDrag, setPageDrag] = useState<{ siteId: string; pageId: string } | null>(null)
+  const [pageDragOverId, setPageDragOverId] = useState<string | null>(null)
+
   const [expandedSites, setExpandedSites] = useState<Set<string>>(new Set())
   function toggleExpanded(siteId: string) {
     setExpandedSites(prev => {
@@ -173,12 +257,13 @@ export default function SitesPage() {
     setLoading(true)
     const { data } = await supabase
       .from('monitored_sites')
-      .select('*, monitored_pages(*)')
+      .select('*, monitored_pages(*), monitored_page_folders(*)')
       .eq('user_id', uid)
       .order('ordem', { ascending: true })
-    const mapped = ((data ?? []) as (MonitoredSite & { monitored_pages: MonitoredPage[] })[]).map(s => ({
+    const mapped = ((data ?? []) as (MonitoredSite & { monitored_pages: MonitoredPage[]; monitored_page_folders: MonitoredPageFolder[] })[]).map(s => ({
       ...s,
-      pages: s.monitored_pages ?? [],
+      pages: (s.monitored_pages ?? []).slice().sort((a, b) => a.ordem - b.ordem),
+      folders: (s.monitored_page_folders ?? []).slice().sort((a, b) => a.ordem - b.ordem),
     }))
     setSites(mapped)
     setLoading(false)
@@ -193,6 +278,7 @@ export default function SitesPage() {
     const mapped = ((data ?? []) as (MonitoredSite & { monitored_pages: MonitoredPage[] })[]).map(s => ({
       ...s,
       pages: s.monitored_pages ?? [],
+      folders: [] as MonitoredPageFolder[],
       dono_email: emailById.get(s.user_id) ?? s.user_id,
     }))
     setAllSites(mapped)
@@ -275,16 +361,115 @@ export default function SitesPage() {
     void fetchSites(userId)
   }
 
-  async function handleTogglePage(page: MonitoredPage) {
-    if (!userId) return
-    await supabase.from('monitored_pages').update({ ativo: !page.ativo }).eq('id', page.id)
+  function handleRequestTogglePage(page: MonitoredPage) {
+    setConfirmAction({ kind: page.ativo ? 'pause' : 'resume', page })
+  }
+
+  async function checkMarkerFor(url: string): Promise<boolean> {
+    try {
+      const res = await fetch('/api/sites/check-marker', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      })
+      const json = await res.json().catch(() => ({}))
+      return json?.status === 'ok'
+    } catch {
+      return false
+    }
+  }
+
+  async function handleVerifyMarker(page: MonitoredPage) {
+    setCheckingMarkerPageId(page.id)
+    const found = await checkMarkerFor(page.url)
+    setCheckingMarkerPageId(null)
+    setMarkerResult({ page, found })
+  }
+
+  async function handleRequestToggleCloaker(page: MonitoredPage) {
+    if (page.verificar_cloaker) {
+      setConfirmAction({ kind: 'cloaker-off', page })
+      return
+    }
+    setCheckingMarkerPageId(page.id)
+    const found = await checkMarkerFor(page.url)
+    setCheckingMarkerPageId(null)
+    if (!found) {
+      setMarkerResult({ page, found: false })
+      return
+    }
+    setConfirmAction({ kind: 'cloaker-on', page })
+  }
+
+  async function handleConfirmAction() {
+    if (!confirmAction || !userId) return
+    setConfirmingAction(true)
+    const { kind, page } = confirmAction
+    if (kind === 'cloaker-on') await supabase.from('monitored_pages').update({ verificar_cloaker: true }).eq('id', page.id)
+    else if (kind === 'cloaker-off') await supabase.from('monitored_pages').update({ verificar_cloaker: false }).eq('id', page.id)
+    else if (kind === 'pause') await supabase.from('monitored_pages').update({ ativo: false }).eq('id', page.id)
+    else if (kind === 'resume') await supabase.from('monitored_pages').update({ ativo: true }).eq('id', page.id)
+    setConfirmingAction(false)
+    setConfirmAction(null)
     void fetchSites(userId)
   }
 
-  async function handleToggleCloaker(page: MonitoredPage) {
+  async function handleCheckPageNow(pageId: string) {
     if (!userId) return
-    await supabase.from('monitored_pages').update({ verificar_cloaker: !page.verificar_cloaker }).eq('id', page.id)
+    setCheckingPageId(pageId)
+    try {
+      await fetch('/api/sites/check-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId }),
+      })
+    } finally {
+      setCheckingPageId(null)
+      void fetchSites(userId)
+    }
+  }
+
+  function openEditPage(page: MonitoredPage) {
+    setEditPage(page)
+    setEditPageNome(page.nome ?? '')
+    setEditPageFolderId(page.pasta_id)
+  }
+
+  async function handleSavePageEdit() {
+    if (!editPage || !userId) return
+    setSavingEditPage(true)
+    await supabase
+      .from('monitored_pages')
+      .update({ nome: editPageNome.trim() || null, pasta_id: editPageFolderId })
+      .eq('id', editPage.id)
+    setSavingEditPage(false)
+    setEditPage(null)
     void fetchSites(userId)
+  }
+
+  async function handleCreateFolder(siteId: string) {
+    if (!folderName.trim() || !userId) return
+    setCreatingFolder(true)
+    const site = sites.find(s => s.id === siteId)
+    const proximaOrdem = site && site.folders.length > 0 ? Math.max(...site.folders.map(f => f.ordem)) + 1 : 0
+    await supabase.from('monitored_page_folders').insert({ site_id: siteId, nome: folderName.trim(), ordem: proximaOrdem })
+    setCreatingFolder(false)
+    setShowCreateFolder(null)
+    setFolderName('')
+    void fetchSites(userId)
+  }
+
+  function handlePageDrop(site: MonitoredSite, groupPages: MonitoredPage[], dropIndex: number) {
+    if (!userId || !pageDrag || pageDrag.siteId !== site.id) { setPageDrag(null); setPageDragOverId(null); return }
+    const dragIndex = groupPages.findIndex(p => p.id === pageDrag.pageId)
+    if (dragIndex === -1 || dragIndex === dropIndex) { setPageDrag(null); setPageDragOverId(null); return }
+    const reordered = [...groupPages]
+    const [moved] = reordered.splice(dragIndex, 1)
+    reordered.splice(dropIndex, 0, moved)
+    setPageDrag(null)
+    setPageDragOverId(null)
+    void Promise.all(reordered.map((p, i) => supabase.from('monitored_pages').update({ ordem: i }).eq('id', p.id)))
+      .then(() => fetchSites(userId))
   }
 
   async function handleCheckNow(siteId: string) {
@@ -345,6 +530,38 @@ export default function SitesPage() {
             Suas páginas de anúncio são checadas automaticamente de hora em hora. Você recebe uma
             notificação push quando alguma cair, der erro ou ficar lenta (mais de 10s).
           </p>
+        </div>
+
+        <div className="mb-6 rounded-xl border p-4" style={{ background: '#13131f', borderColor: 'rgba(255,255,255,0.07)' }}>
+          <div className="flex items-start gap-3">
+            <ShieldCheck size={18} className="mt-0.5 shrink-0 text-cyan-400" />
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-semibold text-slate-200">Verificação de cloacker</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Pra ativar a checagem de cloacker numa página, cole essa marcação na página <strong>black</strong> (a
+                que o visitante real vê) — pode ir no <code className="rounded bg-white/10 px-1 py-0.5 text-[11px] text-slate-300">&lt;head&gt;</code> ou
+                solto no corpo, desde que esteja no HTML entregue pelo servidor (não funciona se for inserida via JavaScript).
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <code className="flex-1 truncate rounded-lg px-3 py-2 text-xs text-cyan-300" style={{ background: '#0b0b14' }}>
+                  {CLOAKER_MARKER_SNIPPET}
+                </code>
+                <button
+                  onClick={handleCopyMarker}
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-white/10"
+                  style={{ background: 'rgba(255,255,255,0.06)' }}
+                >
+                  {copiedMarker ? <Check size={13} className="text-green-400" /> : <Copy size={13} />}
+                  {copiedMarker ? 'Copiado!' : 'Copiar'}
+                </button>
+              </div>
+              <p className="mt-2 text-[11px] text-slate-600">
+                Depois de colar a marcação, use o botão de lupa em cada página abaixo pra verificar se ela foi encontrada,
+                e o escudo (<ShieldCheck size={10} className="inline" />) pra ativar a checagem — se a marcação não for
+                encontrada, a ativação é bloqueada e você vê um aviso.
+              </p>
+            </div>
+          </div>
         </div>
 
         {loading ? (
@@ -448,65 +665,122 @@ export default function SitesPage() {
                     ))}
                   </button>
                 ) : (
-                  <div className="space-y-1.5">
-                    {site.pages.map(page => {
-                      const info = statusInfo(page)
-                      return (
-                        <div
-                          key={page.id}
-                          className={`flex items-center gap-3 rounded-lg px-3 py-2 ${page.ativo ? '' : 'opacity-50'}`}
-                          style={{ background: 'rgba(255,255,255,0.03)' }}
-                        >
-                          <span className="text-base">{page.ativo ? info.emoji : '⏸️'}</span>
-                          <div className="min-w-0 flex-1">
-                            <a href={page.url} target="_blank" rel="noreferrer" title={page.url} className="flex items-center gap-1 truncate text-xs font-medium text-slate-200 hover:text-indigo-300">
-                              {pagePath(page.url)}
-                              <ExternalLink size={10} className="shrink-0" />
-                            </a>
-                            <p className={`text-[11px] ${page.ativo ? info.cor : 'text-slate-600'}`}>
-                              {page.ativo ? info.label : 'Pausado'}
-                              {page.ultimo_status_code ? ` · HTTP ${page.ultimo_status_code}` : ''}
-                              {page.ultimo_tempo_ms ? ` · ${page.ultimo_tempo_ms}ms` : ''}
-                              {' · checado '}{tempoRelativo(page.ultima_checagem_em)}
-                              {page.verificar_cloaker && (
-                                <span className={page.ultimo_status_cloaker === 'falhou' ? 'text-red-400' : page.ultimo_status_cloaker === 'ok' ? 'text-green-400' : 'text-slate-600'}>
-                                  {' · cloacker '}
-                                  {page.ultimo_status_cloaker === 'falhou' ? 'fora do ar 🚨' : page.ultimo_status_cloaker === 'ok' ? 'ok' : 'ainda não checado'}
-                                </span>
-                              )}
-                            </p>
+                  <div className="space-y-3">
+                    {groupPagesByFolder(site).map(group => (
+                      <div key={group.folder?.id ?? 'sem-pasta'}>
+                        {group.folder && (
+                          <div className="mb-1 flex items-center gap-1.5 px-1">
+                            <Folder size={11} className="text-slate-600" />
+                            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">{group.folder.nome}</span>
                           </div>
-                          <button
-                            onClick={() => handleToggleCloaker(page)}
-                            className={`rounded-lg p-1.5 transition-colors hover:bg-white/10 ${page.verificar_cloaker ? 'text-cyan-400' : 'text-slate-600 hover:text-slate-300'}`}
-                            title={page.verificar_cloaker ? 'Verificação de cloacker ativada (clique pra desativar)' : 'Ativar verificação de cloacker'}
-                          >
-                            <ShieldCheck size={12} />
-                          </button>
-                          <button
-                            onClick={() => handleCopyUrl(page.id, page.url)}
-                            className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
-                            title={copiedPageId === page.id ? 'Copiado!' : 'Copiar URL'}
-                          >
-                            {copiedPageId === page.id ? <Check size={12} /> : <Copy size={12} />}
-                          </button>
-                          <button
-                            onClick={() => handleTogglePage(page)}
-                            className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
-                            title={page.ativo ? 'Pausar checagem' : 'Retomar checagem'}
-                          >
-                            {page.ativo ? <Pause size={12} /> : <Play size={12} />}
-                          </button>
-                          <button
-                            onClick={() => setConfirmDelete({ kind: 'page', id: page.id, label: page.url })}
-                            className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-red-500/15 hover:text-red-400"
-                            title="Excluir página"
-                          >
-                            <Trash2 size={12} />
-                          </button>
+                        )}
+                        <div className="space-y-1.5">
+                          {group.pages.map((page, idx) => {
+                            const info = statusInfo(page)
+                            return (
+                              <div
+                                key={page.id}
+                                draggable
+                                onDragStart={() => setPageDrag({ siteId: site.id, pageId: page.id })}
+                                onDragEnd={() => { setPageDrag(null); setPageDragOverId(null) }}
+                                onDragOver={e => { e.preventDefault(); setPageDragOverId(page.id) }}
+                                onDragLeave={() => setPageDragOverId(prev => (prev === page.id ? null : prev))}
+                                onDrop={e => { e.preventDefault(); handlePageDrop(site, group.pages, idx) }}
+                                className="flex items-center gap-2 rounded-lg px-3 py-2 transition-colors"
+                                style={{
+                                  background: 'rgba(255,255,255,0.03)',
+                                  boxShadow: pageDragOverId === page.id && pageDrag && pageDrag.pageId !== page.id ? 'inset 0 0 0 1px rgba(99,102,241,0.6)' : undefined,
+                                  opacity: pageDrag?.pageId === page.id ? 0.4 : (page.ativo ? 1 : 0.5),
+                                }}
+                              >
+                                <span className="cursor-grab p-0.5 text-slate-700 hover:text-slate-500 active:cursor-grabbing" title="Arrastar pra reordenar">
+                                  <GripVertical size={13} />
+                                </span>
+                                <span className="text-base">{page.ativo ? info.emoji : '⏸️'}</span>
+                                <div className="min-w-0 flex-1">
+                                  <a href={page.url} target="_blank" rel="noreferrer" title={page.url} className="flex items-center gap-1 truncate text-xs font-medium text-slate-200 hover:text-indigo-300">
+                                    {page.nome || pagePath(page.url)}
+                                    <ExternalLink size={10} className="shrink-0" />
+                                  </a>
+                                  {page.nome && <p className="truncate text-[10px] text-slate-600" title={page.url}>{pagePath(page.url)}</p>}
+                                  <p className={`text-[11px] ${page.ativo ? info.cor : 'text-slate-600'}`}>
+                                    {page.ativo ? info.label : 'Pausado'}
+                                    {page.ultimo_status_code ? ` · HTTP ${page.ultimo_status_code}` : ''}
+                                    {page.ultimo_tempo_ms ? ` · ${page.ultimo_tempo_ms}ms` : ''}
+                                    {' · checado '}{tempoRelativo(page.ultima_checagem_em)}
+                                    {page.verificar_cloaker && (
+                                      <span className={page.ultimo_status_cloaker === 'falhou' ? 'text-red-400' : page.ultimo_status_cloaker === 'ok' ? 'text-green-400' : 'text-slate-600'}>
+                                        {' · cloacker '}
+                                        {page.ultimo_status_cloaker === 'falhou' ? 'fora do ar 🚨' : page.ultimo_status_cloaker === 'ok' ? 'ok' : 'ainda não checado'}
+                                      </span>
+                                    )}
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => handleCheckPageNow(page.id)}
+                                  className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+                                  title="Checar essa página agora"
+                                  disabled={checkingPageId === page.id}
+                                >
+                                  {checkingPageId === page.id ? <Spinner size={12} /> : <RefreshCw size={12} />}
+                                </button>
+                                <button
+                                  onClick={() => handleVerifyMarker(page)}
+                                  className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+                                  title="Verificar marcação de cloacker"
+                                  disabled={checkingMarkerPageId === page.id}
+                                >
+                                  {checkingMarkerPageId === page.id ? <Spinner size={12} /> : <Search size={12} />}
+                                </button>
+                                <button
+                                  onClick={() => handleRequestToggleCloaker(page)}
+                                  className={`rounded-lg p-1.5 transition-colors hover:bg-white/10 ${page.verificar_cloaker ? 'text-cyan-400' : 'text-slate-600 hover:text-slate-300'}`}
+                                  title={page.verificar_cloaker ? 'Verificação de cloacker ativada (clique pra desativar)' : 'Ativar verificação de cloacker'}
+                                  disabled={checkingMarkerPageId === page.id}
+                                >
+                                  {checkingMarkerPageId === page.id ? <Spinner size={12} /> : <ShieldCheck size={12} />}
+                                </button>
+                                <button
+                                  onClick={() => openEditPage(page)}
+                                  className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+                                  title="Editar página"
+                                >
+                                  <Pencil size={12} />
+                                </button>
+                                <button
+                                  onClick={() => handleCopyUrl(page.id, page.url)}
+                                  className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+                                  title={copiedPageId === page.id ? 'Copiado!' : 'Copiar URL'}
+                                >
+                                  {copiedPageId === page.id ? <Check size={12} /> : <Copy size={12} />}
+                                </button>
+                                <button
+                                  onClick={() => handleRequestTogglePage(page)}
+                                  className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+                                  title={page.ativo ? 'Pausar checagem' : 'Retomar checagem'}
+                                >
+                                  {page.ativo ? <Pause size={12} /> : <Play size={12} />}
+                                </button>
+                                <button
+                                  onClick={() => setConfirmDelete({ kind: 'page', id: page.id, label: page.nome || page.url })}
+                                  className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-red-500/15 hover:text-red-400"
+                                  title="Excluir página"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            )
+                          })}
                         </div>
-                      )
-                    })}
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => setShowCreateFolder(site.id)}
+                      className="flex items-center gap-1.5 px-1 text-[11px] text-slate-600 hover:text-slate-400"
+                    >
+                      <FolderPlus size={11} />
+                      Nova pasta
+                    </button>
                   </div>
                 )}
               </div>
@@ -704,6 +978,121 @@ export default function SitesPage() {
             <Button variant="danger" className="flex-1" onClick={handleConfirmDelete} disabled={deleting}>
               {deleting && <Spinner size={14} />}
               Excluir
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={!!confirmAction} onClose={() => setConfirmAction(null)} title={confirmAction ? CONFIRM_ACTION_TEXT[confirmAction.kind].title : ''}>
+        {confirmAction && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-300">
+              {CONFIRM_ACTION_TEXT[confirmAction.kind].body(confirmAction.page.nome || pagePath(confirmAction.page.url))}
+            </p>
+            <div className="flex gap-2 pt-1">
+              <Button variant="ghost" className="flex-1" onClick={() => setConfirmAction(null)}>Cancelar</Button>
+              <Button className="flex-1" onClick={handleConfirmAction} disabled={confirmingAction}>
+                {confirmingAction && <Spinner size={14} />}
+                {CONFIRM_ACTION_TEXT[confirmAction.kind].confirmLabel}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={!!markerResult} onClose={() => setMarkerResult(null)} title={markerResult?.found ? 'Marcação encontrada' : 'Marcação não encontrada'}>
+        {markerResult && (
+          <div className="space-y-4">
+            <div className={`flex gap-3 rounded-xl border p-3 ${markerResult.found ? 'border-green-500/20 bg-green-500/10' : 'border-red-500/20 bg-red-500/10'}`}>
+              {markerResult.found
+                ? <ShieldCheck size={18} className="mt-0.5 shrink-0 text-green-400" />
+                : <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-400" />}
+              <p className="text-sm text-slate-200">
+                {markerResult.found ? (
+                  <>A marcação <code className="rounded bg-white/10 px-1">{CLOAKER_MARKER_SNIPPET}</code> foi encontrada em{' '}
+                  <span className="break-all font-semibold">{markerResult.page.url}</span>.</>
+                ) : (
+                  <>Não encontrei a marcação <code className="rounded bg-white/10 px-1">{CLOAKER_MARKER_SNIPPET}</code> em{' '}
+                  <span className="break-all font-semibold">{markerResult.page.url}</span>. Confira se ela foi colada na
+                  página black e se não está sendo inserida via JavaScript (precisa estar no HTML que o servidor entrega).</>
+                )}
+              </p>
+            </div>
+            <Button className="w-full" onClick={() => setMarkerResult(null)}>Entendi</Button>
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={!!editPage} onClose={() => setEditPage(null)} title="Editar página">
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">Nome (opcional)</label>
+            <input
+              autoFocus
+              type="text"
+              placeholder={editPage ? pagePath(editPage.url) : ''}
+              value={editPageNome}
+              onChange={e => setEditPageNome(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSavePageEdit()}
+              className="w-full rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 outline-none ring-1 ring-white/10 focus:ring-indigo-500/60"
+              style={{ background: '#111120' }}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">Pasta</label>
+            <select
+              value={editPageFolderId ?? ''}
+              onChange={e => setEditPageFolderId(e.target.value || null)}
+              className="w-full rounded-xl px-4 py-2.5 text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-indigo-500/60"
+              style={{ background: '#111120' }}
+            >
+              <option value="">Sem pasta</option>
+              {editPage && sites.find(s => s.id === editPage.site_id)?.folders.map(f => (
+                <option key={f.id} value={f.id}>{f.nome}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => { if (editPage) setShowCreateFolder(editPage.site_id) }}
+              className="mt-1.5 flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300"
+            >
+              <FolderPlus size={11} />
+              Criar nova pasta
+            </button>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button variant="ghost" className="flex-1" onClick={() => setEditPage(null)}>Cancelar</Button>
+            <Button className="flex-1" onClick={handleSavePageEdit} disabled={savingEditPage}>
+              {savingEditPage && <Spinner size={14} />}
+              Salvar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={!!showCreateFolder} onClose={() => setShowCreateFolder(null)} title="Nova pasta">
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">Nome *</label>
+            <input
+              autoFocus
+              type="text"
+              placeholder="Ex: Campanha A"
+              value={folderName}
+              onChange={e => setFolderName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && showCreateFolder && handleCreateFolder(showCreateFolder)}
+              className="w-full rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 outline-none ring-1 ring-white/10 focus:ring-indigo-500/60"
+              style={{ background: '#111120' }}
+            />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button variant="ghost" className="flex-1" onClick={() => setShowCreateFolder(null)}>Cancelar</Button>
+            <Button
+              className="flex-1"
+              onClick={() => showCreateFolder && handleCreateFolder(showCreateFolder)}
+              disabled={!folderName.trim() || creatingFolder}
+            >
+              {creatingFolder && <Spinner size={14} />}
+              Criar
             </Button>
           </div>
         </div>

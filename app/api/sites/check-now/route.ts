@@ -13,12 +13,14 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}))
   const siteId = typeof body?.siteId === 'string' ? body.siteId : null
+  const pageId = typeof body?.pageId === 'string' ? body.pageId : null
 
   let query = supabase
     .from('monitored_pages')
     .select('id, url, ultimo_status, verificar_cloaker, ultimo_status_cloaker, monitored_sites!inner(user_id, nome)')
     .eq('ativo', true)
   if (siteId) query = query.eq('site_id', siteId)
+  if (pageId) query = query.eq('id', pageId)
 
   const { data: pages, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
