@@ -756,18 +756,28 @@ export default function SitesPage() {
                                     <ExternalLink size={10} className="shrink-0" />
                                   </a>
                                   {page.nome && <p className="truncate text-[10px] text-slate-600" title={page.url}>{pagePath(page.url)}</p>}
-                                  <p className={`text-[11px] ${page.ativo ? info.cor : 'text-slate-600'}`}>
-                                    {page.ativo ? info.label : 'Pausado'}
-                                    {page.ultimo_status_code ? ` · HTTP ${page.ultimo_status_code}` : ''}
-                                    {page.ultimo_tempo_ms ? ` · ${page.ultimo_tempo_ms}ms` : ''}
-                                    {' · checado '}{tempoRelativo(page.ultima_checagem_em)}
+                                  <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
+                                    <p className={`text-[11px] ${page.ativo ? info.cor : 'text-slate-600'}`}>
+                                      {page.ativo ? info.label : 'Pausado'}
+                                      {page.ultimo_status_code ? ` · HTTP ${page.ultimo_status_code}` : ''}
+                                      {page.ultimo_tempo_ms ? ` · ${page.ultimo_tempo_ms}ms` : ''}
+                                      {' · checado '}{tempoRelativo(page.ultima_checagem_em)}
+                                    </p>
                                     {page.verificar_cloaker && (
-                                      <span className={page.ultimo_status_cloaker === 'falhou' ? 'text-red-400' : page.ultimo_status_cloaker === 'ok' ? 'text-green-400' : 'text-slate-600'}>
-                                        {' · cloacker '}
-                                        {page.ultimo_status_cloaker === 'falhou' ? 'fora do ar 🚨' : page.ultimo_status_cloaker === 'ok' ? 'ok' : 'ainda não checado'}
+                                      <span
+                                        className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+                                        style={{
+                                          background: page.ultimo_status_cloaker === 'falhou'
+                                            ? 'linear-gradient(135deg, #f87171, #b91c1c)'
+                                            : page.ultimo_status_cloaker === 'ok'
+                                              ? 'linear-gradient(135deg, #4ade80, #15803d)'
+                                              : 'linear-gradient(135deg, #64748b, #334155)',
+                                        }}
+                                      >
+                                        cloacker {page.ultimo_status_cloaker === 'falhou' ? 'fora do ar 🚨' : page.ultimo_status_cloaker === 'ok' ? 'ok' : 'não checado'}
                                       </span>
                                     )}
-                                  </p>
+                                  </div>
                                 </div>
                                 <button
                                   onClick={() => handleCheckPageNow(page.id)}
