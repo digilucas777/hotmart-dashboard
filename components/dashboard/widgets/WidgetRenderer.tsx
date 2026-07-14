@@ -3,7 +3,8 @@
 import { memo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Copy, Pencil, Trash2 } from 'lucide-react'
-import { computeComparableMetric, computeWidgetData, formatPeriodComparisonLabel, getValueFormat } from '@/lib/utils'
+import { computeWidgetData, formatPeriodComparisonLabel, getValueFormat } from '@/lib/utils'
+import { computeComparableFromSummary, type SummaryRow } from '@/lib/vendas-aggregation'
 import type { Period, Venda, WidgetConfig } from '@/lib/types'
 import { SalesTable } from '@/components/dashboard/SalesTable'
 import { computeMetaWidgetData } from '@/lib/meta-ads-mock'
@@ -55,7 +56,8 @@ function getInsightsValue(source: string, ins: MetaInsightsRaw): InsightsValue |
 function WidgetRendererBase({
   config,
   vendas,
-  previousVendas,
+  summaryCurrent,
+  summaryPrevious,
   combinedVendas,
   period,
   exchangeRate,
@@ -77,7 +79,8 @@ function WidgetRendererBase({
 }: {
   config: WidgetConfig
   vendas: Venda[]
-  previousVendas?: Venda[]
+  summaryCurrent?: SummaryRow[]
+  summaryPrevious?: SummaryRow[]
   combinedVendas?: Venda[]
   period: Period
   exchangeRate: number
@@ -147,10 +150,10 @@ function WidgetRendererBase({
     : computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, effectiveCusto, effectiveCustoUSD, customRange)
 
   const isBRL = !isMetaWidget && getValueFormat(config.data_source) === 'brl'
-  const comparison = !isMetaWidget && data.kind === 'metric' && previousVendas
+  const comparison = !isMetaWidget && data.kind === 'metric' && summaryCurrent && summaryPrevious
     ? (() => {
-        const current = computeComparableMetric(vendas, config.data_source, exchangeRate, custoTotal, effectiveCustoUSD)
-        const previous = computeComparableMetric(previousVendas, config.data_source, exchangeRate, custoTotal, effectiveCustoUSD)
+        const current = computeComparableFromSummary(summaryCurrent, config.data_source, exchangeRate, custoTotal, effectiveCustoUSD)
+        const previous = computeComparableFromSummary(summaryPrevious, config.data_source, exchangeRate, custoTotal, effectiveCustoUSD)
         if (current === null || previous === null || previous === 0) return null
         const pct = ((current - previous) / Math.abs(previous)) * 100
         if (Math.abs(pct) < 0.1) return `• 0% vs ${formatPeriodComparisonLabel(period)}`
@@ -338,7 +341,8 @@ function WidgetRendererBase({
 export const WidgetRenderer = memo(WidgetRendererBase, (prev, next) =>
   prev.config === next.config &&
   prev.vendas === next.vendas &&
-  prev.previousVendas === next.previousVendas &&
+  prev.summaryCurrent === next.summaryCurrent &&
+  prev.summaryPrevious === next.summaryPrevious &&
   prev.combinedVendas === next.combinedVendas &&
   prev.period === next.period &&
   prev.exchangeRate === next.exchangeRate &&

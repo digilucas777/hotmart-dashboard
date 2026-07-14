@@ -6,6 +6,7 @@ import type { Layout, LayoutItem } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
 import type { Period, Venda, WidgetConfig } from '@/lib/types'
+import type { SummaryRow } from '@/lib/vendas-aggregation'
 import { WidgetRenderer } from '@/components/dashboard/widgets/WidgetRenderer'
 import type { MetaCreativeResult, MetaCampaignResult } from '@/lib/meta-ads-mock'
 
@@ -53,7 +54,8 @@ type Props = {
   onLayoutChange: (updated: WidgetConfig[]) => void
   onPushHistory: () => void
   vendas: Venda[]
-  previousVendas: Venda[]
+  summaryCurrent: SummaryRow[]
+  summaryPrevious: SummaryRow[]
   combinedVendas: Venda[]
   period: Period
   exchangeRate: number
@@ -79,7 +81,8 @@ export function DashboardGrid({
   onLayoutChange,
   onPushHistory,
   vendas,
-  previousVendas,
+  summaryCurrent,
+  summaryPrevious,
   combinedVendas,
   period,
   exchangeRate,
@@ -157,7 +160,8 @@ export function DashboardGrid({
             <WidgetRenderer
               config={w}
               vendas={vendas}
-              previousVendas={previousVendas}
+              summaryCurrent={summaryCurrent}
+              summaryPrevious={summaryPrevious}
               combinedVendas={combinedVendas}
               period={period}
               exchangeRate={exchangeRate}

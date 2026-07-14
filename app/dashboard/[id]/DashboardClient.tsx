@@ -40,6 +40,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { DashboardGrid } from '@/components/dashboard/DashboardGrid'
 import { supabase } from '@/lib/supabase'
 import { formatRelativeTime, getPeriodRange, getPreviousPeriodRange, getOfficialSaleAmount, parseOrigem } from '@/lib/utils'
+import { fetchVendasSummary, fetchDistinctOrigens, fetchDistinctAfiliados, type SummaryRow } from '@/lib/vendas-aggregation'
 import type { Venda, Projeto, Produto, Period, WidgetConfig, WidgetType, WidgetDataSource } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
 import { AddWidgetModal } from '@/components/dashboard/AddWidgetModal'
@@ -55,6 +56,11 @@ const THEME_STORAGE_KEY = 'dashboard-theme'
 
 // Colunas explícitas evitam buscar campos extras do banco (created_at, updated_at, etc.)
 const VENDA_COLUMNS = 'id,hotmart_id,hotmart_produto_id,produto,oferta_codigo,oferta_nome,oferta_descricao,oferta_preco,oferta_moeda,plano_id,plano_nome,comprador_nome,comprador_email,valor,valor_recebido,valor_bruto,taxa_hotmart,comissao_produtor,comissao_coprodutor,comissao_afiliado,valor_operacional_final,moeda,status,data_venda,forma_pagamento,pais,origem,afiliado_nome'
+
+// combinedVendas só alimenta o CombinedChartWidget (computa combined_by_day a partir de
+// data_venda/status/moeda/valor_operacional_final) e os filtros de origem/afiliado — não
+// precisa dos campos de comprador/oferta completos que VENDA_COLUMNS carrega.
+const COMBINED_COLUMNS = 'id,hotmart_produto_id,oferta_codigo,status,moeda,valor_operacional_final,data_venda,origem,afiliado_nome'
 
 // Three content-aware snap heights for metric cards:
 // 7 rows = icon + title + value
@@ -388,7 +394,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [showDashboardSwitcher, setShowDashboardSwitcher] = useState(false)
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
   const [vendas, setVendas] = useState<Venda[]>([])
-  const [previousVendas, setPreviousVendas] = useState<Venda[]>([])
+  // Substituem o antigo array bruto de vendas do período anterior (previousVendas) — só
+  // usado pra calcular a variação "vs período anterior" dos widgets de métrica, então um
+  // agregado por status/moeda (get_vendas_summary) resolve sem baixar linha por linha.
+  const [summaryCurrent, setSummaryCurrent] = useState<SummaryRow[]>([])
+  const [summaryPrevious, setSummaryPrevious] = useState<SummaryRow[]>([])
   const [recentVendas, setRecentVendas] = useState<Venda[]>([])
   const [combinedVendas, setCombinedVendas] = useState<Venda[]>([])
   const [period, setPeriod] = useState<Period>('today')
@@ -596,7 +606,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
         if (produtoIds.length === 0) {
           setVendas([])
-          setPreviousVendas([])
+          setSummaryCurrent([])
+          setSummaryPrevious([])
           setRecentVendas([])
           setCombinedVendas([])
           return
@@ -617,7 +628,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
         if (hotmartIds.length === 0) {
           setVendas([])
-          setPreviousVendas([])
+          setSummaryCurrent([])
+          setSummaryPrevious([])
           setRecentVendas([])
           setCombinedVendas([])
           return
@@ -653,38 +665,42 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       const combinedFrom = thirtyDays < monthStart ? thirtyDays : monthStart
 
       // Busca paginada: PostgREST limita a 1000 rows/req independente do .limit() do cliente.
-      const fetchAllForPeriod = async (fromISO: string, toISO: string): Promise<Venda[]> => {
+      const fetchAllForPeriod = async (fromISO: string, toISO: string, columns: string): Promise<Venda[]> => {
         const PAGE_SIZE = 1000
         const all: Venda[] = []
         let offset = 0
         while (true) {
           const { data } = await supabase
             .from('vendas')
-            .select(VENDA_COLUMNS)
+            .select(columns)
             .in('hotmart_produto_id', hotmartIds)
             .gte('data_venda', fromISO)
             .lt('data_venda', toISO)
             .order('data_venda', { ascending: false })
             .range(offset, offset + PAGE_SIZE - 1)
           if (!data || data.length === 0) break
-          all.push(...(data as Venda[]))
+          all.push(...(data as unknown as Venda[]))
           if (data.length < PAGE_SIZE) break
           offset += PAGE_SIZE
         }
         return all
       }
 
-      // 3 queries em paralelo (antes eram 5: + offerLinks + recentVendas)
-      const [currentData, previousData, combinedData] = await Promise.all([
-        fetchAllForPeriod(from.toISOString(), to.toISOString()),
-        fetchAllForPeriod(previousRange.from.toISOString(), previousRange.to.toISOString()),
-        fetchAllForPeriod(combinedFrom.toISOString(), new Date(todayStart.getTime() + 86_400_000).toISOString()),
+      // O período anterior não precisa mais de vendas cruas — só alimentava o cálculo de
+      // "vs período anterior" dos widgets de métrica, que agora usa o agregado de
+      // get_vendas_summary (poucas linhas, tamanho fixo) em vez de baixar tudo pra somar em JS.
+      const [currentData, combinedData, summaryCurrentRows, summaryPreviousRows] = await Promise.all([
+        fetchAllForPeriod(from.toISOString(), to.toISOString(), VENDA_COLUMNS),
+        fetchAllForPeriod(combinedFrom.toISOString(), new Date(todayStart.getTime() + 86_400_000).toISOString(), COMBINED_COLUMNS),
+        fetchVendasSummary(projectId, from, to),
+        fetchVendasSummary(projectId, previousRange.from, previousRange.to),
       ])
 
       const currentFiltered = filterRowsByOfferSelection(currentData, products, productLinks, offerLinks)
       setVendas(currentFiltered)
-      setPreviousVendas(filterRowsByOfferSelection(previousData, products, productLinks, offerLinks))
       setCombinedVendas(filterRowsByOfferSelection(combinedData, products, productLinks, offerLinks))
+      setSummaryCurrent(summaryCurrentRows)
+      setSummaryPrevious(summaryPreviousRows)
       setLastUpdatedAt(new Date())
     } finally {
       setLoading(false)
@@ -757,7 +773,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             // Atualiza estado local imediatamente — sem re-fetch completo
             const patch = (v: Venda) => v.id === row.id ? { ...v, origem } : v
             setVendas(prev => prev.map(patch))
-            setPreviousVendas(prev => prev.map(patch))
             setCombinedVendas(prev => prev.map(patch))
             setRecentVendas(prev => prev.map(patch))
           }
@@ -806,16 +821,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       const hotmartIds = (prods ?? []).map((r: { hotmart_id: string }) => r.hotmart_id)
       if (hotmartIds.length === 0) return
 
-      const { data } = await supabase
-        .from('vendas')
-        .select('origem')
-        .in('hotmart_produto_id', hotmartIds)
-        .not('origem', 'is', null)
+      const origens = await fetchDistinctOrigens(hotmartIds)
 
       const parsed = Array.from(
         new Set(
-          (data ?? [])
-            .map((r: { origem: string | null }) => parseOrigem(r.origem))
+          origens
+            .map((o: string) => parseOrigem(o))
             .filter(o => o !== '—'),
         ),
       ).sort() as string[]
@@ -844,15 +855,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         return
       }
 
-      const { data } = await supabase
-        .from('vendas')
-        .select('afiliado_nome')
-        .in('hotmart_produto_id', hotmartIds)
-        .not('afiliado_nome', 'is', null)
-        .not('afiliado_nome', 'eq', '')
+      const afiliados = await fetchDistinctAfiliados(hotmartIds)
 
       const unique = Array.from(
-        new Set((data ?? []).map((r: { afiliado_nome: string | null }) => r.afiliado_nome).filter((v): v is string => !!v && v.trim() !== '')),
+        new Set(afiliados.filter((v): v is string => !!v && v.trim() !== '')),
       ).sort()
       setAfiliadosDisponiveis(unique)
     }
@@ -1957,7 +1963,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             onLayoutChange={(updated) => setWidgets(updated)}
             onPushHistory={pushHistory}
             vendas={displayVendas}
-            previousVendas={previousVendas}
+            summaryCurrent={summaryCurrent}
+            summaryPrevious={summaryPrevious}
             combinedVendas={displayCombinedVendas}
             period={period}
             exchangeRate={exchangeRate}
