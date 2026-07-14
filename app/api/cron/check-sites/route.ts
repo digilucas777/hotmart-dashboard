@@ -26,7 +26,7 @@ export async function GET(request: Request) {
 
   const { data: pages, error } = await admin
     .from('monitored_pages')
-    .select('id, url, ultimo_status, monitored_sites(user_id, nome)')
+    .select('id, url, ultimo_status, verificar_cloaker, ultimo_status_cloaker, monitored_sites(user_id, nome)')
     .eq('ativo', true)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!pages || pages.length === 0) return NextResponse.json({ ok: true, checadas: 0 })

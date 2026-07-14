@@ -16,7 +16,7 @@ export async function POST(request: Request) {
 
   let query = supabase
     .from('monitored_pages')
-    .select('id, url, ultimo_status, monitored_sites!inner(user_id, nome)')
+    .select('id, url, ultimo_status, verificar_cloaker, ultimo_status_cloaker, monitored_sites!inner(user_id, nome)')
     .eq('ativo', true)
   if (siteId) query = query.eq('site_id', siteId)
 

@@ -17,6 +17,8 @@ type MonitoredPage = {
   ultimo_status_code: number | null
   ultimo_tempo_ms: number | null
   ultima_checagem_em: string | null
+  verificar_cloaker: boolean
+  ultimo_status_cloaker: string | null
 }
 
 type MonitoredSite = {
@@ -279,6 +281,12 @@ export default function SitesPage() {
     void fetchSites(userId)
   }
 
+  async function handleToggleCloaker(page: MonitoredPage) {
+    if (!userId) return
+    await supabase.from('monitored_pages').update({ verificar_cloaker: !page.verificar_cloaker }).eq('id', page.id)
+    void fetchSites(userId)
+  }
+
   async function handleCheckNow(siteId: string) {
     if (!userId) return
     setCheckingSiteId(siteId)
@@ -460,8 +468,21 @@ export default function SitesPage() {
                               {page.ultimo_status_code ? ` · HTTP ${page.ultimo_status_code}` : ''}
                               {page.ultimo_tempo_ms ? ` · ${page.ultimo_tempo_ms}ms` : ''}
                               {' · checado '}{tempoRelativo(page.ultima_checagem_em)}
+                              {page.verificar_cloaker && (
+                                <span className={page.ultimo_status_cloaker === 'falhou' ? 'text-red-400' : page.ultimo_status_cloaker === 'ok' ? 'text-green-400' : 'text-slate-600'}>
+                                  {' · cloacker '}
+                                  {page.ultimo_status_cloaker === 'falhou' ? 'fora do ar 🚨' : page.ultimo_status_cloaker === 'ok' ? 'ok' : 'ainda não checado'}
+                                </span>
+                              )}
                             </p>
                           </div>
+                          <button
+                            onClick={() => handleToggleCloaker(page)}
+                            className={`rounded-lg p-1.5 transition-colors hover:bg-white/10 ${page.verificar_cloaker ? 'text-cyan-400' : 'text-slate-600 hover:text-slate-300'}`}
+                            title={page.verificar_cloaker ? 'Verificação de cloacker ativada (clique pra desativar)' : 'Ativar verificação de cloacker'}
+                          >
+                            <ShieldCheck size={12} />
+                          </button>
                           <button
                             onClick={() => handleCopyUrl(page.id, page.url)}
                             className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"

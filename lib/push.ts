@@ -291,3 +291,31 @@ export async function notifySiteRecovered(params: { userId: string; siteName: st
     console.error('[PUSH] notifySiteRecovered falhou:', err)
   }
 }
+
+export async function notifyCloakerIssue(params: { userId: string; siteName: string; url: string }) {
+  try {
+    if (!ensureVapidConfigured()) return
+    await sendPushToUser(params.userId, {
+      title: `🚨 Cloacker fora do ar — ${params.siteName}`,
+      body: `${params.url}\nA página não está mostrando a versão black (marca escondida não encontrada).`,
+      url: '/sites',
+      tag: `cloaker-${params.url}`,
+    })
+  } catch (err) {
+    console.error('[PUSH] notifyCloakerIssue falhou:', err)
+  }
+}
+
+export async function notifyCloakerRecovered(params: { userId: string; siteName: string; url: string }) {
+  try {
+    if (!ensureVapidConfigured()) return
+    await sendPushToUser(params.userId, {
+      title: `✅ Cloacker voltou a funcionar — ${params.siteName}`,
+      body: params.url,
+      url: '/sites',
+      tag: `cloaker-${params.url}`,
+    })
+  } catch (err) {
+    console.error('[PUSH] notifyCloakerRecovered falhou:', err)
+  }
+}
