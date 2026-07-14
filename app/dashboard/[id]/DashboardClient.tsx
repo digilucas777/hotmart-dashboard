@@ -708,13 +708,24 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       setSummaryCurrent(summaryCurrentRows)
       setSummaryPrevious(summaryPreviousRows)
       setLastUpdatedAt(new Date())
+    } catch (err) {
+      // Sem isso, uma falha aqui (rede, RPC, etc) passava batido: o dashboard ficava com
+      // as métricas zeradas (estado inicial) pra sempre, sem nenhum aviso — parecia "produto
+      // não vinculado" quando na verdade era um erro silencioso de carregamento.
+      console.error('[fetchVendas] falha ao carregar vendas:', err)
+      setSuccessToast('Não foi possível carregar os dados de vendas. Tente atualizar novamente.')
+      setTimeout(() => setSuccessToast(null), 8000)
+      throw err
     } finally {
       setLoading(false)
     }
   }, [projectId, period, customDateRange, filterRowsByOfferSelection])
 
   useEffect(() => {
-    void Promise.resolve().then(fetchVendas)
+    fetchVendas().catch(() => {
+      // Erro já tratado (log + toast) dentro de fetchVendas — aqui só evita um
+      // unhandled promise rejection silencioso no carregamento inicial da página.
+    })
   }, [fetchVendas])
 
   const custosRequestIdRef = useRef(0)
