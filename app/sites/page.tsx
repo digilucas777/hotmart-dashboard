@@ -150,15 +150,19 @@ function buildPageUrls(input: string, dominio: string | null): string[] {
 // Agrupa as páginas de um site pelas pastas cadastradas, mantendo uma seção
 // "sem pasta" pro que não foi organizado ainda (ordem entre as seções segue a
 // ordem das pastas; a ordem dentro de cada seção segue MonitoredPage.ordem).
-function groupPagesByFolder(site: MonitoredSite): { folder: MonitoredPageFolder | null; pages: MonitoredPage[] }[] {
-  const groups: { folder: MonitoredPageFolder | null; pages: MonitoredPage[] }[] = site.folders.map(folder => ({
+type PageGroup = { folder: MonitoredPageFolder | null; pages: MonitoredPage[] }
+
+function groupPagesByFolder(site: MonitoredSite): PageGroup[] {
+  // Pastas aparecem mesmo vazias (pra dar pra arrastar páginas pra dentro) —
+  // só a seção "sem pasta" some quando não sobra nenhuma página solta.
+  const groups: PageGroup[] = site.folders.map(folder => ({
     folder,
     pages: site.pages.filter(p => p.pasta_id === folder.id),
   }))
   const folderIds = new Set(site.folders.map(f => f.id))
   const semPasta = site.pages.filter(p => !p.pasta_id || !folderIds.has(p.pasta_id))
-  groups.push({ folder: null, pages: semPasta })
-  return groups.filter(g => g.pages.length > 0)
+  if (semPasta.length > 0 || groups.length === 0) groups.push({ folder: null, pages: semPasta })
+  return groups
 }
 
 export default function SitesPage() {
@@ -459,17 +463,28 @@ export default function SitesPage() {
     void fetchSites(userId)
   }
 
-  function handlePageDrop(site: MonitoredSite, groupPages: MonitoredPage[], dropIndex: number) {
+  // Cobre tanto reordenar dentro da mesma pasta quanto arrastar pra uma pasta
+  // diferente (ou pra "sem pasta") — nesse caso também atualiza pasta_id.
+  function handlePageDrop(site: MonitoredSite, targetGroup: PageGroup, dropIndex: number) {
     if (!userId || !pageDrag || pageDrag.siteId !== site.id) { setPageDrag(null); setPageDragOverId(null); return }
-    const dragIndex = groupPages.findIndex(p => p.id === pageDrag.pageId)
-    if (dragIndex === -1 || dragIndex === dropIndex) { setPageDrag(null); setPageDragOverId(null); return }
-    const reordered = [...groupPages]
-    const [moved] = reordered.splice(dragIndex, 1)
-    reordered.splice(dropIndex, 0, moved)
+    const draggedPage = site.pages.find(p => p.id === pageDrag.pageId)
+    if (!draggedPage) { setPageDrag(null); setPageDragOverId(null); return }
+    const targetFolderId = targetGroup.folder?.id ?? null
+    const sameGroup = (draggedPage.pasta_id ?? null) === targetFolderId
+    if (sameGroup && targetGroup.pages.findIndex(p => p.id === draggedPage.id) === dropIndex) {
+      setPageDrag(null)
+      setPageDragOverId(null)
+      return
+    }
+    const basePages = targetGroup.pages.filter(p => p.id !== draggedPage.id)
+    const clampedIndex = Math.min(dropIndex, basePages.length)
+    const reordered = [...basePages]
+    reordered.splice(clampedIndex, 0, draggedPage)
     setPageDrag(null)
     setPageDragOverId(null)
-    void Promise.all(reordered.map((p, i) => supabase.from('monitored_pages').update({ ordem: i }).eq('id', p.id)))
-      .then(() => fetchSites(userId))
+    void Promise.all(
+      reordered.map((p, i) => supabase.from('monitored_pages').update({ ordem: i, pasta_id: targetFolderId }).eq('id', p.id)),
+    ).then(() => fetchSites(userId))
   }
 
   async function handleCheckNow(siteId: string) {
@@ -606,9 +621,9 @@ export default function SitesPage() {
                     <button
                       onClick={() => toggleExpanded(site.id)}
                       className="flex min-w-0 items-center gap-2 text-left"
-                      disabled={site.pages.length === 0}
+                      disabled={site.pages.length === 0 && site.folders.length === 0}
                     >
-                    {site.pages.length > 0 && (
+                    {(site.pages.length > 0 || site.folders.length > 0) && (
                       expandedSites.has(site.id)
                         ? <ChevronDown size={15} className="shrink-0 text-slate-500" />
                         : <ChevronRight size={15} className="shrink-0 text-slate-500" />
@@ -652,14 +667,15 @@ export default function SitesPage() {
                   </div>
                 </div>
 
-                {site.pages.length === 0 ? (
+                {site.pages.length === 0 && site.folders.length === 0 ? (
                   <p className="text-xs text-slate-600">Nenhuma página cadastrada nesse site ainda.</p>
                 ) : !expandedSites.has(site.id) ? (
                   <button
                     onClick={() => toggleExpanded(site.id)}
                     className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 hover:text-slate-300"
                   >
-                    <span>{site.pages.length} página{site.pages.length > 1 ? 's' : ''}</span>
+                    <span>{site.pages.length} página{site.pages.length !== 1 ? 's' : ''}</span>
+                    {site.folders.length > 0 && <span>· {site.folders.length} pasta{site.folders.length > 1 ? 's' : ''}</span>}
                     {summarizePages(site.pages).map(s => (
                       <span key={s.label}>{s.emoji} {s.count} {s.label}</span>
                     ))}
@@ -667,7 +683,11 @@ export default function SitesPage() {
                 ) : (
                   <div className="space-y-3">
                     {groupPagesByFolder(site).map(group => (
-                      <div key={group.folder?.id ?? 'sem-pasta'}>
+                      <div
+                        key={group.folder?.id ?? 'sem-pasta'}
+                        onDragOver={e => { if (pageDrag) e.preventDefault() }}
+                        onDrop={e => { e.preventDefault(); handlePageDrop(site, group, group.pages.length) }}
+                      >
                         {group.folder && (
                           <div className="mb-1 flex items-center gap-1.5 px-1">
                             <Folder size={11} className="text-slate-600" />
@@ -675,6 +695,14 @@ export default function SitesPage() {
                           </div>
                         )}
                         <div className="space-y-1.5">
+                          {group.pages.length === 0 && (
+                            <div
+                              className="rounded-lg border border-dashed px-3 py-3 text-center text-[11px] text-slate-600"
+                              style={{ borderColor: pageDrag ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.08)' }}
+                            >
+                              Arraste uma página pra cá
+                            </div>
+                          )}
                           {group.pages.map((page, idx) => {
                             const info = statusInfo(page)
                             return (
@@ -685,7 +713,7 @@ export default function SitesPage() {
                                 onDragEnd={() => { setPageDrag(null); setPageDragOverId(null) }}
                                 onDragOver={e => { e.preventDefault(); setPageDragOverId(page.id) }}
                                 onDragLeave={() => setPageDragOverId(prev => (prev === page.id ? null : prev))}
-                                onDrop={e => { e.preventDefault(); handlePageDrop(site, group.pages, idx) }}
+                                onDrop={e => { e.preventDefault(); e.stopPropagation(); handlePageDrop(site, group, idx) }}
                                 className="flex items-center gap-2 rounded-lg px-3 py-2 transition-colors"
                                 style={{
                                   background: 'rgba(255,255,255,0.03)',
