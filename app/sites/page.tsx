@@ -237,6 +237,22 @@ export default function SitesPage() {
     })
   }
 
+  // Cada pasta (e a seção "sem pasta") abre/fecha independente, tipo um
+  // explorador de arquivos — só mostra as páginas dela quando clicada.
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+  function folderKey(siteId: string, folderId: string | null) {
+    return `${siteId}:${folderId ?? 'sem-pasta'}`
+  }
+  function toggleFolderExpanded(siteId: string, folderId: string | null) {
+    const key = folderKey(siteId, folderId)
+    setExpandedFolders(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
@@ -682,18 +698,27 @@ export default function SitesPage() {
                   </button>
                 ) : (
                   <div className="space-y-3">
-                    {groupPagesByFolder(site).map(group => (
+                    {groupPagesByFolder(site).map(group => {
+                      const key = folderKey(site.id, group.folder?.id ?? null)
+                      const isFolderOpen = expandedFolders.has(key)
+                      return (
                       <div
-                        key={group.folder?.id ?? 'sem-pasta'}
+                        key={key}
                         onDragOver={e => { if (pageDrag) e.preventDefault() }}
                         onDrop={e => { e.preventDefault(); handlePageDrop(site, group, group.pages.length) }}
                       >
-                        {group.folder && (
-                          <div className="mb-1 flex items-center gap-1.5 px-1">
-                            <Folder size={11} className="text-slate-600" />
-                            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">{group.folder.nome}</span>
-                          </div>
-                        )}
+                        <button
+                          onClick={() => toggleFolderExpanded(site.id, group.folder?.id ?? null)}
+                          className="mb-1 flex w-full items-center gap-1.5 px-1 text-left hover:text-slate-400"
+                        >
+                          {isFolderOpen ? <ChevronDown size={12} className="shrink-0 text-slate-600" /> : <ChevronRight size={12} className="shrink-0 text-slate-600" />}
+                          {group.folder ? <Folder size={11} className="shrink-0 text-slate-600" /> : null}
+                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                            {group.folder ? group.folder.nome : 'Sem pasta'}
+                          </span>
+                          <span className="text-[10px] text-slate-700">({group.pages.length})</span>
+                        </button>
+                        {isFolderOpen && (
                         <div className="space-y-1.5">
                           {group.pages.length === 0 && (
                             <div
@@ -800,8 +825,10 @@ export default function SitesPage() {
                             )
                           })}
                         </div>
+                        )}
                       </div>
-                    ))}
+                      )
+                    })}
                     <button
                       onClick={() => setShowCreateFolder(site.id)}
                       className="flex items-center gap-1.5 px-1 text-[11px] text-slate-600 hover:text-slate-400"
