@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
+  AlertTriangle,
   Camera,
   Check,
   ChevronDown,
@@ -451,6 +452,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [showClearModal, setShowClearModal] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [successToast, setSuccessToast] = useState<string | null>(null)
+  const [errorToast, setErrorToast] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
   const [mobileEditWarning, setMobileEditWarning] = useState(false)
 
@@ -713,8 +715,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       // as métricas zeradas (estado inicial) pra sempre, sem nenhum aviso — parecia "produto
       // não vinculado" quando na verdade era um erro silencioso de carregamento.
       console.error('[fetchVendas] falha ao carregar vendas:', err)
-      setSuccessToast('Não foi possível carregar os dados de vendas. Tente atualizar novamente.')
-      setTimeout(() => setSuccessToast(null), 8000)
+      setErrorToast('Não foi possível carregar os dados de vendas. Tente atualizar novamente.')
+      setTimeout(() => setErrorToast(null), 8000)
       throw err
     } finally {
       setLoading(false)
@@ -813,8 +815,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       setSuccessToast('Dados atualizados')
       setTimeout(() => setSuccessToast(null), 5000)
     } catch {
-      setSuccessToast('Erro ao atualizar — tente novamente')
-      setTimeout(() => setSuccessToast(null), 5000)
+      setErrorToast('Erro ao atualizar — tente novamente')
+      setTimeout(() => setErrorToast(null), 8000)
     } finally {
       setIsRefreshing(false)
     }
@@ -2153,6 +2155,18 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl bg-emerald-500/90 px-4 py-3 text-sm font-medium text-white shadow-lg backdrop-blur-sm">
           <span>✓</span>
           <span>{successToast}</span>
+        </div>
+      )}
+
+      {errorToast && (
+        <div className="fixed inset-x-4 top-1/2 z-[60] flex -translate-y-1/2 justify-center">
+          <div className="flex max-w-md items-start gap-3 rounded-2xl border border-red-400/40 bg-red-600 px-5 py-4 text-sm font-semibold text-white shadow-2xl shadow-red-900/40">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+            <span>{errorToast}</span>
+            <button onClick={() => setErrorToast(null)} className="ml-1 shrink-0 opacity-80 hover:opacity-100">
+              <X size={16} />
+            </button>
+          </div>
         </div>
       )}
 
