@@ -473,6 +473,16 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     productLinks: ProjetoProdutoLink[]
     offerLinks: ProjetoProdutoOfertaLink[]
   } | null>(null)
+  // Cancela a busca anterior quando uma nova começa (troca de projeto/período, refresh
+  // manual) — sem isso, trocar rápido de projeto empilhava as buscas antigas (ainda em
+  // voo) em cima das novas, multiplicando a carga no Postgres e derrubando tudo em timeout.
+  const fetchAbortRef = useRef<AbortController | null>(null)
+
+  function isAbortError(err: unknown): boolean {
+    if (err instanceof DOMException && err.name === 'AbortError') return true
+    const msg = err instanceof Error ? err.message : String(err)
+    return /abort/i.test(msg)
+  }
 
   const [showCustoModal, setShowCustoModal] = useState(false)
   const [custoManualList, setCustoManualList] = useState<CustoManual[]>([])
@@ -599,6 +609,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   }, [])
 
   const fetchVendas = useCallback(async () => {
+    // Cancela qualquer busca anterior ainda em voo antes de iniciar esta — evita que uma
+    // troca rápida de projeto/período empilhe buscas concorrentes no Postgres.
+    fetchAbortRef.current?.abort()
+    const controller = new AbortController()
+    fetchAbortRef.current = controller
+
     setLoading(true)
     try {
       // Cache hit: pula as 2 queries sequenciais de configuração de produto a cada troca de período
@@ -608,6 +624,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           .from('projeto_produtos')
           .select('produto_id, todas_ofertas')
           .eq('projeto_id', projectId)
+          .abortSignal(controller.signal)
         if (ppError) throw ppError
 
         const productLinks = (pp ?? []) as ProjetoProdutoLink[]
@@ -624,11 +641,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
         // Busca produtos e ofertas em paralelo (eram 2 queries sequenciais)
         const [prodsRes, offersRes] = await Promise.all([
-          supabase.from('produtos').select('id, hotmart_id').in('id', produtoIds),
+          supabase.from('produtos').select('id, hotmart_id').in('id', produtoIds).abortSignal(controller.signal),
           supabase
             .from('projeto_produto_ofertas')
             .select('produto_id, oferta_codigo, oferta_nome, oferta_preco, oferta_moeda')
-            .eq('projeto_id', projectId),
+            .eq('projeto_id', projectId)
+            .abortSignal(controller.signal),
         ])
         if (prodsRes.error) throw prodsRes.error
         if (offersRes.error) throw offersRes.error
@@ -657,6 +675,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           .eq('status', 'approved')
           .order('data_venda', { ascending: false })
           .limit(80)
+          .abortSignal(controller.signal)
         if (recentError) throw recentError
         setRecentVendas(
           filterRowsByOfferSelection(
@@ -690,6 +709,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             .lt('data_venda', toISO)
             .order('data_venda', { ascending: false })
             .range(offset, offset + PAGE_SIZE - 1)
+            .abortSignal(controller.signal)
           // Sem isso, uma página que estoura o statement_timeout (data: null, error setado)
           // era tratada igual a "acabaram as páginas" — o dashboard zerava/mostrava dados
           // parciais em silêncio em vez de cair no catch e mostrar o erro.
@@ -708,8 +728,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       const [currentData, combinedData, summaryCurrentRows, summaryPreviousRows] = await Promise.all([
         fetchAllForPeriod(from.toISOString(), to.toISOString(), VENDA_COLUMNS),
         fetchAllForPeriod(combinedFrom.toISOString(), new Date(todayStart.getTime() + 86_400_000).toISOString(), COMBINED_COLUMNS),
-        fetchVendasSummary(projectId, from, to),
-        fetchVendasSummary(projectId, previousRange.from, previousRange.to),
+        fetchVendasSummary(projectId, from, to, controller.signal),
+        fetchVendasSummary(projectId, previousRange.from, previousRange.to, controller.signal),
       ])
 
       const currentFiltered = filterRowsByOfferSelection(currentData, products, productLinks, offerLinks)
@@ -719,6 +739,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       setSummaryPrevious(summaryPreviousRows)
       setLastUpdatedAt(new Date())
     } catch (err) {
+      // Uma busca cancelada porque outra mais nova começou (troca de projeto/período,
+      // refresh) não é uma falha real — não deve virar toast de erro.
+      if (isAbortError(err)) return
       // Sem isso, uma falha aqui (rede, RPC, etc) passava batido: o dashboard ficava com
       // as métricas zeradas (estado inicial) pra sempre, sem nenhum aviso — parecia "produto
       // não vinculado" quando na verdade era um erro silencioso de carregamento.
@@ -727,7 +750,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       setTimeout(() => setErrorToast(null), 8000)
       throw err
     } finally {
-      setLoading(false)
+      // Só mexe no loading se esta ainda for a busca vigente — senão uma busca cancelada
+      // que só termina de desenrolar depois poderia apagar o spinner da busca nova.
+      if (fetchAbortRef.current === controller) setLoading(false)
     }
   }, [projectId, period, customDateRange, filterRowsByOfferSelection])
 
@@ -736,6 +761,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       // Erro já tratado (log + toast) dentro de fetchVendas — aqui só evita um
       // unhandled promise rejection silencioso no carregamento inicial da página.
     })
+    // Ao desmontar (ex: trocar de projeto, que remonta com uma key nova) ou antes de
+    // rodar de novo, cancela a busca em voo em vez de deixá-la terminar sozinha
+    // consumindo conexão/tempo de Postgres à toa.
+    return () => fetchAbortRef.current?.abort()
   }, [fetchVendas])
 
   const custosRequestIdRef = useRef(0)

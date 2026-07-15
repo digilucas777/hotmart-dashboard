@@ -9,12 +9,14 @@ import type { WidgetDataSource } from './types'
 // e pro anterior.
 export type SummaryRow = { status: string; moeda: string; cnt: number; total: number }
 
-export async function fetchVendasSummary(projetoId: string, from: Date, to: Date): Promise<SummaryRow[]> {
-  const { data, error } = await supabase.rpc('get_vendas_summary', {
+export async function fetchVendasSummary(projetoId: string, from: Date, to: Date, signal?: AbortSignal): Promise<SummaryRow[]> {
+  let query = supabase.rpc('get_vendas_summary', {
     p_projeto_id: projetoId,
     p_from: from.toISOString(),
     p_to: to.toISOString(),
   })
+  if (signal) query = query.abortSignal(signal)
+  const { data, error } = await query
   if (error) throw error
   return (data ?? []) as SummaryRow[]
 }
