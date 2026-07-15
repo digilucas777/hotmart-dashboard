@@ -604,10 +604,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       // Cache hit: pula as 2 queries sequenciais de configuração de produto a cada troca de período
       let config = hotmartCacheRef.current
       if (!config) {
-        const { data: pp } = await supabase
+        const { data: pp, error: ppError } = await supabase
           .from('projeto_produtos')
           .select('produto_id, todas_ofertas')
           .eq('projeto_id', projectId)
+        if (ppError) throw ppError
 
         const productLinks = (pp ?? []) as ProjetoProdutoLink[]
         const produtoIds = productLinks.map(r => r.produto_id)
@@ -629,6 +630,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             .select('produto_id, oferta_codigo, oferta_nome, oferta_preco, oferta_moeda')
             .eq('projeto_id', projectId),
         ])
+        if (prodsRes.error) throw prodsRes.error
+        if (offersRes.error) throw offersRes.error
 
         const products = (prodsRes.data ?? []) as { id: string; hotmart_id: string }[]
         const hotmartIds = products.map(r => r.hotmart_id)
@@ -647,13 +650,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         hotmartCacheRef.current = config
 
         // recentVendas não depende do período — busca apenas na primeira carga e após refresh
-        const { data: recentData } = await supabase
+        const { data: recentData, error: recentError } = await supabase
           .from('vendas')
           .select(VENDA_COLUMNS)
           .in('hotmart_produto_id', hotmartIds)
           .eq('status', 'approved')
           .order('data_venda', { ascending: false })
           .limit(80)
+        if (recentError) throw recentError
         setRecentVendas(
           filterRowsByOfferSelection(
             (recentData ?? []) as Venda[], products, productLinks, offerLinks,
@@ -678,7 +682,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         const all: Venda[] = []
         let offset = 0
         while (true) {
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from('vendas')
             .select(columns)
             .in('hotmart_produto_id', hotmartIds)
@@ -686,6 +690,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             .lt('data_venda', toISO)
             .order('data_venda', { ascending: false })
             .range(offset, offset + PAGE_SIZE - 1)
+          // Sem isso, uma página que estoura o statement_timeout (data: null, error setado)
+          // era tratada igual a "acabaram as páginas" — o dashboard zerava/mostrava dados
+          // parciais em silêncio em vez de cair no catch e mostrar o erro.
+          if (error) throw error
           if (!data || data.length === 0) break
           all.push(...(data as unknown as Venda[]))
           if (data.length < PAGE_SIZE) break
