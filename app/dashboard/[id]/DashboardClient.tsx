@@ -420,6 +420,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [exchangeRate, setExchangeRate] = useState(5.85)
   const [theme, setTheme] = useState<DashboardTheme>('dark')
   const [loading, setLoading] = useState(true)
+  // Métricas (via get_vendas_summary) carregam rápido e usam `loading`. As vendas cruas
+  // (tabela, gráficos por dia/produto, combinado) são bem mais pesadas de buscar — em vez
+  // de travar o dashboard inteiro nelas, elas atualizam sozinhas com esse loading próprio.
+  const [vendasLoading, setVendasLoading] = useState(true)
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null)
   const [nowTick, setNowTick] = useState(() => Date.now())
 
@@ -616,9 +620,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     fetchAbortRef.current = controller
 
     setLoading(true)
+    let config = hotmartCacheRef.current
+    const { from, to } = getPeriodRange(period, customDateRange)
+    const previousRange = getPreviousPeriodRange(period, customDateRange)
+
     try {
       // Cache hit: pula as 2 queries sequenciais de configuração de produto a cada troca de período
-      let config = hotmartCacheRef.current
       if (!config) {
         const { data: pp, error: ppError } = await supabase
           .from('projeto_produtos')
@@ -636,6 +643,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           setSummaryPrevious([])
           setRecentVendas([])
           setCombinedVendas([])
+          setVendasLoading(false)
           return
         }
 
@@ -661,6 +669,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           setSummaryPrevious([])
           setRecentVendas([])
           setCombinedVendas([])
+          setVendasLoading(false)
           return
         }
 
@@ -684,11 +693,43 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         )
       }
 
-      const { hotmartIds, products, productLinks, offerLinks } = config
+      // Fase rápida: só o resumo agregado (get_vendas_summary, no máx. ~14 linhas) — é o que
+      // alimenta os cards de métrica (faturamento, lucro, ROAS etc.) e libera o `loading`
+      // geral. As vendas cruas (tabela, gráficos, combinado) ficam pra fase lenta, abaixo,
+      // que não bloqueia isso aqui.
+      const [summaryCurrentRows, summaryPreviousRows] = await Promise.all([
+        fetchVendasSummary(projectId, from, to, controller.signal),
+        fetchVendasSummary(projectId, previousRange.from, previousRange.to, controller.signal),
+      ])
+      setSummaryCurrent(summaryCurrentRows)
+      setSummaryPrevious(summaryPreviousRows)
+      setLastUpdatedAt(new Date())
+    } catch (err) {
+      // Uma busca cancelada porque outra mais nova começou (troca de projeto/período,
+      // refresh) não é uma falha real — não deve virar toast de erro.
+      if (isAbortError(err)) return
+      // Sem isso, uma falha aqui (rede, RPC, etc) passava batido: o dashboard ficava com
+      // as métricas zeradas (estado inicial) pra sempre, sem nenhum aviso — parecia "produto
+      // não vinculado" quando na verdade era um erro silencioso de carregamento.
+      console.error('[fetchVendas] falha ao carregar vendas:', err)
+      setErrorToast('Não foi possível carregar os dados de vendas. Tente atualizar novamente.')
+      setTimeout(() => setErrorToast(null), 8000)
+      throw err
+    } finally {
+      // Só mexe no loading se esta ainda for a busca vigente — senão uma busca cancelada
+      // que só termina de desenrolar depois poderia apagar o spinner da busca nova.
+      if (fetchAbortRef.current === controller) setLoading(false)
+    }
 
-      const { from, to } = getPeriodRange(period, customDateRange)
-      const previousRange = getPreviousPeriodRange(period, customDateRange)
-
+    // Fase lenta: vendas cruas (tabela, gráficos por dia/produto/país, gráfico combinado) —
+    // roda depois de as métricas já estarem na tela, sem travar mais nada. Um erro aqui (ex:
+    // o mesmo statement_timeout que às vezes acontece sob carga) não mostra o toast vermelho
+    // — as métricas principais já carregaram certas acima; só loga e mantém os dados
+    // anteriores até a próxima atualização, em vez de derrubar o dashboard inteiro.
+    if (!config) return
+    const { hotmartIds, products, productLinks, offerLinks } = config
+    setVendasLoading(true)
+    try {
       const now = new Date()
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
       const thirtyDays = new Date(todayStart.getTime() - 29 * 86_400_000)
@@ -711,8 +752,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             .range(offset, offset + PAGE_SIZE - 1)
             .abortSignal(controller.signal)
           // Sem isso, uma página que estoura o statement_timeout (data: null, error setado)
-          // era tratada igual a "acabaram as páginas" — o dashboard zerava/mostrava dados
-          // parciais em silêncio em vez de cair no catch e mostrar o erro.
+          // era tratada igual a "acabaram as páginas" — devolvia dados parciais em silêncio.
           if (error) throw error
           if (!data || data.length === 0) break
           all.push(...(data as unknown as Venda[]))
@@ -722,37 +762,17 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         return all
       }
 
-      // O período anterior não precisa mais de vendas cruas — só alimentava o cálculo de
-      // "vs período anterior" dos widgets de métrica, que agora usa o agregado de
-      // get_vendas_summary (poucas linhas, tamanho fixo) em vez de baixar tudo pra somar em JS.
-      const [currentData, combinedData, summaryCurrentRows, summaryPreviousRows] = await Promise.all([
+      const [currentData, combinedData] = await Promise.all([
         fetchAllForPeriod(from.toISOString(), to.toISOString(), VENDA_COLUMNS),
         fetchAllForPeriod(combinedFrom.toISOString(), new Date(todayStart.getTime() + 86_400_000).toISOString(), COMBINED_COLUMNS),
-        fetchVendasSummary(projectId, from, to, controller.signal),
-        fetchVendasSummary(projectId, previousRange.from, previousRange.to, controller.signal),
       ])
-
-      const currentFiltered = filterRowsByOfferSelection(currentData, products, productLinks, offerLinks)
-      setVendas(currentFiltered)
+      setVendas(filterRowsByOfferSelection(currentData, products, productLinks, offerLinks))
       setCombinedVendas(filterRowsByOfferSelection(combinedData, products, productLinks, offerLinks))
-      setSummaryCurrent(summaryCurrentRows)
-      setSummaryPrevious(summaryPreviousRows)
-      setLastUpdatedAt(new Date())
     } catch (err) {
-      // Uma busca cancelada porque outra mais nova começou (troca de projeto/período,
-      // refresh) não é uma falha real — não deve virar toast de erro.
       if (isAbortError(err)) return
-      // Sem isso, uma falha aqui (rede, RPC, etc) passava batido: o dashboard ficava com
-      // as métricas zeradas (estado inicial) pra sempre, sem nenhum aviso — parecia "produto
-      // não vinculado" quando na verdade era um erro silencioso de carregamento.
-      console.error('[fetchVendas] falha ao carregar vendas:', err)
-      setErrorToast('Não foi possível carregar os dados de vendas. Tente atualizar novamente.')
-      setTimeout(() => setErrorToast(null), 8000)
-      throw err
+      console.error('[fetchVendas] falha ao carregar vendas cruas (tabela/gráficos):', err)
     } finally {
-      // Só mexe no loading se esta ainda for a busca vigente — senão uma busca cancelada
-      // que só termina de desenrolar depois poderia apagar o spinner da busca nova.
-      if (fetchAbortRef.current === controller) setLoading(false)
+      if (fetchAbortRef.current === controller) setVendasLoading(false)
     }
   }, [projectId, period, customDateRange, filterRowsByOfferSelection])
 
@@ -2035,6 +2055,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             custoUSD={custoManualTotalUSD}
             customRange={customDateRange}
             loading={loading}
+            vendasLoading={vendasLoading}
             selectedWidgetIds={selectedWidgetIds}
             onSelect={(id, multi) => {
               if (multi) {
@@ -2091,8 +2112,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             </div>
             <div className="mt-3 border-t border-white/[0.06] pt-2.5">
               <h3 className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-muted)]">Insights automáticos</h3>
-              <div className={`space-y-1.5 transition-opacity duration-300 ${loading ? 'pointer-events-none opacity-35' : ''}`}>
-                {loading
+              <div className={`space-y-1.5 transition-opacity duration-300 ${vendasLoading ? 'pointer-events-none opacity-35' : ''}`}>
+                {vendasLoading
                   ? Array.from({ length: 3 }).map((_, i) => (
                       <div key={i} className="h-8 animate-pulse rounded-lg bg-white/[0.04]" />
                     ))
@@ -2106,8 +2127,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             </div>
             <div className="mt-3 border-t border-white/[0.06] pt-2.5">
               <h3 className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[var(--dash-muted)]">Mapa de países</h3>
-              <div className={`space-y-1.5 transition-opacity duration-300 ${loading ? 'pointer-events-none opacity-35' : ''}`}>
-                {loading
+              <div className={`space-y-1.5 transition-opacity duration-300 ${vendasLoading ? 'pointer-events-none opacity-35' : ''}`}>
+                {vendasLoading
                   ? Array.from({ length: 4 }).map((_, i) => (
                       <div key={i} className="h-10 animate-pulse rounded-lg bg-white/[0.04]" />
                     ))

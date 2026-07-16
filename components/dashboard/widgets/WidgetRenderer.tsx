@@ -4,7 +4,7 @@ import { memo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Copy, Pencil, Trash2 } from 'lucide-react'
 import { computeWidgetData, formatPeriodComparisonLabel, getValueFormat } from '@/lib/utils'
-import { computeComparableFromSummary, type SummaryRow } from '@/lib/vendas-aggregation'
+import { computeComparableFromSummary, computeWidgetDataFromSummary, type SummaryRow } from '@/lib/vendas-aggregation'
 import type { Period, Venda, WidgetConfig } from '@/lib/types'
 import { SalesTable } from '@/components/dashboard/SalesTable'
 import { computeMetaWidgetData } from '@/lib/meta-ads-mock'
@@ -67,6 +67,7 @@ function WidgetRendererBase({
   customRange,
   editMode,
   loading,
+  vendasLoading,
   selected,
   linkedMetaAccountId,
   metaInsights,
@@ -90,6 +91,10 @@ function WidgetRendererBase({
   customRange?: { from: Date; to: Date }
   editMode: boolean
   loading?: boolean
+  // Widgets de gráfico/tabela/combinado dependem de `vendas`/`combinedVendas` (busca pesada,
+  // desacoplada das métricas) — usam esse loading próprio em vez do `loading` geral, que hoje
+  // só reflete a busca rápida do resumo agregado.
+  vendasLoading?: boolean
   selected: boolean
   linkedMetaAccountId?: string | null
   metaInsights?: MetaInsightsRaw | null
@@ -147,7 +152,13 @@ function WidgetRendererBase({
         }
         return mock
       })()
-    : computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, effectiveCusto, effectiveCustoUSD, customRange)
+    // Widgets de métrica calculam o valor principal a partir do resumo agregado (rápido,
+    // já chega antes das vendas cruas) quando disponível — só cai pra computeWidgetData
+    // (array bruto) se o data_source não for coberto ou o resumo ainda não tiver chegado.
+    : config.type === 'metric' && summaryCurrent
+      ? (computeWidgetDataFromSummary(summaryCurrent, config.data_source, exchangeRate, effectiveCusto, effectiveCustoUSD)
+        ?? computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, effectiveCusto, effectiveCustoUSD, customRange))
+      : computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, effectiveCusto, effectiveCustoUSD, customRange)
 
   const isBRL = !isMetaWidget && getValueFormat(config.data_source) === 'brl'
   const comparison = !isMetaWidget && data.kind === 'metric' && summaryCurrent && summaryPrevious
@@ -160,6 +171,11 @@ function WidgetRendererBase({
         return `${pct > 0 ? '↑' : '↓'} ${pct > 0 ? '+' : ''}${pct.toFixed(0)}% vs ${formatPeriodComparisonLabel(period)}`
       })()
     : null
+
+  // Gráfico/tabela/combinado dependem da busca pesada de vendas cruas — usam o loading
+  // dela em vez do geral, que agora só reflete a busca rápida do resumo (métrica/meta).
+  const dependsOnRawVendas = config.type === 'line' || config.type === 'bar' || config.type === 'pie' || config.type === 'combined' || config.type === 'table'
+  const effectiveLoading = dependsOnRawVendas ? (vendasLoading ?? loading) : loading
 
   const chartHeight = Math.max(120, (config.row_span ?? 12) * GRID_ROW_HEIGHT - GRID_ITEM_PADDING * 2 - 80)
 
@@ -247,7 +263,7 @@ function WidgetRendererBase({
         </>
       )}
 
-      {loading && (
+      {effectiveLoading && (
         <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-2xl bg-black/30 backdrop-blur-[1px]">
           <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/15 border-t-white/50" />
         </div>
@@ -350,6 +366,7 @@ export const WidgetRenderer = memo(WidgetRendererBase, (prev, next) =>
   prev.customRange === next.customRange &&
   prev.editMode === next.editMode &&
   prev.loading === next.loading &&
+  prev.vendasLoading === next.vendasLoading &&
   prev.selected === next.selected &&
   prev.linkedMetaAccountId === next.linkedMetaAccountId &&
   prev.metaInsights === next.metaInsights &&

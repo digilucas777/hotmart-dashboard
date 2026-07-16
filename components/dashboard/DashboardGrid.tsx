@@ -64,6 +64,7 @@ type Props = {
   custoUSD?: number
   customRange?: { from: Date; to: Date }
   loading: boolean
+  vendasLoading: boolean
   selectedWidgetIds: Set<string>
   onSelect: (id: string, multi?: boolean) => void
   onDelete: (id: string) => void
@@ -91,6 +92,7 @@ export function DashboardGrid({
   custoUSD = 0,
   customRange,
   loading,
+  vendasLoading,
   selectedWidgetIds,
   onSelect,
   onDelete,
@@ -171,6 +173,7 @@ export function DashboardGrid({
               customRange={customRange}
               editMode={isEditing && !isMobile}
               loading={loading}
+              vendasLoading={vendasLoading}
               selected={selectedWidgetIds.has(w.id)}
               onSelect={onSelect}
               onDelete={onDelete}
