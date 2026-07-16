@@ -24,6 +24,11 @@ const STATUS_OPTIONS = [
 export default function VendasPage() {
   const router = useRouter()
   const [allowed, setAllowed] = useState<boolean | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+  // Vendas de todo projeto que o usuário tem acesso ao dashboard (pode_visualizar) — mesmo
+  // critério usado em /projects e já aplicado pelo RLS de `vendas`. Só usado pra não-admin;
+  // admin não tem restrição (null).
+  const [allowedHotmartIds, setAllowedHotmartIds] = useState<string[]>([])
   const [vendas, setVendas] = useState<Venda[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [loading, setLoading] = useState(true)
@@ -54,14 +59,32 @@ export default function VendasPage() {
         .select('role')
         .eq('id', user.id)
         .maybeSingle()
-      if (profile?.role === 'admin') { setAllowed(true); return }
+      if (profile?.role === 'admin') { setIsAdmin(true); setAllowed(true); return }
+
+      // Acesso à aba = acesso a pelo menos um projeto (pode_visualizar) — o mesmo critério
+      // usado em /projects e pelo RLS de `vendas`. Resolve também a lista de produtos desses
+      // projetos, pra escopar a busca de vendas explicitamente (em vez de confiar só no RLS).
       const { data: perms } = await supabase
         .from('user_dashboard_permissions')
-        .select('pode_ver_vendas')
+        .select('projeto_id')
         .eq('user_id', user.id)
-        .eq('pode_ver_vendas', true)
-        .limit(1)
-      if ((perms ?? []).length === 0) { router.push('/projects'); return }
+        .eq('pode_visualizar', true)
+      const projetoIds = (perms ?? []).map((r: { projeto_id: string }) => r.projeto_id)
+      if (projetoIds.length === 0) { router.push('/projects'); return }
+
+      const { data: pp } = await supabase
+        .from('projeto_produtos')
+        .select('produto_id')
+        .in('projeto_id', projetoIds)
+      const produtoIds = Array.from(new Set((pp ?? []).map((r: { produto_id: string }) => r.produto_id)))
+
+      if (produtoIds.length > 0) {
+        const { data: prods } = await supabase
+          .from('produtos')
+          .select('hotmart_id')
+          .in('id', produtoIds)
+        setAllowedHotmartIds((prods ?? []).map((r: { hotmart_id: string }) => r.hotmart_id))
+      }
       setAllowed(true)
     }
     void checkAccess()
@@ -92,17 +115,34 @@ export default function VendasPage() {
   }, [period, customDateRange])
 
   useEffect(() => {
-    supabase
-      .from('produtos')
-      .select('*')
-      .order('nome')
-      .then(({ data }) => setProdutos((data ?? []) as Produto[]))
-  }, [])
+    if (allowed !== true) return
+    // Não-admin só vê no filtro os produtos dos projetos que tem acesso — senão o dropdown
+    // "Produto" expõe nomes de produtos de outros donos/gestores sem nenhuma venda visível.
+    // Um array vazio em .in() já devolve zero linhas, então não precisa de um caso especial.
+    let query = supabase.from('produtos').select('*').order('nome')
+    if (!isAdmin) query = query.in('hotmart_id', allowedHotmartIds)
+    query.then(({ data }) => setProdutos((data ?? []) as Produto[]))
+  }, [allowed, isAdmin, allowedHotmartIds])
 
   const fetchVendas = useCallback(async () => {
     setLoading(true)
     try {
       const { from, to } = getPeriodRange(period, customDateRange)
+
+      // Escopo explícito por projeto acessível (não-admin) — em vez de confiar só no RLS,
+      // igual ao padrão já usado em DashboardClient.tsx. Combina com o filtro de produto
+      // escolhido no próprio filtro (interseção: precisa satisfazer os dois).
+      let scopedHotmartIds: string[] | null = isAdmin ? null : allowedHotmartIds
+      if (produtoFilter.length > 0) {
+        const selected = produtos.filter(p => produtoFilter.includes(p.id)).map(p => p.hotmart_id)
+        scopedHotmartIds = scopedHotmartIds ? scopedHotmartIds.filter(id => selected.includes(id)) : selected
+      }
+
+      if (scopedHotmartIds !== null && scopedHotmartIds.length === 0) {
+        setVendas([])
+        setLastUpdatedAt(new Date())
+        return
+      }
 
       let query = supabase
         .from('vendas')
@@ -111,23 +151,20 @@ export default function VendasPage() {
         .gte('data_venda', from.toISOString())
         .lt('data_venda', to.toISOString())
 
-      if (produtoFilter.length > 0) {
-        const hotmartIds = produtos
-          .filter(p => produtoFilter.includes(p.id))
-          .map(p => p.hotmart_id)
-        if (hotmartIds.length > 0) query = query.in('hotmart_produto_id', hotmartIds)
-      }
-
+      if (scopedHotmartIds !== null) query = query.in('hotmart_produto_id', scopedHotmartIds)
       if (statusFilter.length > 0) query = query.in('status', statusFilter)
       if (origemFilter) query = query.ilike('origem', `%${origemFilter}%`)
 
-      const { data } = await query
+      const { data, error } = await query
+      if (error) throw error
       setVendas((data ?? []) as Venda[])
       setLastUpdatedAt(new Date())
+    } catch (err) {
+      console.error('[VendasPage] falha ao carregar vendas:', err)
     } finally {
       setLoading(false)
     }
-  }, [period, customDateRange, produtoFilter, statusFilter, origemFilter, produtos])
+  }, [period, customDateRange, produtoFilter, statusFilter, origemFilter, produtos, isAdmin, allowedHotmartIds])
 
   useEffect(() => {
     fetchVendas()
