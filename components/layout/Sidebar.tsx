@@ -55,13 +55,14 @@ export function Sidebar() {
         .maybeSingle()
       const admin = profile?.role === 'admin'
       if (admin) { setIsAdmin(true); setCanSeeVendas(true); return }
-      // Mesmo critério do /vendas: acesso à aba = ter acesso a pelo menos um projeto
-      // (pode_visualizar), não o checkbox separado pode_ver_vendas.
+      // Mesmo critério do /vendas: precisa ter acesso ao dashboard (pode_visualizar) E o
+      // checkbox "Ver aba Vendas" marcado (pode_ver_vendas) em pelo menos um projeto.
       const { data: perms } = await supabase
         .from('user_dashboard_permissions')
         .select('pode_visualizar')
         .eq('user_id', user.id)
         .eq('pode_visualizar', true)
+        .eq('pode_ver_vendas', true)
         .limit(1)
       setCanSeeVendas((perms ?? []).length > 0)
     })

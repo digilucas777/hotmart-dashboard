@@ -61,14 +61,17 @@ export default function VendasPage() {
         .maybeSingle()
       if (profile?.role === 'admin') { setIsAdmin(true); setAllowed(true); return }
 
-      // Acesso à aba = acesso a pelo menos um projeto (pode_visualizar) — o mesmo critério
-      // usado em /projects e pelo RLS de `vendas`. Resolve também a lista de produtos desses
-      // projetos, pra escopar a busca de vendas explicitamente (em vez de confiar só no RLS).
+      // Acesso à aba = acesso ao dashboard do projeto (pode_visualizar) E o checkbox
+      // "Ver aba Vendas" marcado nesse mesmo projeto (pode_ver_vendas) — as duas coisas
+      // precisam estar marcadas pra aquele projeto específico aparecer aqui. Resolve também
+      // a lista de produtos desses projetos, pra escopar a busca de vendas explicitamente
+      // (em vez de confiar só no RLS).
       const { data: perms } = await supabase
         .from('user_dashboard_permissions')
         .select('projeto_id')
         .eq('user_id', user.id)
         .eq('pode_visualizar', true)
+        .eq('pode_ver_vendas', true)
       const projetoIds = (perms ?? []).map((r: { projeto_id: string }) => r.projeto_id)
       if (projetoIds.length === 0) { router.push('/projects'); return }
 
