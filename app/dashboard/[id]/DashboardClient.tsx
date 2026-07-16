@@ -722,58 +722,60 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
 
     // Fase lenta: vendas cruas (tabela, gráficos por dia/produto/país, gráfico combinado) —
-    // roda depois de as métricas já estarem na tela, sem travar mais nada. Um erro aqui (ex:
-    // o mesmo statement_timeout que às vezes acontece sob carga) não mostra o toast vermelho
-    // — as métricas principais já carregaram certas acima; só loga e mantém os dados
-    // anteriores até a próxima atualização, em vez de derrubar o dashboard inteiro.
+    // roda em segundo plano, sem travar mais nada — nem os cards de métrica (já mostrados
+    // acima) nem quem chamou fetchVendas (handleRefresh esperava isso tudo antes, e por
+    // isso o botão "Atualizar" ficava preso no overlay de tela cheia até essa busca pesada
+    // terminar). Por isso é disparada com `void` em vez de `await`ada aqui.
     if (!config) return
-    const { hotmartIds, products, productLinks, offerLinks } = config
-    setVendasLoading(true)
-    try {
-      const now = new Date()
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      const thirtyDays = new Date(todayStart.getTime() - 29 * 86_400_000)
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-      const combinedFrom = thirtyDays < monthStart ? thirtyDays : monthStart
+    const cfg = config
+    void (async () => {
+      setVendasLoading(true)
+      try {
+        const now = new Date()
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        const thirtyDays = new Date(todayStart.getTime() - 29 * 86_400_000)
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+        const combinedFrom = thirtyDays < monthStart ? thirtyDays : monthStart
 
-      // Busca paginada: PostgREST limita a 1000 rows/req independente do .limit() do cliente.
-      const fetchAllForPeriod = async (fromISO: string, toISO: string, columns: string): Promise<Venda[]> => {
-        const PAGE_SIZE = 1000
-        const all: Venda[] = []
-        let offset = 0
-        while (true) {
-          const { data, error } = await supabase
-            .from('vendas')
-            .select(columns)
-            .in('hotmart_produto_id', hotmartIds)
-            .gte('data_venda', fromISO)
-            .lt('data_venda', toISO)
-            .order('data_venda', { ascending: false })
-            .range(offset, offset + PAGE_SIZE - 1)
-            .abortSignal(controller.signal)
-          // Sem isso, uma página que estoura o statement_timeout (data: null, error setado)
-          // era tratada igual a "acabaram as páginas" — devolvia dados parciais em silêncio.
-          if (error) throw error
-          if (!data || data.length === 0) break
-          all.push(...(data as unknown as Venda[]))
-          if (data.length < PAGE_SIZE) break
-          offset += PAGE_SIZE
+        // Busca paginada: PostgREST limita a 1000 rows/req independente do .limit() do cliente.
+        const fetchAllForPeriod = async (fromISO: string, toISO: string, columns: string): Promise<Venda[]> => {
+          const PAGE_SIZE = 1000
+          const all: Venda[] = []
+          let offset = 0
+          while (true) {
+            const { data, error } = await supabase
+              .from('vendas')
+              .select(columns)
+              .in('hotmart_produto_id', cfg.hotmartIds)
+              .gte('data_venda', fromISO)
+              .lt('data_venda', toISO)
+              .order('data_venda', { ascending: false })
+              .range(offset, offset + PAGE_SIZE - 1)
+              .abortSignal(controller.signal)
+            // Sem isso, uma página que estoura o statement_timeout (data: null, error setado)
+            // era tratada igual a "acabaram as páginas" — devolvia dados parciais em silêncio.
+            if (error) throw error
+            if (!data || data.length === 0) break
+            all.push(...(data as unknown as Venda[]))
+            if (data.length < PAGE_SIZE) break
+            offset += PAGE_SIZE
+          }
+          return all
         }
-        return all
-      }
 
-      const [currentData, combinedData] = await Promise.all([
-        fetchAllForPeriod(from.toISOString(), to.toISOString(), VENDA_COLUMNS),
-        fetchAllForPeriod(combinedFrom.toISOString(), new Date(todayStart.getTime() + 86_400_000).toISOString(), COMBINED_COLUMNS),
-      ])
-      setVendas(filterRowsByOfferSelection(currentData, products, productLinks, offerLinks))
-      setCombinedVendas(filterRowsByOfferSelection(combinedData, products, productLinks, offerLinks))
-    } catch (err) {
-      if (isAbortError(err)) return
-      console.error('[fetchVendas] falha ao carregar vendas cruas (tabela/gráficos):', err)
-    } finally {
-      if (fetchAbortRef.current === controller) setVendasLoading(false)
-    }
+        const [currentData, combinedData] = await Promise.all([
+          fetchAllForPeriod(from.toISOString(), to.toISOString(), VENDA_COLUMNS),
+          fetchAllForPeriod(combinedFrom.toISOString(), new Date(todayStart.getTime() + 86_400_000).toISOString(), COMBINED_COLUMNS),
+        ])
+        setVendas(filterRowsByOfferSelection(currentData, cfg.products, cfg.productLinks, cfg.offerLinks))
+        setCombinedVendas(filterRowsByOfferSelection(combinedData, cfg.products, cfg.productLinks, cfg.offerLinks))
+      } catch (err) {
+        if (isAbortError(err)) return
+        console.error('[fetchVendas] falha ao carregar vendas cruas (tabela/gráficos):', err)
+      } finally {
+        if (fetchAbortRef.current === controller) setVendasLoading(false)
+      }
+    })()
   }, [projectId, period, customDateRange, filterRowsByOfferSelection])
 
   useEffect(() => {
