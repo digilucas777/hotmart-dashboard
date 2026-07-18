@@ -497,6 +497,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [custoParaExcluir, setCustoParaExcluir] = useState<CustoManual | null>(null)
   const [custoSalvoOk, setCustoSalvoOk] = useState(false)
   const [custoActionError, setCustoActionError] = useState<string | null>(null)
+  // A primeira página vem em fetchCustosManuals (10 custos) — daí em diante, cada
+  // clique em "Carregar mais" busca 20 de cada vez, encostados no fim da lista atual.
+  const [custosHasMore, setCustosHasMore] = useState(false)
+  const [loadingMoreCustos, setLoadingMoreCustos] = useState(false)
 
   const [origensDisponiveis, setOrigensDisponiveis] = useState<string[]>([])
   const [origensFilter, setOrigensFilter] = useState<string[]>([])
@@ -810,14 +814,38 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         .select('*')
         .eq('projeto_id', projectId)
         .order('data', { ascending: false })
-        .limit(10),
+        .range(0, 9),
     ])
     // Uma resposta atrasada de um período antigo não pode sobrescrever
     // o resultado de um pedido mais novo que já chegou primeiro.
     if (requestId !== custosRequestIdRef.current) return
     setCustoManualRaw((periodRes.data ?? []) as { valor: number; moeda: string }[])
-    setCustoManualList((historyRes.data ?? []) as CustoManual[])
+    const history = (historyRes.data ?? []) as CustoManual[]
+    setCustoManualList(history)
+    setCustosHasMore(history.length === 10)
   }, [projectId, period, customDateRange])
+
+  const loadMoreCustos = useCallback(async () => {
+    const requestId = custosRequestIdRef.current
+    setLoadingMoreCustos(true)
+    try {
+      const offset = custoManualList.length
+      const { data } = await supabase
+        .from('custos_manuais')
+        .select('*')
+        .eq('projeto_id', projectId)
+        .order('data', { ascending: false })
+        .range(offset, offset + 19)
+      // Se o período/projeto trocou enquanto isso carregava, descarta — senão gruda
+      // custos de um período antigo na lista do período novo.
+      if (requestId !== custosRequestIdRef.current) return
+      const more = (data ?? []) as CustoManual[]
+      setCustoManualList(prev => [...prev, ...more])
+      setCustosHasMore(more.length === 20)
+    } finally {
+      setLoadingMoreCustos(false)
+    }
+  }, [projectId, custoManualList.length])
 
   useEffect(() => {
     void fetchCustosManuals()
@@ -2324,7 +2352,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           {/* Histórico */}
           {custoManualList.length > 0 && (
             <div className="border-t border-white/[0.06] pt-4">
-              <p className="mb-2 text-xs font-black uppercase tracking-wider text-[var(--dash-muted)]">Últimos 10 custos</p>
+              <p className="mb-2 text-xs font-black uppercase tracking-wider text-[var(--dash-muted)]">Custos cadastrados</p>
               <div className="max-h-56 overflow-y-auto">
                 <table className="w-full text-xs">
                   <thead>
@@ -2357,6 +2385,16 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                   </tbody>
                 </table>
               </div>
+              {custosHasMore && (
+                <button
+                  onClick={loadMoreCustos}
+                  disabled={loadingMoreCustos}
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold text-[var(--dash-muted)] transition-colors hover:bg-white/[0.04] hover:text-[var(--dash-text)] disabled:opacity-50"
+                >
+                  {loadingMoreCustos && <Spinner size={12} />}
+                  Carregar mais 20
+                </button>
+              )}
             </div>
           )}
         </div>
