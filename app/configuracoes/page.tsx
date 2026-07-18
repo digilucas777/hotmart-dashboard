@@ -112,6 +112,7 @@ export default function ConfiguracoesPage() {
   const [deactivatingPush, setDeactivatingPush] = useState(false)
   const [savingPrefs, setSavingPrefs] = useState(false)
   const [prefsSaved, setPrefsSaved] = useState(false)
+  const [prefsError, setPrefsError] = useState('')
 
   useEffect(() => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
@@ -266,18 +267,29 @@ export default function ConfiguracoesPage() {
   const saveNotifPrefs = async () => {
     setSavingPrefs(true)
     setPrefsSaved(false)
-    const preferences = notifProjetos.map(p => ({
-      projeto_id: p.id,
-      ...(notifPrefs[p.id] ?? DEFAULT_NOTIF_PREF),
-    }))
-    await fetch('/api/notifications/preferences', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ preferences }),
-    })
-    setSavingPrefs(false)
-    setPrefsSaved(true)
-    setTimeout(() => setPrefsSaved(false), 3000)
+    setPrefsError('')
+    try {
+      const preferences = notifProjetos.map(p => ({
+        projeto_id: p.id,
+        ...(notifPrefs[p.id] ?? DEFAULT_NOTIF_PREF),
+      }))
+      const res = await fetch('/api/notifications/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preferences }),
+      })
+      // Sem isso, uma falha aqui (rede, RLS, etc) passava batido: o botão mostrava
+      // "Salvo!" mesmo quando nada foi gravado, e o usuário só descobria ao recarregar
+      // a página e ver a caixa desmarcada de novo, achando que tinha marcado errado.
+      if (!res.ok) throw new Error(`status ${res.status}`)
+      setPrefsSaved(true)
+      setTimeout(() => setPrefsSaved(false), 3000)
+    } catch (err) {
+      console.error('[Configuracoes] falha ao salvar preferências de notificação:', err)
+      setPrefsError('Não foi possível salvar as preferências. Tente novamente.')
+    } finally {
+      setSavingPrefs(false)
+    }
   }
 
   const handleSave = async () => {
@@ -602,6 +614,12 @@ export default function ConfiguracoesPage() {
                       <span className="flex items-center gap-1 text-xs text-green-400">
                         <Check size={12} />
                         Preferências salvas com sucesso
+                      </span>
+                    )}
+                    {prefsError && (
+                      <span className="flex items-center gap-1 text-xs text-red-400">
+                        <AlertCircle size={12} />
+                        {prefsError}
                       </span>
                     )}
                   </div>
