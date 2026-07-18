@@ -11,6 +11,7 @@ import {
   Check,
   AlertCircle,
   Bell,
+  BellOff,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Projeto } from '@/lib/types'
@@ -108,6 +109,7 @@ export default function ConfiguracoesPage() {
     return isIos && !isStandalone
   })
   const [activatingPush, setActivatingPush] = useState(false)
+  const [deactivatingPush, setDeactivatingPush] = useState(false)
   const [savingPrefs, setSavingPrefs] = useState(false)
   const [prefsSaved, setPrefsSaved] = useState(false)
 
@@ -222,6 +224,32 @@ export default function ConfiguracoesPage() {
       )
     } finally {
       setActivatingPush(false)
+    }
+  }
+
+  // Permite "resetar" a inscrição sem precisar remover e readicionar o app à Tela de
+  // Início — útil quando a notificação parece ativada mas parou de chegar de verdade
+  // (ex: depois de uma atualização do iOS que corrompe a inscrição por trás sem avisar).
+  // Desativa e reativa de novo cria uma inscrição nova e limpa no navegador.
+  const deactivatePush = async () => {
+    setDeactivatingPush(true)
+    setPushError('')
+    try {
+      const registration = await navigator.serviceWorker.getRegistration('/sw.js')
+      const subscription = await registration?.pushManager.getSubscription()
+      if (subscription) {
+        await fetch('/api/notifications/unsubscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: subscription.endpoint }),
+        })
+        await subscription.unsubscribe()
+      }
+      setPushSubscribed(false)
+    } catch {
+      setPushError('Não foi possível desativar as notificações. Tente novamente.')
+    } finally {
+      setDeactivatingPush(false)
     }
   }
 
@@ -502,9 +530,15 @@ export default function ConfiguracoesPage() {
                   </div>
                 )}
                 {pushSubscribed ? (
-                  <div className="flex items-center gap-2 rounded-xl bg-green-500/10 px-3 py-2.5 text-xs text-green-400">
-                    <Check size={12} />
-                    Notificações ativadas neste dispositivo
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2 rounded-xl bg-green-500/10 px-3 py-2.5 text-xs text-green-400">
+                      <Check size={12} />
+                      Notificações ativadas neste dispositivo
+                    </div>
+                    <Button onClick={deactivatePush} disabled={deactivatingPush} size="sm" variant="outline">
+                      {deactivatingPush ? <Spinner size={14} /> : <BellOff size={14} />}
+                      Desativar
+                    </Button>
                   </div>
                 ) : pushPermission !== 'unsupported' && pushPermission !== 'denied' ? (
                   <Button onClick={activatePush} disabled={activatingPush} size="sm" variant="outline">
