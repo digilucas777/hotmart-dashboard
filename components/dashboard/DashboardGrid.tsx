@@ -124,12 +124,21 @@ export function DashboardGrid({
   const isMobile = currentBreakpoint === 'sm'
 
   const desktopLayout = widgets.map(widgetToLayout)
-  const mobileLayout = widgets.reduce<LayoutItem[]>((acc, w) => {
-    const h = mobileHeightForType(w.type)
-    const prevY = acc.length > 0 ? acc[acc.length - 1]!.y + acc[acc.length - 1]!.h : 0
-    acc.push({ i: w.id, x: 0, y: prevY, w: 2, h })
-    return acc
-  }, [])
+  // A pilha do mobile empilhava os cards na ordem "crua" do array (geralmente ordem de
+  // criação), não na posição visual do desktop (row_start/col_start) — por isso um card
+  // arrastado pro topo no PC podia continuar aparecendo mais abaixo no celular. Ordena
+  // primeiro por linha e depois por coluna (ordem de leitura) antes de empilhar.
+  const mobileLayout = [...widgets]
+    .sort((a, b) => {
+      const rowDiff = (a.row_start ?? 1) - (b.row_start ?? 1)
+      return rowDiff !== 0 ? rowDiff : (a.col_start ?? 1) - (b.col_start ?? 1)
+    })
+    .reduce<LayoutItem[]>((acc, w) => {
+      const h = mobileHeightForType(w.type)
+      const prevY = acc.length > 0 ? acc[acc.length - 1]!.y + acc[acc.length - 1]!.h : 0
+      acc.push({ i: w.id, x: 0, y: prevY, w: 2, h })
+      return acc
+    }, [])
 
   const layouts = { md: desktopLayout, sm: mobileLayout }
 
