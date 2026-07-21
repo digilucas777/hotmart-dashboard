@@ -373,7 +373,7 @@ function SortableDashboardOption({
       </div>
       <button
         onClick={onClick}
-        className={`flex flex-1 items-center gap-3 rounded-2xl py-3 pr-3 text-left transition-all ${
+        className={`flex min-w-0 flex-1 items-center gap-3 rounded-2xl py-3 pr-3 text-left transition-all ${
           active
             ? 'bg-gradient-to-r from-cyan-400/15 to-violet-500/15 text-[var(--dash-text)]'
             : 'text-[var(--dash-muted)] hover:bg-white/5 hover:text-[var(--dash-text)]'
@@ -1760,7 +1760,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                     </div>
                     <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={isAdmin ? handleDashboardDragEnd : () => {}} modifiers={[restrictToVerticalAxis]}>
                     <SortableContext items={dashboardOptions.map(p => p.id)} strategy={verticalListSortingStrategy}>
-                    <div className="max-h-80 space-y-1 overflow-y-auto pr-1">
+                    <div className="max-h-80 space-y-1 overflow-y-auto overflow-x-hidden pr-1">
                       {dashboardOptions.map(option => {
                         const active = option.id === projectId
                         return (

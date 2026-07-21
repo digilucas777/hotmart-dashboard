@@ -118,6 +118,7 @@ export type WidgetDataSource =
   | 'roas'
   | 'cpa'
   | 'commission'
+  | 'comissao_33'
   | 'combined_by_day'
   | 'top_produtos'
   | 'todos_produtos'

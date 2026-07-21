@@ -16,6 +16,7 @@ import {
   Puzzle,
   Sparkles,
   Check,
+  Percent,
 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -57,6 +58,13 @@ const PERSONALIZADO_ITEMS: {
     type: 'meta-metric',
     data_source: 'meta_roas_geral',
     icon: BarChart2,
+  },
+  {
+    label: 'Minha Comissão (33%)',
+    description: '33% do lucro (faturamento convertido menos investimento convertido) — mostra o total em USD embaixo',
+    type: 'metric',
+    data_source: 'comissao_33',
+    icon: Percent,
   },
 ]
 

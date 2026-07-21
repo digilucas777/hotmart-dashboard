@@ -27,6 +27,7 @@ const ICON_MAP: Partial<Record<WidgetDataSource, React.ElementType>> = {
   pending_count:   Clock,
   cancelled_count: AlertTriangle,
   commission:      Percent,
+  comissao_33:     Percent,
   lucro:           Landmark,
   lucro_usd:       TrendingUp,
   margem_lucro:    Percent,
@@ -47,6 +48,7 @@ const ACCENT_MAP: Partial<Record<WidgetDataSource, string>> = {
   pending_count:   '#facc15',
   cancelled_count: '#fb923c',
   commission:      '#6ee7b7',
+  comissao_33:     '#6ee7b7',
   lucro:           '#4ade80',
   lucro_usd:       '#4ade80',
   margem_lucro:    '#4ade80',
@@ -72,7 +74,7 @@ export function MetricWidget({
   numericValue?: number
 }) {
   const Icon = ICON_MAP[dataSource] ?? DollarSign
-  const isLucro = dataSource === 'lucro' || dataSource === 'lucro_usd'
+  const isLucro = dataSource === 'lucro' || dataSource === 'lucro_usd' || dataSource === 'comissao_33'
   const accent = (() => {
     if (isLucro && numericValue !== undefined) {
       if (numericValue < 0) return '#f87171'

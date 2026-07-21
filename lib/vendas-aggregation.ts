@@ -76,6 +76,8 @@ export function computeComparableFromSummary(
       return custoTotal > 0 && approved.cnt > 0 ? custoTotal / approved.cnt : null
     case 'commission':
       return totalConverted * 0.18
+    case 'comissao_33':
+      return (totalConverted - custoTotal) * 0.33
     default:
       return null
   }
@@ -179,6 +181,11 @@ export function computeWidgetDataFromSummary(
     case 'commission': {
       const commission = totalConverted * 0.18
       return { kind: 'metric', value: formatBRL(commission), subValue: `18% de ${formatBRL(totalConverted)}` }
+    }
+    case 'comissao_33': {
+      const comissao = (totalConverted - custoTotal) * 0.33
+      const comissaoUSD = exchangeRate > 0 ? comissao / exchangeRate : 0
+      return { kind: 'metric', value: formatBRL(comissao), subValue: formatUSD(comissaoUSD), numericValue: comissao }
     }
     default:
       return null

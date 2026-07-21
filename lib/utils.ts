@@ -370,6 +370,17 @@ export function computeWidgetData(
       }
     }
 
+    case 'comissao_33': {
+      const comissao = (totalConverted - custoTotal) * 0.33
+      const comissaoUSD = exchangeRate > 0 ? comissao / exchangeRate : 0
+      return {
+        kind: 'metric',
+        value: formatBRL(comissao),
+        subValue: formatUSD(comissaoUSD),
+        numericValue: comissao,
+      }
+    }
+
     case 'revenue_by_day': {
       const { from, to } = getPeriodRange(period, customRange)
       const isHourly = period === 'today' || period === 'yesterday' ||
@@ -590,6 +601,8 @@ export function computeComparableMetric(
       return custoTotal > 0 && approved.length > 0 ? custoTotal / approved.length : null
     case 'commission':
       return totalConverted * 0.18
+    case 'comissao_33':
+      return (totalConverted - custoTotal) * 0.33
     default:
       return null
   }
