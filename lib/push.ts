@@ -107,6 +107,7 @@ export function resolveNotifCategory(
 // retorna uma lista, nunca um único projeto.
 export async function resolveProjetos(
   hotmartProdutoId: string | null,
+  ofertaCodigo: string | null,
 ): Promise<{ id: string; nome: string }[]> {
   if (!hotmartProdutoId) return []
   const { data: produto } = await supabase
@@ -118,14 +119,39 @@ export async function resolveProjetos(
 
   const { data: links } = await supabase
     .from('projeto_produtos')
-    .select('projeto_id, projetos(nome)')
+    .select('projeto_id, todas_ofertas, projetos(nome)')
     .eq('produto_id', produto.id)
   if (!links || links.length === 0) return []
 
-  return (links as { projeto_id: string; projetos?: { nome?: string } | null }[]).map(link => ({
-    id: link.projeto_id,
-    nome: link.projetos?.nome ?? 'Dashboard',
-  }))
+  const rows = links as { projeto_id: string; todas_ofertas: boolean | null; projetos?: { nome?: string } | null }[]
+
+  // Um mesmo produto pode estar vinculado a vários projetos, cada um com sua
+  // própria seleção de ofertas (todas_ofertas=false + projeto_produto_ofertas)
+  // — mesma regra que o dashboard já aplica (filterRowsByOfferSelection, em
+  // DashboardClient.tsx). Sem isso, um projeto configurado pra só contar
+  // ofertas específicas recebia notificação de QUALQUER venda do produto,
+  // mesmo de ofertas que ele explicitamente não seleciona.
+  const restritos = rows.filter(r => r.todas_ofertas === false)
+  const ofertasPermitidas = new Map<string, Set<string>>()
+  if (restritos.length > 0) {
+    const { data: ofertas } = await supabase
+      .from('projeto_produto_ofertas')
+      .select('projeto_id, oferta_codigo')
+      .eq('produto_id', produto.id)
+      .in('projeto_id', restritos.map(r => r.projeto_id))
+    for (const o of (ofertas ?? []) as { projeto_id: string; oferta_codigo: string }[]) {
+      if (!ofertasPermitidas.has(o.projeto_id)) ofertasPermitidas.set(o.projeto_id, new Set())
+      ofertasPermitidas.get(o.projeto_id)!.add(o.oferta_codigo)
+    }
+  }
+
+  return rows
+    .filter(r => {
+      if (r.todas_ofertas !== false) return true
+      const permitidas = ofertasPermitidas.get(r.projeto_id)
+      return !!ofertaCodigo && !!permitidas?.has(ofertaCodigo)
+    })
+    .map(r => ({ id: r.projeto_id, nome: r.projetos?.nome ?? 'Dashboard' }))
 }
 
 export async function notifySale(params: {

@@ -319,7 +319,7 @@ export async function POST(req: NextRequest) {
     const sendNotification = (valorNotificado: number) => {
       if (!categoria || !hotmart_produto_id) return
       after(async () => {
-        const projetos = await resolveProjetos(hotmart_produto_id)
+        const projetos = await resolveProjetos(hotmart_produto_id, oferta_codigo)
         await Promise.all(projetos.map(projeto => notifySale({
           categoria,
           projetoId: projeto.id,
