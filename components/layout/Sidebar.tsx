@@ -13,6 +13,7 @@ import {
   LogOut,
   ShieldCheck,
   Radio,
+  Target,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
   { icon: ShoppingCart, label: 'Vendas', href: '/vendas' },
   { icon: FileText, label: 'Relatórios', href: '/relatorios' },
   { icon: Radio, label: 'Sites', href: '/sites' },
+  { icon: Target, label: 'Rastreamento', href: '/rastreamento' },
   { icon: Plug, label: 'Integrações', href: '/integracoes' },
   { icon: Settings, label: 'Configurações', href: '/configuracoes' },
 ]
