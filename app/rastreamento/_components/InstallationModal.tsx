@@ -32,7 +32,7 @@ function nextKey() {
 
 type PixelForm = { _key: string; id?: string; pixel_id: string; capi_token: string; hasToken: boolean; test_event_code: string }
 type DomainForm = { _key: string; id?: string; domain: string; tipo: TrackDomainTipo }
-type TriggerForm = { _key: string; id?: string; tipo: TrackTriggerTipo; meta_event: string; config: Record<string, unknown> }
+type TriggerForm = { _key: string; id?: string; tipo: TrackTriggerTipo; meta_event: string; config: Record<string, unknown>; ativo: boolean }
 
 function emptyPixel(): PixelForm {
   return { _key: nextKey(), pixel_id: '', capi_token: '', hasToken: false, test_event_code: '' }
@@ -41,12 +41,71 @@ function emptyDomain(tipo: TrackDomainTipo): DomainForm {
   return { _key: nextKey(), domain: '', tipo }
 }
 function emptyTrigger(): TriggerForm {
-  return { _key: nextKey(), tipo: 'click_link', meta_event: 'Lead', config: {} }
+  return { _key: nextKey(), tipo: 'click_link', meta_event: 'Lead', config: {}, ativo: true }
 }
 
 const inputClass = 'w-full rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 outline-none ring-1 ring-white/10 focus:ring-indigo-500/60'
 const inputStyle = { background: '#111120' }
 const labelClass = 'mb-1.5 block text-xs font-medium text-slate-500'
+
+function EventPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {META_EVENTS.map(ev => (
+        <button
+          key={ev}
+          type="button"
+          onClick={() => onChange(ev)}
+          className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+            value === ev ? 'bg-indigo-500 text-white' : 'text-slate-400 hover:bg-white/10'
+          }`}
+          style={value === ev ? undefined : { background: 'rgba(255,255,255,0.06)' }}
+        >
+          {ev}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function DomainList({ label, placeholder, items, onChange, help }: {
+  label: string
+  placeholder: string
+  items: DomainForm[]
+  onChange: (items: DomainForm[]) => void
+  help?: string
+}) {
+  return (
+    <div>
+      <label className={labelClass}>{label}</label>
+      <div className="space-y-2">
+        {items.map(d => (
+          <div key={d._key} className="flex gap-2">
+            <input
+              type="text"
+              value={d.domain}
+              onChange={e => onChange(items.map(x => (x._key === d._key ? { ...x, domain: e.target.value } : x)))}
+              placeholder={placeholder}
+              className={`${inputClass} flex-1`}
+              style={inputStyle}
+            />
+            <button
+              onClick={() => onChange(items.filter(x => x._key !== d._key))}
+              className="shrink-0 rounded-lg p-2 text-slate-500 hover:bg-red-500/15 hover:text-red-400"
+              title="Remover domínio"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button onClick={() => onChange([...items, emptyDomain(items[0]?.tipo ?? 'lp')])} className="mt-2 flex items-center gap-1.5 text-[11px] text-indigo-400 hover:text-indigo-300">
+        <Plus size={12} /> Adicionar domínio
+      </button>
+      {help && <p className="mt-1 text-[11px] text-slate-600">{help}</p>}
+    </div>
+  )
+}
 
 interface InstallationModalProps {
   open: boolean
@@ -61,7 +120,8 @@ export function InstallationModal({ open, installation, onClose, onSaved }: Inst
   const [cloudflareToken, setCloudflareToken] = useState('')
   const [hasCloudflareToken, setHasCloudflareToken] = useState(false)
   const [pixels, setPixels] = useState<PixelForm[]>([emptyPixel()])
-  const [domains, setDomains] = useState<DomainForm[]>([emptyDomain('lp')])
+  const [lpDomains, setLpDomains] = useState<DomainForm[]>([emptyDomain('lp')])
+  const [checkoutDomains, setCheckoutDomains] = useState<DomainForm[]>([])
   const [triggers, setTriggers] = useState<TriggerForm[]>([])
   const [webhookMetaEvent, setWebhookMetaEvent] = useState('Purchase')
   const [sessionEnrichment, setSessionEnrichment] = useState(false)
@@ -83,10 +143,13 @@ export function InstallationModal({ open, installation, onClose, onSaved }: Inst
             hasToken: !!p.capi_token_masked, test_event_code: p.test_event_code ?? '',
           }))
         : [emptyPixel()])
-      setDomains(installation.domains.length > 0
-        ? installation.domains.map(d => ({ _key: nextKey(), id: d.id, domain: d.domain, tipo: d.tipo }))
+      const lp = installation.domains.filter(d => d.tipo === 'lp')
+      const checkout = installation.domains.filter(d => d.tipo === 'checkout')
+      setLpDomains(lp.length > 0
+        ? lp.map(d => ({ _key: nextKey(), id: d.id, domain: d.domain, tipo: d.tipo }))
         : [emptyDomain('lp')])
-      setTriggers(installation.triggers.map(t => ({ _key: nextKey(), id: t.id, tipo: t.tipo, meta_event: t.meta_event, config: t.config })))
+      setCheckoutDomains(checkout.map(d => ({ _key: nextKey(), id: d.id, domain: d.domain, tipo: d.tipo })))
+      setTriggers(installation.triggers.map(t => ({ _key: nextKey(), id: t.id, tipo: t.tipo, meta_event: t.meta_event, config: t.config, ativo: t.ativo })))
       setWebhookMetaEvent(installation.webhook_meta_event)
       setSessionEnrichment(installation.session_enrichment_enabled)
       setSessionTtlDays(installation.session_ttl_days)
@@ -97,7 +160,8 @@ export function InstallationModal({ open, installation, onClose, onSaved }: Inst
       setCloudflareToken('')
       setHasCloudflareToken(false)
       setPixels([emptyPixel()])
-      setDomains([emptyDomain('lp')])
+      setLpDomains([emptyDomain('lp')])
+      setCheckoutDomains([])
       setTriggers([])
       setWebhookMetaEvent('Purchase')
       setSessionEnrichment(false)
@@ -110,9 +174,6 @@ export function InstallationModal({ open, installation, onClose, onSaved }: Inst
   function updatePixel(key: string, patch: Partial<PixelForm>) {
     setPixels(prev => prev.map(p => (p._key === key ? { ...p, ...patch } : p)))
   }
-  function updateDomain(key: string, patch: Partial<DomainForm>) {
-    setDomains(prev => prev.map(d => (d._key === key ? { ...d, ...patch } : d)))
-  }
   function updateTrigger(key: string, patch: Partial<TriggerForm>) {
     setTriggers(prev => prev.map(t => (t._key === key ? { ...t, ...patch } : t)))
   }
@@ -120,7 +181,10 @@ export function InstallationModal({ open, installation, onClose, onSaved }: Inst
   async function handleSave() {
     if (!nome.trim()) { setError('Dê um nome pra instalação.'); return }
     const validPixels = pixels.filter(p => p.pixel_id.trim())
-    const validDomains = domains.filter(d => d.domain.trim())
+    const validDomains = [
+      ...lpDomains.filter(d => d.domain.trim()).map(d => ({ ...d, tipo: 'lp' as const })),
+      ...checkoutDomains.filter(d => d.domain.trim()).map(d => ({ ...d, tipo: 'checkout' as const })),
+    ]
 
     setSaving(true)
     setError(null)
@@ -144,7 +208,7 @@ export function InstallationModal({ open, installation, onClose, onSaved }: Inst
             test_event_code: p.test_event_code.trim() || null,
           })),
           domains: validDomains.map(d => ({ id: d.id, domain: d.domain.trim(), tipo: d.tipo })),
-          triggers: triggers.map(t => ({ id: t.id, tipo: t.tipo, meta_event: t.meta_event, config: t.config })),
+          triggers: triggers.map(t => ({ id: t.id, tipo: t.tipo, meta_event: t.meta_event, config: t.config, ativo: t.ativo })),
         }),
       })
       const json = await res.json().catch(() => ({}))
@@ -241,42 +305,20 @@ export function InstallationModal({ open, installation, onClose, onSaved }: Inst
             </button>
           </div>
 
-          <div>
-            <label className={labelClass}>Domínios (allowlist)</label>
-            <div className="space-y-2">
-              {domains.map(d => (
-                <div key={d._key} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={d.domain}
-                    onChange={e => updateDomain(d._key, { domain: e.target.value })}
-                    placeholder="minhalp.com.br"
-                    className={`${inputClass} flex-1`}
-                    style={inputStyle}
-                  />
-                  <select
-                    value={d.tipo}
-                    onChange={e => updateDomain(d._key, { tipo: e.target.value as TrackDomainTipo })}
-                    className={inputClass}
-                    style={{ ...inputStyle, width: '9rem' }}
-                  >
-                    <option value="lp">LP (envia tráfego)</option>
-                    <option value="checkout">Checkout</option>
-                  </select>
-                  <button onClick={() => setDomains(prev => prev.filter(x => x._key !== d._key))} className="shrink-0 rounded-lg p-2 text-slate-500 hover:bg-red-500/15 hover:text-red-400" title="Remover domínio">
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button onClick={() => setDomains(prev => [...prev, emptyDomain('lp')])} className="mt-2 flex items-center gap-1.5 text-[11px] text-indigo-400 hover:text-indigo-300">
-              <Plus size={12} /> Adicionar domínio
-            </button>
-            <p className="mt-1 text-[11px] text-slate-600">
-              Domínios &quot;checkout&quot; (ex: pay.hotmart.com, go.hotmart.com) só são usados se o enriquecimento de sessão estiver ativo, na seção 4.
-            </p>
-          </div>
+          <DomainList
+            label="Domínios que enviam tráfego"
+            placeholder="minhalp.com.br"
+            items={lpDomains}
+            onChange={setLpDomains}
+            help="Domínios das LPs que vão disparar eventos pro worker (allowlist de origem)."
+          />
         </section>
+
+        {/* Diagnóstico — bloco solto, mesma posição da ferramenta de referência */}
+        <label className="flex items-center gap-2 text-sm text-slate-300">
+          <input type="checkbox" checked={diagnostico} onChange={e => setDiagnostico(e.target.checked)} className="h-4 w-4 rounded" />
+          Diagnóstico (debug) — guarda amostra do payload cru de cada evento
+        </label>
 
         {/* Seção 3 — Eventos (gatilhos) */}
         <section>
@@ -284,28 +326,30 @@ export function InstallationModal({ open, installation, onClose, onSaved }: Inst
           <div className="space-y-2">
             {triggers.map(t => (
               <div key={t._key} className="rounded-xl p-3 ring-1 ring-white/10" style={inputStyle}>
-                <div className="flex gap-2">
+                <div className="mb-2 flex items-center justify-between">
                   <select
                     value={t.tipo}
                     onChange={e => updateTrigger(t._key, { tipo: e.target.value as TrackTriggerTipo, config: {} })}
-                    className={`${inputClass} flex-1`}
+                    className={inputClass}
                     style={{ background: '#0b0b14' }}
                   >
                     {TRIGGER_TIPOS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                   </select>
-                  <select
-                    value={t.meta_event}
-                    onChange={e => updateTrigger(t._key, { meta_event: e.target.value })}
-                    className={inputClass}
-                    style={{ background: '#0b0b14', width: '11rem' }}
-                  >
-                    {META_EVENTS.map(ev => <option key={ev} value={ev}>{ev}</option>)}
-                  </select>
-                  <button onClick={() => setTriggers(prev => prev.filter(x => x._key !== t._key))} className="shrink-0 rounded-lg p-2 text-slate-500 hover:bg-red-500/15 hover:text-red-400" title="Remover gatilho">
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="ml-2 flex shrink-0 items-center gap-2">
+                    <label className="flex items-center gap-1.5 text-xs text-slate-400">
+                      <input type="checkbox" checked={t.ativo} onChange={e => updateTrigger(t._key, { ativo: e.target.checked })} className="h-4 w-4 rounded" />
+                      Ativo
+                    </label>
+                    <button onClick={() => setTriggers(prev => prev.filter(x => x._key !== t._key))} className="rounded-lg p-2 text-slate-500 hover:bg-red-500/15 hover:text-red-400" title="Remover gatilho">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
                 <TriggerConfigFields trigger={t} onChange={config => updateTrigger(t._key, { config })} />
+                <div className="mt-2">
+                  <p className={labelClass}>Evento Meta a disparar</p>
+                  <EventPicker value={t.meta_event} onChange={v => updateTrigger(t._key, { meta_event: v })} />
+                </div>
               </div>
             ))}
           </div>
@@ -317,17 +361,13 @@ export function InstallationModal({ open, installation, onClose, onSaved }: Inst
         {/* Seção 4 — Webhook de compra */}
         <section className="space-y-3">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">4. Webhook de compra</h3>
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className={labelClass}>Plataforma</label>
-              <input type="text" value="Hotmart" disabled className={`${inputClass} opacity-60`} style={inputStyle} />
-            </div>
-            <div className="flex-1">
-              <label className={labelClass}>Evento Meta a disparar</label>
-              <select value={webhookMetaEvent} onChange={e => setWebhookMetaEvent(e.target.value)} className={inputClass} style={inputStyle}>
-                {META_EVENTS.map(ev => <option key={ev} value={ev}>{ev}</option>)}
-              </select>
-            </div>
+          <div>
+            <label className={labelClass}>Plataforma</label>
+            <input type="text" value="Hotmart" disabled className={`${inputClass} opacity-60`} style={inputStyle} />
+          </div>
+          <div>
+            <label className={labelClass}>Evento Meta a disparar</label>
+            <EventPicker value={webhookMetaEvent} onChange={setWebhookMetaEvent} />
           </div>
 
           <label className="flex items-center gap-2 text-sm text-slate-300">
@@ -335,21 +375,22 @@ export function InstallationModal({ open, installation, onClose, onSaved }: Inst
             Enriquecer com dados de sessão (geo, IP, fbp, fbc)
           </label>
           {sessionEnrichment && (
-            <div>
-              <label className={labelClass}>Validade da sessão</label>
-              <select value={sessionTtlDays} onChange={e => setSessionTtlDays(Number(e.target.value))} className={inputClass} style={inputStyle}>
-                {SESSION_TTL_OPTIONS.map(d => <option key={d} value={d}>{d} dias</option>)}
-              </select>
-              <p className="mt-1 text-[11px] text-slate-600">
-                Marque os domínios de checkout (ex: pay.hotmart.com) na seção 2 pra isso funcionar.
-              </p>
+            <div className="space-y-4 rounded-xl p-3 ring-1 ring-white/10" style={inputStyle}>
+              <DomainList
+                label="Domínios de checkout"
+                placeholder="pay.hotmart.com"
+                items={checkoutDomains}
+                onChange={setCheckoutDomains}
+                help="Ex: pay.hotmart.com, go.hotmart.com — onde a pessoa finaliza a compra."
+              />
+              <div>
+                <label className={labelClass}>Validade da sessão</label>
+                <select value={sessionTtlDays} onChange={e => setSessionTtlDays(Number(e.target.value))} className={inputClass} style={{ background: '#0b0b14' }}>
+                  {SESSION_TTL_OPTIONS.map(d => <option key={d} value={d}>{d} dias</option>)}
+                </select>
+              </div>
             </div>
           )}
-
-          <label className="flex items-center gap-2 text-sm text-slate-300">
-            <input type="checkbox" checked={diagnostico} onChange={e => setDiagnostico(e.target.checked)} className="h-4 w-4 rounded" />
-            Diagnóstico (guardar amostra do payload cru recebido)
-          </label>
 
           {installation && (
             <div className="rounded-xl p-3 ring-1 ring-white/10" style={inputStyle}>
@@ -380,7 +421,7 @@ function TriggerConfigFields({ trigger, onChange }: { trigger: TriggerForm; onCh
 
   if (trigger.tipo === 'click_link' || trigger.tipo === 'click_element') {
     return (
-      <div className="mt-2 grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <input
           type="text"
           value={(c.filtro as string) ?? ''}
@@ -447,7 +488,7 @@ function TriggerConfigFields({ trigger, onChange }: { trigger: TriggerForm; onCh
 
   if (trigger.tipo === 'video_progress') {
     return (
-      <div className="mt-2 grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <select
           value={(c.modo as string) ?? 'auto'}
           onChange={e => onChange({ ...c, modo: e.target.value })}
@@ -470,5 +511,5 @@ function TriggerConfigFields({ trigger, onChange }: { trigger: TriggerForm; onCh
     )
   }
 
-  return <p className="mt-2 text-[11px] text-slate-600">Detecta automaticamente os campos nome/e-mail/telefone do formulário.</p>
+  return <p className="text-[11px] text-slate-600">Detecta automaticamente os campos nome/e-mail/telefone do formulário.</p>
 }

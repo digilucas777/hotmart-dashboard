@@ -27,6 +27,7 @@ export type TrackTrigger = {
   tipo: TrackTriggerTipo
   meta_event: string
   config: Record<string, unknown>
+  ativo: boolean
 }
 
 export type TrackInstallation = {
@@ -67,6 +68,7 @@ export type TrackTriggerInput = {
   tipo: TrackTriggerTipo
   meta_event: string
   config?: Record<string, unknown>
+  ativo?: boolean
 }
 
 export type TrackInstallationSaveInput = {

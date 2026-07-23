@@ -19,6 +19,7 @@ type TriggerRow = {
   tipo: TrackTrigger['tipo']
   meta_event: string
   config: Record<string, unknown>
+  ativo: boolean
 }
 
 export type InstallationRow = {
@@ -63,6 +64,7 @@ export function mapInstallationRow(row: InstallationRow): TrackInstallation {
     tipo: t.tipo,
     meta_event: t.meta_event,
     config: t.config ?? {},
+    ativo: t.ativo,
   }))
 
   return {

@@ -93,6 +93,7 @@ export async function POST(request: Request) {
     tipo: trigger.tipo,
     meta_event: trigger.meta_event,
     config: trigger.config ?? {},
+    ativo: trigger.ativo ?? true,
   }))
 
   const { data: full, error: fetchError } = await supabase
