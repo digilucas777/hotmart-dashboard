@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, Pause, Play, Radio, ExternalLink, ShieldCheck, Pencil, RefreshCw, AlertTriangle, ChevronDown, ChevronRight, GripVertical, Copy, Check, Search, FolderPlus, Folder } from 'lucide-react'
+import { Plus, Trash2, Pause, Play, Radio, ExternalLink, ShieldCheck, Pencil, RefreshCw, AlertTriangle, ChevronDown, ChevronRight, GripVertical, Copy, Check, Search, FolderPlus, Folder, MoreVertical } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { ActionSheet } from '@/components/ui/ActionSheet'
 
 const CLOAKER_MARKER_SNIPPET = '<!-- pagina:black -->'
 
@@ -190,6 +191,9 @@ export default function SitesPage() {
 
   const [confirmDelete, setConfirmDelete] = useState<ConfirmDelete | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  const [siteMenuFor, setSiteMenuFor] = useState<MonitoredSite | null>(null)
+  const [pageMenuFor, setPageMenuFor] = useState<MonitoredPage | null>(null)
 
   const [checkingSiteId, setCheckingSiteId] = useState<string | null>(null)
   const [checkingAll, setCheckingAll] = useState(false)
@@ -532,29 +536,29 @@ export default function SitesPage() {
   return (
     <div className="min-h-screen" style={{ background: '#0b0b14' }}>
       <header className="border-b" style={{ borderColor: 'rgba(255,255,255,0.07)', background: 'rgba(11,11,20,0.95)' }}>
-        <div className="mx-auto flex h-14 max-w-[1200px] items-center justify-between px-6">
+        <div className="mx-auto flex h-14 max-w-[1200px] items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20">
               <Radio size={16} className="text-indigo-400" />
             </div>
             <span className="text-sm font-bold text-slate-100">Sites monitorados</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {sites.length > 0 && (
               <Button onClick={handleCheckAll} size="sm" variant="outline" disabled={checkingAll}>
                 {checkingAll ? <Spinner size={14} /> : <RefreshCw size={14} />}
-                Checar tudo agora
+                <span className="hidden sm:inline">Checar tudo agora</span>
               </Button>
             )}
             <Button onClick={() => setShowCreateSite(true)} size="sm">
               <Plus size={14} />
-              Novo site
+              <span className="hidden sm:inline">Novo site</span>
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1200px] px-6 py-8">
+      <main className="mx-auto max-w-[1200px] px-4 py-8 sm:px-6">
         <div className="mb-6">
           <h1 className="text-xl font-bold text-slate-100">Sites</h1>
           <p className="mt-0.5 text-xs text-slate-500">
@@ -629,14 +633,14 @@ export default function SitesPage() {
                       draggable
                       onDragStart={() => setDragIndex(index)}
                       onDragEnd={() => { setDragIndex(null); setDragOverIndex(null) }}
-                      className="cursor-grab p-1 text-slate-600 hover:text-slate-400 active:cursor-grabbing"
+                      className="hidden cursor-grab p-1 text-slate-600 hover:text-slate-400 active:cursor-grabbing sm:inline-flex"
                       title="Arrastar pra reordenar"
                     >
                       <GripVertical size={15} />
                     </span>
                     <button
                       onClick={() => toggleExpanded(site.id)}
-                      className="flex min-w-0 items-center gap-2 text-left"
+                      className="flex min-w-0 items-center gap-2 py-1 text-left"
                       disabled={site.pages.length === 0 && site.folders.length === 0}
                     >
                     {(site.pages.length > 0 || site.folders.length > 0) && (
@@ -650,7 +654,7 @@ export default function SitesPage() {
                     </span>
                     </button>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="hidden items-center gap-1 sm:flex">
                     <button
                       onClick={() => handleCheckNow(site.id)}
                       className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
@@ -681,6 +685,13 @@ export default function SitesPage() {
                       <Trash2 size={14} />
                     </button>
                   </div>
+                  <button
+                    onClick={() => setSiteMenuFor(site)}
+                    className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300 sm:hidden"
+                    title="Mais opções"
+                  >
+                    <MoreVertical size={16} />
+                  </button>
                 </div>
 
                 {site.pages.length === 0 && site.folders.length === 0 ? (
@@ -746,12 +757,12 @@ export default function SitesPage() {
                                   opacity: pageDrag?.pageId === page.id ? 0.4 : (page.ativo ? 1 : 0.5),
                                 }}
                               >
-                                <span className="cursor-grab p-0.5 text-slate-700 hover:text-slate-500 active:cursor-grabbing" title="Arrastar pra reordenar">
+                                <span className="hidden cursor-grab p-0.5 text-slate-700 hover:text-slate-500 active:cursor-grabbing sm:inline-flex" title="Arrastar pra reordenar">
                                   <GripVertical size={13} />
                                 </span>
                                 <span className="text-base">{page.ativo ? info.emoji : '⏸️'}</span>
                                 <div className="min-w-0 flex-1">
-                                  <a href={page.url} target="_blank" rel="noreferrer" title={page.url} className="flex items-center gap-1 truncate text-xs font-medium text-slate-200 hover:text-indigo-300">
+                                  <a href={page.url} target="_blank" rel="noreferrer" title={page.url} className="flex items-center gap-1 truncate py-1 text-xs font-medium text-slate-200 hover:text-indigo-300 sm:py-0">
                                     {page.nome || pagePath(page.url)}
                                     <ExternalLink size={10} className="shrink-0" />
                                   </a>
@@ -779,57 +790,66 @@ export default function SitesPage() {
                                     )}
                                   </div>
                                 </div>
+                                <div className="hidden items-center gap-1 sm:flex">
+                                  <button
+                                    onClick={() => handleCheckPageNow(page.id)}
+                                    className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+                                    title="Checar essa página agora"
+                                    disabled={checkingPageId === page.id}
+                                  >
+                                    {checkingPageId === page.id ? <Spinner size={12} /> : <RefreshCw size={12} />}
+                                  </button>
+                                  <button
+                                    onClick={() => handleVerifyMarker(page)}
+                                    className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+                                    title="Verificar marcação de cloacker"
+                                    disabled={checkingMarkerPageId === page.id}
+                                  >
+                                    {checkingMarkerPageId === page.id ? <Spinner size={12} /> : <Search size={12} />}
+                                  </button>
+                                  <button
+                                    onClick={() => handleRequestToggleCloaker(page)}
+                                    className={`rounded-lg p-1.5 transition-colors hover:bg-white/10 ${page.verificar_cloaker ? 'text-cyan-400' : 'text-slate-600 hover:text-slate-300'}`}
+                                    title={page.verificar_cloaker ? 'Verificação de cloacker ativada (clique pra desativar)' : 'Ativar verificação de cloacker'}
+                                    disabled={checkingMarkerPageId === page.id}
+                                  >
+                                    {checkingMarkerPageId === page.id ? <Spinner size={12} /> : <ShieldCheck size={12} />}
+                                  </button>
+                                  <button
+                                    onClick={() => openEditPage(page)}
+                                    className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+                                    title="Editar página"
+                                  >
+                                    <Pencil size={12} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleCopyUrl(page.id, page.url)}
+                                    className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+                                    title={copiedPageId === page.id ? 'Copiado!' : 'Copiar URL'}
+                                  >
+                                    {copiedPageId === page.id ? <Check size={12} /> : <Copy size={12} />}
+                                  </button>
+                                  <button
+                                    onClick={() => handleRequestTogglePage(page)}
+                                    className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+                                    title={page.ativo ? 'Pausar checagem' : 'Retomar checagem'}
+                                  >
+                                    {page.ativo ? <Pause size={12} /> : <Play size={12} />}
+                                  </button>
+                                  <button
+                                    onClick={() => setConfirmDelete({ kind: 'page', id: page.id, label: page.nome || page.url })}
+                                    className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-red-500/15 hover:text-red-400"
+                                    title="Excluir página"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
                                 <button
-                                  onClick={() => handleCheckPageNow(page.id)}
-                                  className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
-                                  title="Checar essa página agora"
-                                  disabled={checkingPageId === page.id}
+                                  onClick={() => setPageMenuFor(page)}
+                                  className="shrink-0 rounded-lg p-2 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300 sm:hidden"
+                                  title="Mais opções"
                                 >
-                                  {checkingPageId === page.id ? <Spinner size={12} /> : <RefreshCw size={12} />}
-                                </button>
-                                <button
-                                  onClick={() => handleVerifyMarker(page)}
-                                  className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
-                                  title="Verificar marcação de cloacker"
-                                  disabled={checkingMarkerPageId === page.id}
-                                >
-                                  {checkingMarkerPageId === page.id ? <Spinner size={12} /> : <Search size={12} />}
-                                </button>
-                                <button
-                                  onClick={() => handleRequestToggleCloaker(page)}
-                                  className={`rounded-lg p-1.5 transition-colors hover:bg-white/10 ${page.verificar_cloaker ? 'text-cyan-400' : 'text-slate-600 hover:text-slate-300'}`}
-                                  title={page.verificar_cloaker ? 'Verificação de cloacker ativada (clique pra desativar)' : 'Ativar verificação de cloacker'}
-                                  disabled={checkingMarkerPageId === page.id}
-                                >
-                                  {checkingMarkerPageId === page.id ? <Spinner size={12} /> : <ShieldCheck size={12} />}
-                                </button>
-                                <button
-                                  onClick={() => openEditPage(page)}
-                                  className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
-                                  title="Editar página"
-                                >
-                                  <Pencil size={12} />
-                                </button>
-                                <button
-                                  onClick={() => handleCopyUrl(page.id, page.url)}
-                                  className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
-                                  title={copiedPageId === page.id ? 'Copiado!' : 'Copiar URL'}
-                                >
-                                  {copiedPageId === page.id ? <Check size={12} /> : <Copy size={12} />}
-                                </button>
-                                <button
-                                  onClick={() => handleRequestTogglePage(page)}
-                                  className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
-                                  title={page.ativo ? 'Pausar checagem' : 'Retomar checagem'}
-                                >
-                                  {page.ativo ? <Pause size={12} /> : <Play size={12} />}
-                                </button>
-                                <button
-                                  onClick={() => setConfirmDelete({ kind: 'page', id: page.id, label: page.nome || page.url })}
-                                  className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-red-500/15 hover:text-red-400"
-                                  title="Excluir página"
-                                >
-                                  <Trash2 size={12} />
+                                  <MoreVertical size={16} />
                                 </button>
                               </div>
                             )
@@ -876,7 +896,7 @@ export default function SitesPage() {
                         return (
                           <div key={page.id} className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs" style={{ background: 'rgba(255,255,255,0.03)' }}>
                             <span>{info.emoji}</span>
-                            <span className="truncate text-slate-400" title={page.url}>{pagePath(page.url)}</span>
+                            <span className="min-w-0 flex-1 truncate text-slate-400" title={page.url}>{pagePath(page.url)}</span>
                             <span className={`shrink-0 ${info.cor}`}>{info.label}</span>
                             <button
                               onClick={() => handleCopyUrl(page.id, page.url)}
@@ -896,6 +916,49 @@ export default function SitesPage() {
           </div>
         )}
       </main>
+
+      <ActionSheet
+        open={!!siteMenuFor}
+        onClose={() => setSiteMenuFor(null)}
+        title={siteMenuFor?.nome}
+        items={siteMenuFor ? [
+          { key: 'check', label: 'Checar agora', icon: <RefreshCw size={16} />, onClick: () => handleCheckNow(siteMenuFor.id) },
+          { key: 'edit', label: 'Editar site', icon: <Pencil size={16} />, onClick: () => openEditSite(siteMenuFor) },
+          { key: 'add-page', label: 'Adicionar página(s)', icon: <Plus size={16} />, onClick: () => setAddPageSiteId(siteMenuFor.id) },
+          { key: 'delete', label: 'Excluir site', icon: <Trash2 size={16} />, onClick: () => setConfirmDelete({ kind: 'site', id: siteMenuFor.id, label: siteMenuFor.nome }), destructive: true },
+        ] : []}
+      />
+
+      <ActionSheet
+        open={!!pageMenuFor}
+        onClose={() => setPageMenuFor(null)}
+        title={pageMenuFor?.nome || (pageMenuFor ? pagePath(pageMenuFor.url) : undefined)}
+        items={pageMenuFor ? [
+          { key: 'check', label: 'Checar agora', icon: <RefreshCw size={16} />, onClick: () => handleCheckPageNow(pageMenuFor.id) },
+          { key: 'verify-marker', label: 'Verificar marcação de cloacker', icon: <Search size={16} />, onClick: () => handleVerifyMarker(pageMenuFor) },
+          {
+            key: 'toggle-cloaker',
+            label: pageMenuFor.verificar_cloaker ? 'Desativar verificação de cloacker' : 'Ativar verificação de cloacker',
+            icon: <ShieldCheck size={16} />,
+            onClick: () => handleRequestToggleCloaker(pageMenuFor),
+          },
+          { key: 'edit', label: 'Editar página', icon: <Pencil size={16} />, onClick: () => openEditPage(pageMenuFor) },
+          { key: 'copy', label: 'Copiar URL', icon: <Copy size={16} />, onClick: () => handleCopyUrl(pageMenuFor.id, pageMenuFor.url) },
+          {
+            key: 'toggle-active',
+            label: pageMenuFor.ativo ? 'Pausar checagem' : 'Retomar checagem',
+            icon: pageMenuFor.ativo ? <Pause size={16} /> : <Play size={16} />,
+            onClick: () => handleRequestTogglePage(pageMenuFor),
+          },
+          {
+            key: 'delete',
+            label: 'Excluir página',
+            icon: <Trash2 size={16} />,
+            onClick: () => setConfirmDelete({ kind: 'page', id: pageMenuFor.id, label: pageMenuFor.nome || pageMenuFor.url }),
+            destructive: true,
+          },
+        ] : []}
+      />
 
       <Modal open={showCreateSite} onClose={() => setShowCreateSite(false)} title="Novo site">
         <div className="space-y-4">
