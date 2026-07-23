@@ -64,15 +64,12 @@ com roteamento simples por `pathname`:
   (pixels, domínios, gatilhos). Injeta:
   - Disparo automático de `PageView` no carregamento da página, gerando (ou
     reaproveitando de um cookie) o `session_id` daquela visita
-  - Se enriquecimento de sessão estiver ligado: reescreve, na hora do clique, os
-    links da página cujo destino bate com um domínio de checkout cadastrado,
-    anexando `?hottrack_sid={session_id}` — é assim que o `/webhook/hotmart`
-    depois consegue cruzar a compra com a sessão salva no KV
-  - Listener de clique em link pra cada gatilho `click_link` configurado (ex:
-    dispara `InitiateCheckout` quando o link clicado contém `hotmart.com`)
-  - Os demais tipos de gatilho da Etapa 1 (scroll, form_submit, click_element,
-    url_visited, time_on_page, video_progress), cada um só incluído no script se
-    a instalação tiver esse gatilho configurado (mantém o arquivo pequeno)
+  - Listener pra cada gatilho configurado na instalação (scroll, form_submit,
+    click_link, click_element, url_visited, time_on_page, video_progress), cada
+    um só incluído no script se a instalação tiver esse gatilho configurado
+    (mantém o arquivo pequeno). O gatilho `form_submit`, quando detecta um campo
+    de e-mail, inclui esse e-mail (hasheado) no evento — é essa a ponte pro
+    enriquecimento por e-mail (ver seção abaixo)
   - Função global `HotTrack.track(eventName, params)` pra disparo manual
 - **`POST /collect`** — recebe os eventos do `t.js`. Valida `Origin`/`Referer`
   contra a allowlist de domínios (`tipo = 'lp'`). Se enriquecimento de sessão
@@ -108,27 +105,62 @@ na interface.
 O botão "Fazer deploy" (hoje só um placeholder textual) passa a chamar essa rota
 de verdade, com spinner de carregamento e exibição de erro/sucesso.
 
-## Fluxo dos 3 eventos principais (confirmação dos requisitos do usuário)
+## Fluxo dos 3 eventos principais (revisado após descobertas desta conversa)
 
 1. **PageView** — automático, disparado pelo `/t.js` assim que a página carrega.
    Sempre inclui fbp/fbc/IP/user-agent (o máximo disponível nesse momento).
-2. **InitiateCheckout** — o usuário configura, na Seção 3 da instalação, um
-   gatilho `click_link` com filtro contendo o domínio/link do botão de comprar
-   (ex: `hotmart.com`) e evento Meta = `InitiateCheckout`. Isso já é suportado
-   pelo schema e pela interface da Etapa 1; o trabalho aqui é o `/t.js` do Worker
-   interpretar esse gatilho e disparar o evento no clique.
+2. **InitiateCheckout** — **não é responsabilidade do nosso Worker.** A Hotmart já
+   dispara esse evento nativamente (pixel cadastrado no produto, na página de
+   checkout dela). O usuário só precisa manter esse evento marcado nas
+   configurações de "Pixels de Rastreamento" do produto, na própria Hotmart.
 3. **Purchase** — via webhook da Hotmart (novo, adicional ao webhook já existente
-   do dashboard — não mexe nele). Inclui os dados hasheados do comprador +
-   fbp/fbc/geo/IP cruzados da sessão salva no KV, maximizando a qualidade de
-   correspondência (EMQ) no Gerenciador de Eventos da Meta.
+   do dashboard — não mexe nele). **O usuário precisa desmarcar o evento Purchase
+   nas configurações de "Pixels de Rastreamento" do produto na Hotmart**, deixando
+   só a Hotmart cuidar do InitiateCheckout — senão a venda seria contada em
+   dobro na Meta (uma vez pelo pixel nativo da Hotmart, outra pela nossa CAPI).
+   A interface do dashboard precisa deixar esse aviso claro (ver seção "Avisos na
+   interface" abaixo).
 
-## Detalhe técnico a confirmar durante a implementação
-A Hotmart precisa devolver, no payload do webhook de compra, o parâmetro
-`hottrack_sid` que foi anexado ao link de checkout — o projeto já tem uma rota
-(`app/api/hotmart/sync-origem/route.ts`) que lida com parâmetros de origem
-repassados pela Hotmart; o plano de implementação vai verificar o formato exato
-usado por ela (provavelmente o campo `src`/`sck`) antes de decidir o nome do
-parâmetro que o `/t.js` deve anexar.
+### Por que não cruzamos fbp/fbc no Purchase via parâmetro de URL
+
+Investigamos usar o mecanismo padrão da Hotmart (parâmetro `src`/`sck` na URL do
+checkout, devolvido no webhook) pra levar um identificador de sessão até o
+Purchase. **Descartado**: esse mesmo campo já alimenta a coluna `origem` de
+`vendas` (função `extractOrigem` em `app/api/webhook/hotmart/route.ts`), usada
+nos relatórios de origem/tráfego já existentes. Usar esse campo pra outra coisa
+corromperia esses relatórios.
+
+### Enriquecimento por e-mail (melhor esforço, não garantido)
+
+Alternativa adotada: quando o enriquecimento de sessão está ligado, o `/collect`
+grava a sessão no KV sob duas chaves — `sid:{session_id}` (sempre) e, **se um
+gatilho `form_submit` capturar um e-mail na página**, também sob
+`email:{sha256(email)}`. No webhook de compra, o Worker tenta achar a sessão pelo
+e-mail do comprador (`data.buyer.email`, já vem no payload da Hotmart) hasheado
+do mesmo jeito; se achar, mescla fbp/fbc/geo no Purchase; se não achar, envia o
+Purchase só com os dados hasheados do comprador (sem o bônus de fbp/fbc).
+
+**Confirmado nesta conversa:** o funil do usuário não tem captura de e-mail antes
+do checkout (só a própria Hotmart pergunta o e-mail, no checkout dela). Isso
+significa que, **para as instalações atuais dele, o cruzamento por e-mail nunca
+vai encontrar nada** — o Purchase sempre vai sair só com os dados do comprador,
+sem fbp/fbc. Implementamos o mecanismo mesmo assim (custo baixo, é só mais uma
+chave de KV) porque ele passa a funcionar automaticamente no dia em que ele
+configurar algum formulário de captura de e-mail antes do checkout, em qualquer
+instalação futura.
+
+## Avisos na interface (novo requisito desta conversa)
+
+Em `app/rastreamento/_components/InstallationModal.tsx`, seção 4 (Webhook de
+compra), adicionar um aviso fixo (não é só texto de ajuda, é um alerta visual)
+explicando: *"Antes de ativar, vá em Hotmart → seu produto → Pixels de
+Rastreamento e desmarque o evento Purchase, deixando só InitiateCheckout marcado
+— senão a venda conta em dobro na Meta."*
+
+No toggle "Enriquecer com dados de sessão", adicionar uma nota explicando que só
+tem efeito no Purchase se houver um gatilho de formulário (`form_submit`)
+capturando e-mail **antes** do checkout — senão o cruzamento nunca vai encontrar
+nada (mas não tem problema deixar ligado mesmo assim).
 
 ## Segurança
 - Tokens (Cloudflare, CAPI) só saem descriptografados em memória, no momento do
@@ -150,7 +182,8 @@ parâmetro que o `/t.js` deve anexar.
    Cloudflare do usuário (visível no painel deles)
 3. Colar o `/t.js` gerado numa página de teste, confirmar `PageView` no Gerenciador
    de Eventos da Meta (com código de teste preenchido)
-4. Clicar no botão de comprar (link pro checkout Hotmart) e confirmar
-   `InitiateCheckout`
-5. Fazer uma compra de teste e confirmar `Purchase` com dados do comprador e
-   fbp/fbc cruzados
+4. Confirmar, no produto da Hotmart, que "Pixels de Rastreamento" está com
+   InitiateCheckout marcado e Purchase desmarcado
+5. Fazer uma compra de teste e confirmar `Purchase` com os dados hasheados do
+   comprador chegando (sem fbp/fbc, já que este funil não captura e-mail antes
+   do checkout — comportamento esperado)
