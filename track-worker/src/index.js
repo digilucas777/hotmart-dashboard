@@ -68,14 +68,23 @@ async function handleCollect(request, env) {
 
   const sessionEnrichment = env.SESSION_ENRICHMENT_ENABLED === 'true'
   if (sessionEnrichment && env.SESSIONS) {
-    const ttlSeconds = (Number(env.SESSION_TTL_DAYS) || 7) * 86400
-    const sessionData = { fbp: body.fbp || null, fbc: body.fbc || null, ip, userAgent, url: body.url || null }
-    await env.SESSIONS.put(`sid:${body.session_id}`, JSON.stringify(sessionData), { expirationTtl: ttlSeconds })
+    // Uma falha aqui (ex: cota de gravação do KV estourada) nunca pode impedir
+    // o envio do evento principal pra Meta — por isso fica isolada num try/catch
+    // próprio, só logada quando o diagnóstico está ativo.
+    try {
+      const ttlSeconds = (Number(env.SESSION_TTL_DAYS) || 7) * 86400
+      const sessionData = { fbp: body.fbp || null, fbc: body.fbc || null, ip, userAgent, url: body.url || null }
+      await env.SESSIONS.put(`sid:${body.session_id}`, JSON.stringify(sessionData), { expirationTtl: ttlSeconds })
 
-    const email = body.params && body.params.email
-    if (email) {
-      const emailHash = await sha256Hex(email)
-      await env.SESSIONS.put(`email:${emailHash}`, JSON.stringify(sessionData), { expirationTtl: ttlSeconds })
+      const email = body.params && body.params.email
+      if (email) {
+        const emailHash = await sha256Hex(email)
+        await env.SESSIONS.put(`email:${emailHash}`, JSON.stringify(sessionData), { expirationTtl: ttlSeconds })
+      }
+    } catch (err) {
+      if (env.DIAGNOSTICO_ATIVO === 'true') {
+        console.error('[Rastreamento] falha ao gravar sessão no KV (evento seguiu normalmente):', err)
+      }
     }
   }
 
@@ -122,14 +131,22 @@ async function handleHotmartWebhook(request, env) {
 
   const sessionEnrichment = env.SESSION_ENRICHMENT_ENABLED === 'true'
   if (sessionEnrichment && env.SESSIONS && buyer.email) {
-    const emailHash = await sha256Hex(buyer.email)
-    const stored = await env.SESSIONS.get(`email:${emailHash}`)
-    if (stored) {
-      const session = JSON.parse(stored)
-      if (session.fbp) userData.fbp = session.fbp
-      if (session.fbc) userData.fbc = session.fbc
-      if (session.ip) userData.client_ip_address = session.ip
-      if (session.userAgent) userData.client_user_agent = session.userAgent
+    // Mesma proteção do /collect: uma falha ao ler o KV não pode impedir o
+    // envio do Purchase — nesse caso ele só sai sem o bônus de fbp/fbc.
+    try {
+      const emailHash = await sha256Hex(buyer.email)
+      const stored = await env.SESSIONS.get(`email:${emailHash}`)
+      if (stored) {
+        const session = JSON.parse(stored)
+        if (session.fbp) userData.fbp = session.fbp
+        if (session.fbc) userData.fbc = session.fbc
+        if (session.ip) userData.client_ip_address = session.ip
+        if (session.userAgent) userData.client_user_agent = session.userAgent
+      }
+    } catch (err) {
+      if (env.DIAGNOSTICO_ATIVO === 'true') {
+        console.error('[Rastreamento] falha ao ler sessão do KV (Purchase seguiu sem o cruzamento):', err)
+      }
     }
   }
 

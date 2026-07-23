@@ -12,6 +12,13 @@ function makeKvMock() {
   }
 }
 
+function makeFailingKvMock() {
+  return {
+    async get() { throw new Error('KV get falhou (simulado)') },
+    async put() { throw new Error('KV put falhou (simulado, ex: cota excedida)') },
+  }
+}
+
 function makeEnv(overrides = {}) {
   return {
     PIXELS_JSON: JSON.stringify([{ pixel_id: '111', capi_token: 'tok', test_event_code: null }]),
@@ -134,6 +141,54 @@ test('webhook da Hotmart aprovado hasheia dados do comprador e cruza sessão sal
     const userData = sentBody.data[0].user_data
     assert.equal(userData.em.length, 64)
     assert.equal(userData.fbp, 'fb.1.222')
+    assert.equal(sentBody.data[0].event_name, 'Purchase')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('POST /collect ainda envia o evento pra Meta mesmo se a gravação no KV falhar', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnv({ SESSIONS: makeFailingKvMock() })
+    const req = new Request('https://sinal.teste.com/collect', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: 'PageView', session_id: 'abc123', url: 'https://minhalp.com.br/', params: { email: 'joao@exemplo.com' } }),
+    })
+    const res = await worker.fetch(req, env)
+    assert.equal(res.status, 200)
+    assert.equal(calls.length, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart ainda envia o Purchase mesmo se a leitura do KV falhar', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnv({ SESSIONS: makeFailingKvMock() })
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: { buyer: { name: 'João Silva', email: 'joao@exemplo.com' }, purchase: { transaction: 'HP123', price: { value: 97, currency_value: 'BRL' } } },
+      }),
+    })
+    const res = await worker.fetch(req, env)
+    assert.equal(res.status, 200)
+    assert.equal(calls.length, 1)
+    const sentBody = JSON.parse(calls[0].init.body)
     assert.equal(sentBody.data[0].event_name, 'Purchase')
   } finally {
     globalThis.fetch = originalFetch
