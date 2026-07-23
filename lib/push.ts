@@ -345,3 +345,23 @@ export async function notifyCloakerRecovered(params: { userId: string; siteName:
     console.error('[PUSH] notifyCloakerRecovered falhou:', err)
   }
 }
+
+export async function notifyCloudflareUsageWarning(params: {
+  userId: string
+  installationNome: string
+  requests: number
+  limit: number
+}) {
+  try {
+    if (!ensureVapidConfigured()) return
+    const percent = Math.round((params.requests / params.limit) * 100)
+    await sendPushToUser(params.userId, {
+      title: `⚠️ Rastreamento "${params.installationNome}" perto do limite`,
+      body: `${params.requests.toLocaleString('pt-BR')} de ${params.limit.toLocaleString('pt-BR')} requisições hoje (${percent}%) no plano gratuito da Cloudflare.`,
+      url: '/rastreamento',
+      tag: `track-usage-${params.installationNome}`,
+    })
+  } catch (err) {
+    console.error('[PUSH] notifyCloudflareUsageWarning falhou:', err)
+  }
+}
