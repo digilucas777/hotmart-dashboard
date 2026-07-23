@@ -198,6 +198,12 @@ export default function SitesPage() {
   const [checkingSiteId, setCheckingSiteId] = useState<string | null>(null)
   const [checkingAll, setCheckingAll] = useState(false)
 
+  const [checkToast, setCheckToast] = useState<string | null>(null)
+  function showCheckToast(message: string) {
+    setCheckToast(message)
+    setTimeout(() => setCheckToast(prev => (prev === message ? null : prev)), 3000)
+  }
+
   const [copiedPageId, setCopiedPageId] = useState<string | null>(null)
   async function handleCopyUrl(pageId: string, url: string) {
     await navigator.clipboard.writeText(url)
@@ -277,8 +283,11 @@ export default function SitesPage() {
     )
   }
 
-  const fetchSites = useCallback(async (uid: string) => {
-    setLoading(true)
+  // `silent` evita o spinner de tela cheia (usado depois de um "checar agora"):
+  // troca só os dados de `sites`, sem passar por loading=true, então a árvore de
+  // sites/pastas abertas não desmonta nem perde a posição de rolagem/estado.
+  const fetchSites = useCallback(async (uid: string, opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true)
     const { data } = await supabase
       .from('monitored_sites')
       .select('*, monitored_pages(*), monitored_page_folders(*)')
@@ -290,7 +299,7 @@ export default function SitesPage() {
       folders: (s.monitored_page_folders ?? []).slice().sort((a, b) => a.ordem - b.ordem),
     }))
     setSites(mapped)
-    setLoading(false)
+    if (!opts?.silent) setLoading(false)
   }, [])
 
   const fetchAllSites = useCallback(async () => {
@@ -447,9 +456,10 @@ export default function SitesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pageId }),
       })
+      showCheckToast('Página checada agora')
     } finally {
       setCheckingPageId(null)
-      void fetchSites(userId)
+      void fetchSites(userId, { silent: true })
     }
   }
 
@@ -516,9 +526,10 @@ export default function SitesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ siteId }),
       })
+      showCheckToast('Site checado agora')
     } finally {
       setCheckingSiteId(null)
-      void fetchSites(userId)
+      void fetchSites(userId, { silent: true })
     }
   }
 
@@ -527,9 +538,10 @@ export default function SitesPage() {
     setCheckingAll(true)
     try {
       await fetch('/api/sites/check-now', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      showCheckToast('Todos os sites foram checados')
     } finally {
       setCheckingAll(false)
-      void fetchSites(userId)
+      void fetchSites(userId, { silent: true })
     }
   }
 
@@ -916,6 +928,13 @@ export default function SitesPage() {
           </div>
         )}
       </main>
+
+      {checkToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl bg-emerald-500/90 px-4 py-3 text-sm font-medium text-white shadow-lg backdrop-blur-sm">
+          <Check size={16} />
+          <span>{checkToast}</span>
+        </div>
+      )}
 
       <ActionSheet
         open={!!siteMenuFor}
