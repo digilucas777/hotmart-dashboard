@@ -129,6 +129,8 @@ export function InstallationModal({ open, installation, onClose, onSaved }: Inst
   const [diagnostico, setDiagnostico] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [deploying, setDeploying] = useState(false)
+  const [deployError, setDeployError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -222,11 +224,34 @@ export function InstallationModal({ open, installation, onClose, onSaved }: Inst
     }
   }
 
+  async function handleDeploy() {
+    if (!installation) return
+    setDeploying(true)
+    setDeployError(null)
+    try {
+      const res = await fetch('/api/track/installations/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: installation.id }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setDeployError(json?.error || 'Não foi possível publicar o Worker.')
+        return
+      }
+      onSaved()
+    } finally {
+      setDeploying(false)
+    }
+  }
+
   return (
     <Modal open={open} onClose={onClose} title={installation ? 'Editar instalação' : 'Nova instalação'} maxWidth="max-w-2xl">
       <div className="max-h-[70vh] space-y-6 overflow-y-auto pr-1">
-        {error && (
-          <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-300">{error}</div>
+        {(error || deployError) && (
+          <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-300">
+            {error || deployError}
+          </div>
         )}
 
         {/* Seção 1 — Cloudflare */}
@@ -361,6 +386,17 @@ export function InstallationModal({ open, installation, onClose, onSaved }: Inst
         {/* Seção 4 — Webhook de compra */}
         <section className="space-y-3">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">4. Webhook de compra</h3>
+
+          <div className="flex gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-200">
+            <span>⚠️</span>
+            <p>
+              Antes de ativar: vá em <strong>Hotmart → seu produto → Pixels de Rastreamento</strong> e
+              desmarque o evento <strong>Purchase</strong>, deixando só <strong>InitiateCheckout</strong> marcado.
+              Sem isso, a venda é contada em dobro na Meta (uma vez pelo pixel nativo da Hotmart, outra pela
+              nossa integração).
+            </p>
+          </div>
+
           <div>
             <label className={labelClass}>Plataforma</label>
             <input type="text" value="Hotmart" disabled className={`${inputClass} opacity-60`} style={inputStyle} />
@@ -374,6 +410,11 @@ export function InstallationModal({ open, installation, onClose, onSaved }: Inst
             <input type="checkbox" checked={sessionEnrichment} onChange={e => setSessionEnrichment(e.target.checked)} className="h-4 w-4 rounded" />
             Enriquecer com dados de sessão (geo, IP, fbp, fbc)
           </label>
+          <p className="text-[11px] text-slate-600">
+            Só tem efeito no Purchase se algum gatilho de formulário (seção 3) capturar o e-mail da pessoa
+            <strong> antes</strong> dela ir pro checkout. Se seu funil vai direto pro checkout da Hotmart sem
+            passar por um formulário seu, pode deixar ligado — só não vai ter o que cruzar ainda.
+          </p>
           {sessionEnrichment && (
             <div className="space-y-4 rounded-xl p-3 ring-1 ring-white/10" style={inputStyle}>
               <DomainList
@@ -410,6 +451,12 @@ export function InstallationModal({ open, installation, onClose, onSaved }: Inst
           {saving && <Spinner size={14} />}
           Salvar
         </Button>
+        {installation && (
+          <Button className="flex-1" variant="outline" onClick={handleDeploy} disabled={deploying}>
+            {deploying && <Spinner size={14} />}
+            Fazer deploy
+          </Button>
+        )}
       </div>
     </Modal>
   )
