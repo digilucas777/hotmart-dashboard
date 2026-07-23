@@ -75,6 +75,7 @@ async function fetchSaleItem(token: string, transactionId: string): Promise<any 
 const HOTMART_ACCOUNTS = [
   { id: process.env.HOTMART_CLIENT_ID, secret: process.env.HOTMART_CLIENT_SECRET },
   { id: process.env.HOTMART_CLIENT_ID_2, secret: process.env.HOTMART_CLIENT_SECRET_2 },
+  { id: process.env.HOTMART_CLIENT_ID_3, secret: process.env.HOTMART_CLIENT_SECRET_3 },
 ]
 
 async function fetchSaleFromAnyAccount(transactionId: string): Promise<any | null> {
