@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Rocket } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -111,10 +111,11 @@ interface InstallationModalProps {
   open: boolean
   installation: TrackInstallation | null
   onClose: () => void
-  onSaved: () => void
+  onSaved: (installation: TrackInstallation) => void
+  onDeployed: () => void
 }
 
-export function InstallationModal({ open, installation, onClose, onSaved }: InstallationModalProps) {
+export function InstallationModal({ open, installation, onClose, onSaved, onDeployed }: InstallationModalProps) {
   const [nome, setNome] = useState('')
   const [workerSubdomain, setWorkerSubdomain] = useState('')
   const [cloudflareToken, setCloudflareToken] = useState('')
@@ -180,66 +181,76 @@ export function InstallationModal({ open, installation, onClose, onSaved }: Inst
     setTriggers(prev => prev.map(t => (t._key === key ? { ...t, ...patch } : t)))
   }
 
-  async function handleSave() {
-    if (!nome.trim()) { setError('Dê um nome pra instalação.'); return }
+  async function saveInstallation(): Promise<TrackInstallation | null> {
+    if (!nome.trim()) { setError('Dê um nome pra instalação.'); return null }
     const validPixels = pixels.filter(p => p.pixel_id.trim())
     const validDomains = [
       ...lpDomains.filter(d => d.domain.trim()).map(d => ({ ...d, tipo: 'lp' as const })),
       ...checkoutDomains.filter(d => d.domain.trim()).map(d => ({ ...d, tipo: 'checkout' as const })),
     ]
 
+    const res = await fetch('/api/track/installations/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: installation?.id,
+        nome: nome.trim(),
+        worker_subdomain: workerSubdomain.trim() || null,
+        cloudflare_api_token: cloudflareToken.trim() || undefined,
+        webhook_meta_event: webhookMetaEvent,
+        session_enrichment_enabled: sessionEnrichment,
+        session_ttl_days: sessionTtlDays,
+        diagnostico_ativo: diagnostico,
+        pixels: validPixels.map(p => ({
+          id: p.id,
+          pixel_id: p.pixel_id.trim(),
+          capi_token: p.capi_token.trim() || undefined,
+          test_event_code: p.test_event_code.trim() || null,
+        })),
+        domains: validDomains.map(d => ({ id: d.id, domain: d.domain.trim(), tipo: d.tipo })),
+        triggers: triggers.map(t => ({ id: t.id, tipo: t.tipo, meta_event: t.meta_event, config: t.config, ativo: t.ativo })),
+      }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setError(json?.error || 'Não foi possível salvar.')
+      return null
+    }
+    return json.installation as TrackInstallation
+  }
+
+  async function handleSave() {
     setSaving(true)
     setError(null)
     try {
-      const res = await fetch('/api/track/installations/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: installation?.id,
-          nome: nome.trim(),
-          worker_subdomain: workerSubdomain.trim() || null,
-          cloudflare_api_token: cloudflareToken.trim() || undefined,
-          webhook_meta_event: webhookMetaEvent,
-          session_enrichment_enabled: sessionEnrichment,
-          session_ttl_days: sessionTtlDays,
-          diagnostico_ativo: diagnostico,
-          pixels: validPixels.map(p => ({
-            id: p.id,
-            pixel_id: p.pixel_id.trim(),
-            capi_token: p.capi_token.trim() || undefined,
-            test_event_code: p.test_event_code.trim() || null,
-          })),
-          domains: validDomains.map(d => ({ id: d.id, domain: d.domain.trim(), tipo: d.tipo })),
-          triggers: triggers.map(t => ({ id: t.id, tipo: t.tipo, meta_event: t.meta_event, config: t.config, ativo: t.ativo })),
-        }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setError(json?.error || 'Não foi possível salvar.')
-        return
-      }
-      onSaved()
+      const saved = await saveInstallation()
+      if (saved) onSaved(saved)
     } finally {
       setSaving(false)
     }
   }
 
   async function handleDeploy() {
-    if (!installation) return
     setDeploying(true)
     setDeployError(null)
+    setError(null)
     try {
+      // Publica sempre a versão mais recente do formulário — salva primeiro,
+      // pra não exigir um "Salvar" manual antes de cada deploy.
+      const saved = await saveInstallation()
+      if (!saved) return
+
       const res = await fetch('/api/track/installations/deploy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: installation.id }),
+        body: JSON.stringify({ id: saved.id }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
         setDeployError(json?.error || 'Não foi possível publicar o Worker.')
         return
       }
-      onSaved()
+      onDeployed()
     } finally {
       setDeploying(false)
     }
@@ -407,7 +418,21 @@ export function InstallationModal({ open, installation, onClose, onSaved }: Inst
           </div>
 
           <label className="flex items-center gap-2 text-sm text-slate-300">
-            <input type="checkbox" checked={sessionEnrichment} onChange={e => setSessionEnrichment(e.target.checked)} className="h-4 w-4 rounded" />
+            <input
+              type="checkbox"
+              checked={sessionEnrichment}
+              onChange={e => {
+                const checked = e.target.checked
+                setSessionEnrichment(checked)
+                if (checked && checkoutDomains.length === 0) {
+                  setCheckoutDomains([
+                    { _key: nextKey(), domain: 'pay.hotmart.com', tipo: 'checkout' },
+                    { _key: nextKey(), domain: 'go.hotmart.com', tipo: 'checkout' },
+                  ])
+                }
+              }}
+              className="h-4 w-4 rounded"
+            />
             Enriquecer com dados de sessão (geo, IP, fbp, fbc)
           </label>
           <p className="text-[11px] text-slate-600">
@@ -452,8 +477,13 @@ export function InstallationModal({ open, installation, onClose, onSaved }: Inst
           Salvar
         </Button>
         {installation && (
-          <Button className="flex-1" variant="outline" onClick={handleDeploy} disabled={deploying}>
-            {deploying && <Spinner size={14} />}
+          <Button
+            className="flex-1 text-white"
+            style={{ background: 'linear-gradient(135deg, #f97316, #ef4444)' }}
+            onClick={handleDeploy}
+            disabled={saving || deploying}
+          >
+            {deploying ? <Spinner size={14} /> : <Rocket size={14} />}
             Fazer deploy
           </Button>
         )}
