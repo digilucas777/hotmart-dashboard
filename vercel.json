@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/purge-dashboards",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/purge-track-events",
+      "schedule": "0 4 * * *"
     }
   ]
 }
