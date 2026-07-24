@@ -22,6 +22,11 @@ export async function POST(request: Request) {
   const { supabase, user } = await getAuthenticatedUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
+  const { data: profile } = await supabase.from('user_profiles').select('role').eq('id', user.id).maybeSingle()
+  if (profile?.role !== 'admin') {
+    return NextResponse.json({ error: 'módulo em teste — só administradores podem usar por enquanto' }, { status: 403 })
+  }
+
   const body = await request.json().catch(() => null) as TrackInstallationSaveInput | null
   if (!body || !body.nome?.trim()) {
     return NextResponse.json({ error: 'nome é obrigatório' }, { status: 400 })

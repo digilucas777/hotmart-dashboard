@@ -23,6 +23,8 @@ export default function RastreamentoPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [savedPopup, setSavedPopup] = useState<TrackInstallation | null>(null)
   const [deployToast, setDeployToast] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [checkingAccess, setCheckingAccess] = useState(true)
 
   const fetchInstallations = useCallback(async () => {
     setLoading(true)
@@ -36,7 +38,11 @@ export default function RastreamentoPage() {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-      await fetchInstallations()
+      const { data: profile } = await supabase.from('user_profiles').select('role').eq('id', user.id).maybeSingle()
+      const admin = profile?.role === 'admin'
+      setIsAdmin(admin)
+      setCheckingAccess(false)
+      if (admin) await fetchInstallations()
     }
     void init()
   }, [router, fetchInstallations])
@@ -110,6 +116,18 @@ export default function RastreamentoPage() {
       </header>
 
       <main className="mx-auto max-w-[1200px] px-6 py-8">
+        {checkingAccess ? (
+          <div className="flex justify-center py-16"><Spinner size={24} /></div>
+        ) : !isAdmin ? (
+          <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed py-20 text-center" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
+            <span className="text-3xl">🚧</span>
+            <h1 className="mt-2 text-lg font-bold text-slate-100">Em teste</h1>
+            <p className="max-w-sm text-sm text-slate-500">
+              Esse módulo de rastreamento ainda está em teste — em breve disponível pra todo mundo.
+            </p>
+          </div>
+        ) : (
+        <>
         <div className="mb-6">
           <h1 className="text-xl font-bold text-slate-100">Instalações de rastreamento</h1>
           <p className="mt-0.5 text-xs text-slate-500">
@@ -179,8 +197,12 @@ export default function RastreamentoPage() {
             ))}
           </div>
         )}
+        </>
+        )}
       </main>
 
+      {isAdmin && (
+      <>
       <InstallationModal
         open={showModal}
         installation={editing}
@@ -241,6 +263,8 @@ export default function RastreamentoPage() {
           </div>
         </div>
       </Modal>
+      </>
+      )}
     </div>
   )
 }
