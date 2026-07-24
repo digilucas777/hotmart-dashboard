@@ -135,13 +135,15 @@ function buildCheckoutDecoratorCode(checkoutDomains) {
           u.searchParams.set('sck', sid);
           link.href = u.toString();
         }
-        // "src" marca que essa venda veio de uma página com nosso script
-        // instalado (nunca sobrescreve se a página já tiver colocado um src
-        // manualmente) — é o que diferencia, do lado do webhook, uma venda
-        // desse funil rastreado de uma venda de outro pixel/campanha que usa
-        // o mesmo produto da Hotmart sem passar por aqui.
-        if (!u.searchParams.has('src')) {
-          u.searchParams.set('src', 'rastreamento-tracker');
+        // O "src" já é usado manualmente (pra identificar a página/variante
+        // de origem) — a gente só ACRESCENTA "-tracker" no valor que já tá
+        // lá, nunca inventa um valor novo nem sobrescreve o que já existe.
+        // É esse sufixo que diferencia, do lado do webhook, uma venda desse
+        // funil rastreado de uma venda de outro pixel/campanha que usa o
+        // mesmo produto da Hotmart sem passar por uma página com o script.
+        var existingSrc = u.searchParams.get('src');
+        if (existingSrc && existingSrc.toLowerCase().indexOf('tracker') === -1) {
+          u.searchParams.set('src', existingSrc + '-tracker');
           link.href = u.toString();
         }
         link.setAttribute('data-ht-decorated', '1');
