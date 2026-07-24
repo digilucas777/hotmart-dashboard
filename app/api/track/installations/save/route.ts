@@ -49,6 +49,7 @@ export async function POST(request: Request) {
     session_enrichment_enabled: !!body.session_enrichment_enabled,
     session_ttl_days: body.session_ttl_days ?? 7,
     diagnostico_ativo: !!body.diagnostico_ativo,
+    require_tracker_src: !!body.require_tracker_src,
     updated_at: new Date().toISOString(),
   }
   if (body.cloudflare_api_token) {

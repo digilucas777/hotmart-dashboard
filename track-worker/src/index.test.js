@@ -549,3 +549,100 @@ test('webhook da Hotmart propaga geo e UTM da sessão cruzada pro ingest do Purc
     globalThis.fetch = originalFetch
   }
 })
+
+test('webhook da Hotmart NÃO manda pra Meta quando REQUIRE_TRACKER_SRC está ligado e o src não tem "-tracker" (venda de outro pixel/campanha)', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest({ REQUIRE_TRACKER_SRC: 'true' })
+    const ctx = makeCtx()
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'Outro Comprador', email: 'outro@exemplo.com' },
+          purchase: { transaction: 'HP-OUTRO-PIXEL', price: { value: 97, currency_value: 'BRL' }, origin: { src: 'outro-pixel-campanha' } },
+        },
+      }),
+    })
+    const res = await worker.fetch(req, env, ctx)
+    assert.equal(res.status, 200)
+    await Promise.all(ctx._tasks)
+
+    assert.equal(calls.filter(c => c.url.includes('graph.facebook.com')).length, 0, 'não devia mandar pra Meta')
+    const ingestCall = calls.find(c => c.url === env.INGEST_URL)
+    assert.ok(ingestCall, 'ainda devia aparecer no nosso painel')
+    const ingestBody = JSON.parse(ingestCall.init.body)
+    assert.equal(ingestBody.source, 'pixel')
+    assert.equal(ingestBody.src, 'outro-pixel-campanha')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart MANDA pra Meta quando REQUIRE_TRACKER_SRC está ligado e o src tem "-tracker"', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest({ REQUIRE_TRACKER_SRC: 'true' })
+    const ctx = makeCtx()
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'Comprador Rastreado', email: 'rastreado@exemplo.com' },
+          purchase: { transaction: 'HP-RASTREADO', price: { value: 97, currency_value: 'BRL' }, origin: { src: 'pv-b-vs-nv-tracker' } },
+        },
+      }),
+    })
+    const res = await worker.fetch(req, env, ctx)
+    assert.equal(res.status, 200)
+    await Promise.all(ctx._tasks)
+
+    assert.equal(calls.filter(c => c.url.includes('graph.facebook.com')).length, 1, 'devia mandar pra Meta')
+    const ingestCall = calls.find(c => c.url === env.INGEST_URL)
+    const ingestBody = JSON.parse(ingestCall.init.body)
+    assert.equal(ingestBody.source, 'capi')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart manda pra Meta normalmente quando REQUIRE_TRACKER_SRC não está ligado (comportamento padrão, compatível)', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest()
+    const ctx = makeCtx()
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'Sem Filtro', email: 'semfiltro@exemplo.com' },
+          purchase: { transaction: 'HP-SEM-FILTRO', price: { value: 97, currency_value: 'BRL' } },
+        },
+      }),
+    })
+    const res = await worker.fetch(req, env, ctx)
+    assert.equal(res.status, 200)
+    await Promise.all(ctx._tasks)
+    assert.equal(calls.filter(c => c.url.includes('graph.facebook.com')).length, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})

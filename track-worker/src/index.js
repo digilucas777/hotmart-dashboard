@@ -252,6 +252,17 @@ async function handleHotmartWebhook(request, env, ctx) {
   const pixels = parseEnvJson(env.PIXELS_JSON, [])
   if (pixels.length === 0) return json({ error: 'no pixels configured' }, 500)
 
+  // O webhook da Hotmart é por PRODUTO, não por domínio/pixel/campanha — se
+  // o mesmo produto também é vendido por outro pixel/campanha fora desse
+  // funil, a Hotmart chama esse mesmo webhook pra QUALQUER venda aprovada
+  // do produto. Quando REQUIRE_TRACKER_SRC está ligado, só manda pra Meta
+  // as vendas cujo "src" tem o sufixo "-tracker" que o nosso próprio script
+  // colou no link de checkout — o resto ainda aparece no painel (fica
+  // registrado), só não vai pra Meta, pra não atribuir errado.
+  const requireTrackerSrc = env.REQUIRE_TRACKER_SRC === 'true'
+  const rawSrc = purchase?.origin?.src || null
+  const isTrackedSale = !requireTrackerSrc || (typeof rawSrc === 'string' && rawSrc.toLowerCase().includes('tracker'))
+
   const userData = {}
   if (buyer.email) userData.em = await sha256Hex(buyer.email)
   if (buyer.name) userData.fn = await sha256Hex(String(buyer.name).split(' ')[0])
@@ -307,29 +318,36 @@ async function handleHotmartWebhook(request, env, ctx) {
   }
 
   const eventId = `purchase:${purchase.transaction}`
-  const results = await Promise.all(pixels.map(pixel => sendToMeta({
-    pixelId: pixel.pixel_id,
-    capiToken: pixel.capi_token,
-    testEventCode: pixel.test_event_code,
-    eventName: 'Purchase',
-    eventId,
-    eventSourceUrl: undefined,
-    userData,
-    customData: {
-      value: purchase.price?.value ?? 0,
-      currency: purchase.price?.currency_value ?? 'BRL',
-    },
-  })))
+  let results = []
+  if (isTrackedSale) {
+    results = await Promise.all(pixels.map(pixel => sendToMeta({
+      pixelId: pixel.pixel_id,
+      capiToken: pixel.capi_token,
+      testEventCode: pixel.test_event_code,
+      eventName: 'Purchase',
+      eventId,
+      eventSourceUrl: undefined,
+      userData,
+      customData: {
+        value: purchase.price?.value ?? 0,
+        currency: purchase.price?.currency_value ?? 'BRL',
+      },
+    })))
+  }
 
   if (env.DIAGNOSTICO_ATIVO === 'true') {
-    console.log('[Rastreamento] /webhook/hotmart', { transaction: purchase.transaction, resultados: results })
+    if (isTrackedSale) {
+      console.log('[Rastreamento] /webhook/hotmart', { transaction: purchase.transaction, resultados: results })
+    } else {
+      console.log('[Rastreamento] /webhook/hotmart ignorado (src sem "-tracker", não é desse funil):', { transaction: purchase.transaction, src: rawSrc })
+    }
   }
 
   const matchedGeo = matchedSession?.geo || {}
   const matchedUtm = matchedSession?.utm || {}
   sendToIngest(ctx, env, {
     event_name: 'Purchase',
-    source: 'capi',
+    source: isTrackedSale ? 'capi' : 'pixel',
     fbp: userData.fbp || null,
     fbc: userData.fbc || null,
     ip: userData.client_ip_address || null,

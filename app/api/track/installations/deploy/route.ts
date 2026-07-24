@@ -109,6 +109,7 @@ export async function POST(request: Request) {
       { type: 'plain_text', name: 'DIAGNOSTICO_ATIVO', text: String(installation.diagnostico_ativo) },
       { type: 'plain_text', name: 'INGEST_URL', text: `${APP_URL}/api/track/events/ingest` },
       { type: 'secret_text', name: 'INGEST_SECRET', text: installation.ingest_secret },
+      { type: 'plain_text', name: 'REQUIRE_TRACKER_SRC', text: String(installation.require_tracker_src) },
     ]
 
     await deployWorkerScript(token, accountId, scriptName, readWorkerModules(), bindings)

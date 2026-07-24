@@ -139,6 +139,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
   const [sessionEnrichment, setSessionEnrichment] = useState(false)
   const [sessionTtlDays, setSessionTtlDays] = useState(7)
   const [diagnostico, setDiagnostico] = useState(false)
+  const [requireTrackerSrc, setRequireTrackerSrc] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deploying, setDeploying] = useState(false)
@@ -175,6 +176,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
       setSessionEnrichment(installation.session_enrichment_enabled)
       setSessionTtlDays(installation.session_ttl_days)
       setDiagnostico(installation.diagnostico_ativo)
+      setRequireTrackerSrc(installation.require_tracker_src)
     } else {
       setNome('')
       setWorkerSubdomain('')
@@ -188,6 +190,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
       setSessionEnrichment(false)
       setSessionTtlDays(7)
       setDiagnostico(false)
+      setRequireTrackerSrc(false)
     }
     setError(null)
   }, [open, installation])
@@ -219,6 +222,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
         session_enrichment_enabled: sessionEnrichment,
         session_ttl_days: sessionTtlDays,
         diagnostico_ativo: diagnostico,
+        require_tracker_src: requireTrackerSrc,
         pixels: validPixels.map(p => ({
           id: p.id,
           pixel_id: p.pixel_id.trim(),
@@ -399,6 +403,23 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
           <input type="checkbox" checked={diagnostico} onChange={e => setDiagnostico(e.target.checked)} className="h-4 w-4 rounded" />
           Diagnóstico (debug) — guarda amostra do payload cru de cada evento
         </label>
+
+        <div>
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={requireTrackerSrc}
+              onChange={e => setRequireTrackerSrc(e.target.checked)}
+              className="h-4 w-4 rounded"
+            />
+            Só manda Purchase pra Meta se o link de checkout tiver "-tracker" no src
+          </label>
+          <p className="mt-1 ml-6 text-xs text-slate-500">
+            Ative se o mesmo produto da Hotmart também for vendido por outro pixel/campanha fora
+            desse funil — sem isso, toda venda aprovada do produto (de qualquer origem) seria
+            atribuída a essa instalação.
+          </p>
+        </div>
 
         {/* Seção 3 — Eventos (gatilhos) */}
         <section>

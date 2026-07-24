@@ -42,6 +42,7 @@ export type TrackInstallation = {
   session_enrichment_enabled: boolean
   session_ttl_days: number
   diagnostico_ativo: boolean
+  require_tracker_src: boolean
   status: 'draft' | 'deployed'
   created_at: string
   updated_at: string
@@ -80,6 +81,7 @@ export type TrackInstallationSaveInput = {
   session_enrichment_enabled?: boolean
   session_ttl_days?: number
   diagnostico_ativo?: boolean
+  require_tracker_src?: boolean
   pixels?: TrackPixelInput[]
   domains?: TrackDomainInput[]
   triggers?: TrackTriggerInput[]
