@@ -8,6 +8,11 @@ test('buildSnippet sempre inclui disparo automático de PageView', () => {
   assert.match(code, /window\.HotTrack = \{ track: send \}/)
 })
 
+test('buildSnippet usa URL absoluta do Worker pro /collect (script roda no domínio da página, não no dele)', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [], workerOrigin: 'https://sinal.lecoursdejoy.store' })
+  assert.match(code, /COLLECT_URL = "https:\/\/sinal\.lecoursdejoy\.store" \+ '\/collect'/)
+})
+
 test('buildSnippet ignora gatilho inativo', () => {
   const code = buildSnippet({
     sessionTtlDays: 7,

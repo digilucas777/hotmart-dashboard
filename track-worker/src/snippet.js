@@ -146,13 +146,17 @@ function buildCheckoutDecoratorCode(checkoutDomains) {
   })();`
 }
 
-export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains }) {
+export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, workerOrigin }) {
   const sessionTtlSeconds = Math.max(1, Number(sessionTtlDays) || 7) * 86400
   const triggerCode = (triggers || []).map(buildTriggerCode).join('\n')
   const checkoutDecoratorCode = buildCheckoutDecoratorCode(checkoutDomains)
 
   return `(function(){
-  var COLLECT_URL = '/collect';
+  // Precisa ser uma URL absoluta pro domínio do Worker: esse script roda no
+  // contexto da PÁGINA que o carregou (ex: lecoursdejoy.store), não no
+  // domínio de onde ele foi baixado — uma URL relativa tipo '/collect'
+  // mandaria a chamada pro próprio site do cliente, que não tem essa rota.
+  var COLLECT_URL = ${jsString(workerOrigin || '')} + '/collect';
   var SESSION_TTL_SECONDS = ${sessionTtlSeconds};
   function getCookie(name){
     var m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]+)'));

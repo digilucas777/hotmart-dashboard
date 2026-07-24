@@ -55,6 +55,13 @@ test('GET /t.js retorna javascript com PageView automático', async () => {
   assert.match(body, /send\('PageView'\)/)
 })
 
+test('GET /t.js usa o próprio domínio do Worker como COLLECT_URL (script roda no domínio da página do cliente)', async () => {
+  const env = makeEnv()
+  const res = await worker.fetch(new Request('https://sinal.teste.com/t.js'), env)
+  const body = await res.text()
+  assert.match(body, /COLLECT_URL = "https:\/\/sinal\.teste\.com" \+ '\/collect'/)
+})
+
 test('GET /health retorna a contagem de pixels configurados', async () => {
   const env = makeEnv()
   const res = await worker.fetch(new Request('https://sinal.teste.com/health'), env)

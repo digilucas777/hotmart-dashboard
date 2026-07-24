@@ -12,11 +12,12 @@ function parseEnvJson(raw, fallback) {
   try { return raw ? JSON.parse(raw) : fallback } catch { return fallback }
 }
 
-function handleSnippet(env) {
+function handleSnippet(request, env) {
   const triggers = parseEnvJson(env.TRIGGERS_JSON, [])
   const checkoutDomains = parseEnvJson(env.CHECKOUT_DOMAINS_JSON, [])
   const sessionTtlDays = Number(env.SESSION_TTL_DAYS) || 7
-  const body = buildSnippet({ sessionTtlDays, triggers, checkoutDomains })
+  const workerOrigin = new URL(request.url).origin
+  const body = buildSnippet({ sessionTtlDays, triggers, checkoutDomains, workerOrigin })
   return new Response(body, {
     headers: { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=300' },
   })
@@ -283,7 +284,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url)
     try {
-      if (url.pathname === '/t.js') return handleSnippet(env)
+      if (url.pathname === '/t.js') return handleSnippet(request, env)
       if (url.pathname === '/collect' && request.method === 'POST') return handleCollect(request, env, ctx)
       if (url.pathname === '/webhook/hotmart') return handleHotmartWebhook(request, env, ctx)
       if (url.pathname === '/health') return handleHealth(env)
