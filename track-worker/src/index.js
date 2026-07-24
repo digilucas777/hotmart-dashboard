@@ -4,12 +4,28 @@ import { normalizePhone } from './phone.js'
 
 const WORKER_VERSION = '1.2.0'
 
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
+function json(data, status = 200, extraHeaders) {
+  return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...extraHeaders } })
 }
 
 function parseEnvJson(raw, fallback) {
   try { return raw ? JSON.parse(raw) : fallback } catch { return fallback }
+}
+
+// O /collect é chamado via navigator.sendBeacon com um Blob de tipo
+// application/json — pro navegador isso conta como requisição "não-simples"
+// e ele manda um preflight OPTIONS antes. Sem responder esse preflight com os
+// cabeçalhos certos, o navegador cancela o POST de verdade silenciosamente
+// (sem erro nenhum no console) — foi exatamente isso que impedia os eventos
+// de chegar, mesmo depois da URL do COLLECT_URL já estar correta.
+function corsHeaders(request, env) {
+  const origin = request.headers.get('Origin') || ''
+  return {
+    'Access-Control-Allow-Origin': isOriginAllowed(request, env) ? origin : 'null',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Max-Age': '86400',
+  }
 }
 
 function handleSnippet(request, env) {
@@ -102,13 +118,14 @@ function sendToIngest(ctx, env, event) {
 }
 
 async function handleCollect(request, env, ctx) {
-  if (!isOriginAllowed(request, env)) return json({ error: 'origin not allowed' }, 403)
+  const cors = corsHeaders(request, env)
+  if (!isOriginAllowed(request, env)) return json({ error: 'origin not allowed' }, 403, cors)
 
   const body = await request.json().catch(() => null)
-  if (!body || !body.event_name || !body.session_id) return json({ error: 'invalid payload' }, 400)
+  if (!body || !body.event_name || !body.session_id) return json({ error: 'invalid payload' }, 400, cors)
 
   const pixels = parseEnvJson(env.PIXELS_JSON, [])
-  if (pixels.length === 0) return json({ error: 'no pixels configured' }, 500)
+  if (pixels.length === 0) return json({ error: 'no pixels configured' }, 500, cors)
 
   const ip = request.headers.get('CF-Connecting-IP') || ''
   const userAgent = request.headers.get('User-Agent') || ''
@@ -173,7 +190,7 @@ async function handleCollect(request, env, ctx) {
     raw_payload: env.DIAGNOSTICO_ATIVO === 'true' ? body : null,
   })
 
-  return json({ ok: true })
+  return json({ ok: true }, 200, cors)
 }
 
 async function handleHotmartWebhook(request, env, ctx) {
@@ -285,6 +302,9 @@ export default {
     const url = new URL(request.url)
     try {
       if (url.pathname === '/t.js') return handleSnippet(request, env)
+      if (url.pathname === '/collect' && request.method === 'OPTIONS') {
+        return new Response(null, { status: 204, headers: corsHeaders(request, env) })
+      }
       if (url.pathname === '/collect' && request.method === 'POST') return handleCollect(request, env, ctx)
       if (url.pathname === '/webhook/hotmart') return handleHotmartWebhook(request, env, ctx)
       if (url.pathname === '/health') return handleHealth(env)

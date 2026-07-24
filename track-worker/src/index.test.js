@@ -70,6 +70,35 @@ test('GET /health retorna a contagem de pixels configurados', async () => {
   assert.equal(json.pixels, 1)
 })
 
+test('OPTIONS /collect responde o preflight de CORS (senão o navegador cancela o sendBeacon real, sem erro nenhum)', async () => {
+  const env = makeEnv()
+  const req = new Request('https://sinal.teste.com/collect', {
+    method: 'OPTIONS',
+    headers: { Origin: 'https://minhalp.com.br', 'Access-Control-Request-Method': 'POST' },
+  })
+  const res = await worker.fetch(req, env)
+  assert.equal(res.status, 204)
+  assert.equal(res.headers.get('Access-Control-Allow-Origin'), 'https://minhalp.com.br')
+  assert.match(res.headers.get('Access-Control-Allow-Methods'), /POST/)
+})
+
+test('POST /collect responde com Access-Control-Allow-Origin da origem permitida', async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response('{}', { status: 200 })
+  try {
+    const env = makeEnv()
+    const req = new Request('https://sinal.teste.com/collect', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: 'PageView', session_id: 'abc' }),
+    })
+    const res = await worker.fetch(req, env)
+    assert.equal(res.headers.get('Access-Control-Allow-Origin'), 'https://minhalp.com.br')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('POST /collect rejeita origem fora da allowlist', async () => {
   const env = makeEnv()
   const req = new Request('https://sinal.teste.com/collect', {
