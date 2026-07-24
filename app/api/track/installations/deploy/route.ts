@@ -12,6 +12,10 @@ function scriptNameFor(installationId: string): string {
   return `track-${installationId.replace(/-/g, '').slice(0, 16)}`
 }
 
+// Mesma URL usada pelos workflows de cron (.github/workflows/*.yml) — o
+// projeto não tem uma env var própria pra isso, segue a mesma convenção.
+const APP_URL = 'https://hotmart-dashboard-woad.vercel.app'
+
 function readWorkerModules() {
   const dir = path.join(process.cwd(), 'track-worker', 'src')
   return [
@@ -102,6 +106,8 @@ export async function POST(request: Request) {
       { type: 'plain_text', name: 'SESSION_ENRICHMENT_ENABLED', text: String(installation.session_enrichment_enabled) },
       { type: 'plain_text', name: 'SESSION_TTL_DAYS', text: String(installation.session_ttl_days) },
       { type: 'plain_text', name: 'DIAGNOSTICO_ATIVO', text: String(installation.diagnostico_ativo) },
+      { type: 'plain_text', name: 'INGEST_URL', text: `${APP_URL}/api/track/events/ingest` },
+      { type: 'secret_text', name: 'INGEST_SECRET', text: installation.ingest_secret },
     ]
 
     await deployWorkerScript(token, accountId, scriptName, readWorkerModules(), bindings)
