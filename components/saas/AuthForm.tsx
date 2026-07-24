@@ -151,7 +151,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                   <UserRound size={12} />
                   Nome
                 </span>
-                <input value={name} onChange={e => setName(e.target.value)} required className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm outline-none transition-colors focus:border-cyan-300/60" />
+                <input name="name" autoComplete="name" value={name} onChange={e => setName(e.target.value)} required className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm outline-none transition-colors focus:border-cyan-300/60" />
               </label>
             )}
             <label className="block">
@@ -159,7 +159,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                 <Mail size={12} />
                 E-mail
               </span>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} required className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm outline-none transition-colors focus:border-cyan-300/60" />
+              <input type="email" name="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} required className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm outline-none transition-colors focus:border-cyan-300/60" />
             </label>
             {!isForgot && (
               <label className="block">
@@ -167,7 +167,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                   <Lock size={12} />
                   Senha
                 </span>
-                <input type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm outline-none transition-colors focus:border-cyan-300/60" />
+                <input type="password" name="password" autoComplete={isRegister ? 'new-password' : 'current-password'} value={password} onChange={e => setPassword(e.target.value)} required minLength={6} className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm outline-none transition-colors focus:border-cyan-300/60" />
               </label>
             )}
 
