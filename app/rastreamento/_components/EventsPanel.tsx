@@ -56,6 +56,16 @@ function relativeTime(iso: string): string {
   return `há ${Math.floor(h / 24)}d`
 }
 
+// Data/hora completa (no fuso do navegador de quem tá olhando o painel) —
+// pra comparar direto com o horário que a Hotmart mostra, "há Xs" sozinho
+// não dá pra bater o olho com um horário exato.
+function exactTime(iso: string): string {
+  return new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  })
+}
+
 function geoLabel(e: RecentEvent): string | null {
   const parts = [e.geo_city, e.geo_region, e.geo_country].filter(Boolean)
   return parts.length > 0 ? parts.join(', ') : null
@@ -74,6 +84,11 @@ function pageSlug(url: string | null): string | null {
 function originLabel(e: RecentEvent): { label: string; className: string } {
   if (e.fbc) return { label: '📱 Facebook Ads', className: 'text-blue-300' }
   if (e.utm_source) return { label: `🔗 ${e.utm_source}`, className: 'text-indigo-300' }
+  // "src" é o campo que a Hotmart já manda mesmo quando não tem fbc/utm (ex:
+  // compras de order bump/upsell, que não passam por uma nova página com
+  // sessão) — melhor sinal de origem do que nada, não devia cair em
+  // "Direto/Orgânico" só porque faltou fbc/utm.
+  if (e.src) return { label: `🏷️ ${e.src}`, className: 'text-teal-300' }
   return { label: '🌐 Direto/Orgânico', className: 'text-slate-400' }
 }
 
@@ -117,7 +132,10 @@ function EventRow({ e }: { e: RecentEvent }) {
             </span>
           )}
         </span>
-        <span className="text-slate-600">{relativeTime(e.received_at)}</span>
+        <span className="text-right text-slate-600">
+          <span className="block font-mono text-slate-400">{exactTime(e.received_at)}</span>
+          <span className="block text-[10px]">{relativeTime(e.received_at)}</span>
+        </span>
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
         <span className={origin.className}>{origin.label}</span>
