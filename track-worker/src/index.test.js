@@ -384,6 +384,42 @@ test('POST /collect avisa o dashboard (ingest) em segundo plano, sem atrasar a r
   }
 })
 
+test('POST /collect manda geo cru e UTM pro ingest (painel precisa mostrar de onde veio o visitante)', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest()
+    const ctx = makeCtx()
+    const req = new Request('https://sinal.teste.com/collect', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json', 'cf-connecting-ip': '9.9.9.9' },
+      body: JSON.stringify({
+        event_name: 'PageView',
+        session_id: 'sess-utm',
+        url: 'https://minhalp.com.br/?utm_source=facebook&utm_medium=cpc&utm_campaign=verao',
+        utm: { utm_source: 'facebook', utm_medium: 'cpc', utm_campaign: 'verao' },
+      }),
+    })
+    req.cf = { city: 'Paris', regionCode: 'IDF', country: 'FR', postalCode: '75001' }
+    await worker.fetch(req, env, ctx)
+    await Promise.all(ctx._tasks)
+
+    const ingestCall = calls.find(c => c.url === env.INGEST_URL)
+    const ingestBody = JSON.parse(ingestCall.init.body)
+    assert.equal(ingestBody.geo_city, 'Paris')
+    assert.equal(ingestBody.geo_country, 'FR')
+    assert.equal(ingestBody.utm_source, 'facebook')
+    assert.equal(ingestBody.utm_medium, 'cpc')
+    assert.equal(ingestBody.utm_campaign, 'verao')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('webhook da Hotmart avisa o dashboard (ingest) com session_hit true quando cruzou sessão', async () => {
   const originalFetch = globalThis.fetch
   const calls = []
@@ -416,6 +452,47 @@ test('webhook da Hotmart avisa o dashboard (ingest) com session_hit true quando 
     assert.equal(ingestBody.event_name, 'Purchase')
     assert.equal(ingestBody.session_hit, true)
     assert.equal(ingestBody.session_id, 'sess-xyz')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart propaga geo e UTM da sessão cruzada pro ingest do Purchase', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest()
+    const ctx = makeCtx()
+    await env.SESSIONS.put('sid:sess-utm2', JSON.stringify({
+      fbp: 'fb.1.999', fbc: null, ip: '8.8.8.8', userAgent: 'ua',
+      geo: { city: 'Lyon', region: 'ARA', country: 'FR', postalCode: '69001' },
+      url: 'https://minhalp.com.br/?utm_source=facebook',
+      utm: { utm_source: 'facebook', utm_medium: 'cpc' },
+    }))
+
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'Ana Souza', email: 'ana@exemplo.com' },
+          purchase: { transaction: 'HP998', price: { value: 197, currency_value: 'BRL' }, origin: { sck: 'sess-utm2' } },
+        },
+      }),
+    })
+    await worker.fetch(req, env, ctx)
+    await Promise.all(ctx._tasks)
+
+    const ingestCall = calls.find(c => c.url === env.INGEST_URL)
+    const ingestBody = JSON.parse(ingestCall.init.body)
+    assert.equal(ingestBody.geo_city, 'Lyon')
+    assert.equal(ingestBody.geo_country, 'FR')
+    assert.equal(ingestBody.utm_source, 'facebook')
+    assert.equal(ingestBody.utm_medium, 'cpc')
   } finally {
     globalThis.fetch = originalFetch
   }

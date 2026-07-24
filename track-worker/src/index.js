@@ -139,7 +139,7 @@ async function handleCollect(request, env, ctx) {
     // próprio, só logada quando o diagnóstico está ativo.
     try {
       const ttlSeconds = (Number(env.SESSION_TTL_DAYS) || 7) * 86400
-      const sessionData = { fbp: body.fbp || null, fbc: body.fbc || null, ip, userAgent, geo, url: body.url || null }
+      const sessionData = { fbp: body.fbp || null, fbc: body.fbc || null, ip, userAgent, geo, url: body.url || null, utm: body.utm || null }
 
       // Grava a sessão (chave sid:) só na 1ª chamada da sessão inteira (marcada
       // pelo cliente via sessionStorage) — gravar em toda chamada estourava
@@ -179,6 +179,7 @@ async function handleCollect(request, env, ctx) {
     console.log('[Rastreamento] /collect', { event: body.event_name, session_id: body.session_id, resultados: results })
   }
 
+  const utm = body.utm || {}
   sendToIngest(ctx, env, {
     event_name: body.event_name,
     source: 'capi',
@@ -187,6 +188,17 @@ async function handleCollect(request, env, ctx) {
     ip,
     session_id: body.session_id,
     session_hit: false,
+    geo_city: geo.city,
+    geo_region: geo.region,
+    geo_country: geo.country,
+    geo_postal_code: geo.postalCode,
+    user_agent: userAgent,
+    url: body.url || null,
+    utm_source: utm.utm_source || null,
+    utm_medium: utm.utm_medium || null,
+    utm_campaign: utm.utm_campaign || null,
+    utm_content: utm.utm_content || null,
+    utm_term: utm.utm_term || null,
     raw_payload: env.DIAGNOSTICO_ATIVO === 'true' ? body : null,
   })
 
@@ -219,6 +231,7 @@ async function handleHotmartWebhook(request, env, ctx) {
   const sessionEnrichment = env.SESSION_ENRICHMENT_ENABLED === 'true'
   let sessionHit = false
   let matchedSessionId = null
+  let matchedSession = null
   if (sessionEnrichment && env.SESSIONS) {
     // Uma falha aqui (ex: KV fora do ar) nunca pode impedir o envio do
     // Purchase — nesse caso ele só sai sem o bônus de fbp/fbc/geo.
@@ -246,6 +259,7 @@ async function handleHotmartWebhook(request, env, ctx) {
 
       if (session) {
         sessionHit = true
+        matchedSession = session
         if (session.fbp) userData.fbp = session.fbp
         if (session.fbc) userData.fbc = session.fbc
         if (session.ip) userData.client_ip_address = session.ip
@@ -278,6 +292,8 @@ async function handleHotmartWebhook(request, env, ctx) {
     console.log('[Rastreamento] /webhook/hotmart', { transaction: purchase.transaction, resultados: results })
   }
 
+  const matchedGeo = matchedSession?.geo || {}
+  const matchedUtm = matchedSession?.utm || {}
   sendToIngest(ctx, env, {
     event_name: 'Purchase',
     source: 'capi',
@@ -286,6 +302,17 @@ async function handleHotmartWebhook(request, env, ctx) {
     ip: userData.client_ip_address || null,
     session_id: matchedSessionId,
     session_hit: sessionHit,
+    geo_city: matchedGeo.city || null,
+    geo_region: matchedGeo.region || null,
+    geo_country: matchedGeo.country || null,
+    geo_postal_code: matchedGeo.postalCode || null,
+    user_agent: matchedSession?.userAgent || null,
+    url: matchedSession?.url || null,
+    utm_source: matchedUtm.utm_source || null,
+    utm_medium: matchedUtm.utm_medium || null,
+    utm_campaign: matchedUtm.utm_campaign || null,
+    utm_content: matchedUtm.utm_content || null,
+    utm_term: matchedUtm.utm_term || null,
     raw_payload: env.DIAGNOSTICO_ATIVO === 'true' ? body : null,
   })
 

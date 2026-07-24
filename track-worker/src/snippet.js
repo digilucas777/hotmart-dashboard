@@ -191,6 +191,28 @@ export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, worker
     document.cookie = '_fbc=' + id + ';path=/;max-age=7776000;SameSite=Lax';
     return id;
   }
+  // UTM só vem na URL da página de entrada (o clique no anúncio) — páginas
+  // seguintes na mesma sessão não têm mais o parâmetro. Por isso guarda num
+  // cookie na primeira vez que aparece e reaproveita depois, igual ao fbc.
+  function getOrCreateUtm(){
+    var keys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
+    var params = new URLSearchParams(location.search);
+    var current = {};
+    var hasAny = false;
+    keys.forEach(function(k){
+      var v = params.get(k);
+      if (v) { current[k] = v; hasAny = true; }
+    });
+    if (hasAny) {
+      document.cookie = '_ht_utm=' + encodeURIComponent(JSON.stringify(current)) + ';path=/;max-age=' + SESSION_TTL_SECONDS + ';SameSite=Lax';
+      return current;
+    }
+    var stored = getCookie('_ht_utm');
+    if (stored) {
+      try { return JSON.parse(stored); } catch (e) { return {}; }
+    }
+    return {};
+  }
   // A sessão (fbp/fbc/geo/ip) só precisa ser gravada uma vez no KV — gravar de
   // novo a cada evento estourava rápido a cota gratuita (1000 gravações/dia).
   // sessionStorage sobrevive entre páginas na mesma aba, então isso marca só a
@@ -207,6 +229,7 @@ export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, worker
   var sid = getOrCreateSid();
   var fbp = getOrCreateFbp();
   var fbc = getOrCreateFbc();
+  var utm = getOrCreateUtm();
   function send(eventName, extra){
     var payload = {
       event_name: eventName,
@@ -214,6 +237,7 @@ export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, worker
       fbp: fbp,
       fbc: fbc,
       url: location.href,
+      utm: utm,
       new_session: isNewSession(),
       params: extra || {}
     };

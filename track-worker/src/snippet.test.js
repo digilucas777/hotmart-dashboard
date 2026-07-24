@@ -43,6 +43,13 @@ test('buildSnippet inclui a validade de sessão em segundos no cookie', () => {
   assert.match(code, /SESSION_TTL_SECONDS = 1209600/)
 })
 
+test('buildSnippet captura utm_* da URL e manda no payload (pra saber de onde veio o clique)', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [] })
+  assert.match(code, /function getOrCreateUtm\(\)/)
+  assert.match(code, /'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'/)
+  assert.match(code, /utm: utm/)
+})
+
 test('buildSnippet manda o evento via fetch com keepalive, não sendBeacon (sendBeacon se mostrou pouco confiável em teste real)', () => {
   const code = buildSnippet({ sessionTtlDays: 7, triggers: [] })
   assert.doesNotMatch(code, /navigator\.sendBeacon\(/)

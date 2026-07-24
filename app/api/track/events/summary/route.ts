@@ -2,7 +2,25 @@ import { NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/app/api/meta/_utils'
 
 type EventRow = { event_name: string; fbp: string | null; fbc: string | null; session_hit: boolean | null }
-type RecentRow = { event_name: string; source: string; session_hit: boolean | null; received_at: string }
+type RecentRow = {
+  event_name: string
+  source: string
+  session_hit: boolean | null
+  received_at: string
+  ip: string | null
+  fbp: string | null
+  fbc: string | null
+  session_id: string | null
+  geo_city: string | null
+  geo_region: string | null
+  geo_country: string | null
+  url: string | null
+  utm_source: string | null
+  utm_medium: string | null
+  utm_campaign: string | null
+  utm_content: string | null
+  utm_term: string | null
+}
 
 export async function GET(request: Request) {
   const { supabase, user } = await getAuthenticatedUser()
@@ -54,10 +72,10 @@ export async function GET(request: Request) {
 
   const { data: recent } = await supabase
     .from('track_events')
-    .select('event_name, source, session_hit, received_at')
+    .select('event_name, source, session_hit, received_at, ip, fbp, fbc, session_id, geo_city, geo_region, geo_country, url, utm_source, utm_medium, utm_campaign, utm_content, utm_term')
     .eq('installation_id', installationId)
     .order('received_at', { ascending: false })
-    .limit(20)
+    .limit(30)
 
   return NextResponse.json({
     counts_24h: counts,

@@ -19,6 +19,17 @@ type IngestBody = {
   ip?: string | null
   session_id?: string | null
   session_hit?: boolean
+  geo_city?: string | null
+  geo_region?: string | null
+  geo_country?: string | null
+  geo_postal_code?: string | null
+  user_agent?: string | null
+  url?: string | null
+  utm_source?: string | null
+  utm_medium?: string | null
+  utm_campaign?: string | null
+  utm_content?: string | null
+  utm_term?: string | null
   raw_payload?: unknown
 }
 
@@ -54,6 +65,17 @@ export async function POST(request: Request) {
     ip: body.ip ?? null,
     session_id: body.session_id ?? null,
     session_hit: !!body.session_hit,
+    geo_city: body.geo_city ?? null,
+    geo_region: body.geo_region ?? null,
+    geo_country: body.geo_country ?? null,
+    geo_postal_code: body.geo_postal_code ?? null,
+    user_agent: body.user_agent ?? null,
+    url: body.url ?? null,
+    utm_source: body.utm_source ?? null,
+    utm_medium: body.utm_medium ?? null,
+    utm_campaign: body.utm_campaign ?? null,
+    utm_content: body.utm_content ?? null,
+    utm_term: body.utm_term ?? null,
     raw_payload: body.raw_payload ?? null,
   })
 
