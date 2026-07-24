@@ -68,6 +68,17 @@ function EventPicker({ value, onChange }: { value: string; onChange: (v: string)
   )
 }
 
+function SectionHeader({ number, title }: { number: number; title: string }) {
+  return (
+    <div className="mb-3 flex items-center gap-2.5 border-b border-white/10 pb-2.5">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 text-xs font-bold text-indigo-300">
+        {number}
+      </span>
+      <h3 className="text-sm font-bold text-slate-100">{title}</h3>
+    </div>
+  )
+}
+
 function DomainList({ label, placeholder, items, onChange, help }: {
   label: string
   placeholder: string
@@ -274,7 +285,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
 
         {/* Seção 1 — Cloudflare */}
         <section>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">1. Conectar Cloudflare</h3>
+          <SectionHeader number={1} title="Conectar Cloudflare" />
           <label className={labelClass}>Cloudflare API Token</label>
           <input
             type="password"
@@ -294,7 +305,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
 
         {/* Seção 2 — Config & plataformas */}
         <section className="space-y-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">2. Configuração &amp; plataformas</h3>
+          <SectionHeader number={2} title="Configuração & plataformas" />
           <div>
             <label className={labelClass}>Nome da instalação *</label>
             <input autoFocus type="text" value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: Massagem tântrica ES" className={inputClass} style={inputStyle} />
@@ -391,7 +402,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
 
         {/* Seção 3 — Eventos (gatilhos) */}
         <section>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">3. Eventos (opcional)</h3>
+          <SectionHeader number={3} title="Eventos (opcional)" />
           <div className="space-y-2">
             {triggers.map(t => (
               <div key={t._key} className="rounded-xl p-3 ring-1 ring-white/10" style={inputStyle}>
@@ -429,7 +440,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
 
         {/* Seção 4 — Webhook de compra */}
         <section className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">4. Webhook de compra</h3>
+          <SectionHeader number={4} title="Webhook de compra" />
 
           <div className="flex gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-200">
             <span>⚠️</span>
