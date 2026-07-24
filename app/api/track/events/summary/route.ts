@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/app/api/meta/_utils'
 
-type EventRow = { event_name: string; fbp: string | null; fbc: string | null; session_hit: boolean | null }
+type EventRow = { event_name: string; source: string; fbp: string | null; fbc: string | null; session_hit: boolean | null }
 type RecentRow = {
   event_name: string
   source: string
@@ -20,6 +20,7 @@ type RecentRow = {
   utm_campaign: string | null
   utm_content: string | null
   utm_term: string | null
+  src: string | null
 }
 
 export async function GET(request: Request) {
@@ -49,7 +50,7 @@ export async function GET(request: Request) {
 
   const { data: events24h, error } = await supabase
     .from('track_events')
-    .select('event_name, fbp, fbc, session_hit')
+    .select('event_name, source, fbp, fbc, session_hit')
     .eq('installation_id', installationId)
     .gte('received_at', since24h)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -58,10 +59,16 @@ export async function GET(request: Request) {
   const counts: Record<string, number> = {}
   let withFbp = 0
   let withFbc = 0
+  let capiTotal = 0
   let purchaseTotal = 0
   let purchaseMatched = 0
   for (const row of rows) {
     counts[row.event_name] = (counts[row.event_name] ?? 0) + 1
+    // Eventos "pixel" (ex: clique em checkout, só monitoramento — nunca vão
+    // pra Meta) nunca têm fbp/fbc por desenho, então ficam fora dessa conta
+    // de qualidade — senão puxariam a % pra baixo sem motivo real.
+    if (row.source !== 'capi') continue
+    capiTotal += 1
     if (row.fbp) withFbp += 1
     if (row.fbc) withFbc += 1
     if (row.event_name === 'Purchase') {
@@ -72,7 +79,7 @@ export async function GET(request: Request) {
 
   const { data: recent } = await supabase
     .from('track_events')
-    .select('event_name, source, session_hit, received_at, ip, fbp, fbc, session_id, geo_city, geo_region, geo_country, url, utm_source, utm_medium, utm_campaign, utm_content, utm_term')
+    .select('event_name, source, session_hit, received_at, ip, fbp, fbc, session_id, geo_city, geo_region, geo_country, url, utm_source, utm_medium, utm_campaign, utm_content, utm_term, src')
     .eq('installation_id', installationId)
     .order('received_at', { ascending: false })
     .limit(30)
@@ -80,9 +87,9 @@ export async function GET(request: Request) {
   return NextResponse.json({
     counts_24h: counts,
     coverage_24h: {
-      total: rows.length,
-      with_fbp_pct: rows.length > 0 ? Math.round((withFbp / rows.length) * 100) : null,
-      with_fbc_pct: rows.length > 0 ? Math.round((withFbc / rows.length) * 100) : null,
+      total: capiTotal,
+      with_fbp_pct: capiTotal > 0 ? Math.round((withFbp / capiTotal) * 100) : null,
+      with_fbc_pct: capiTotal > 0 ? Math.round((withFbc / capiTotal) * 100) : null,
       purchase_session_matched_pct: purchaseTotal > 0 ? Math.round((purchaseMatched / purchaseTotal) * 100) : null,
     },
     recent: (recent ?? []) as RecentRow[],

@@ -110,6 +110,58 @@ test('POST /collect rejeita origem fora da allowlist', async () => {
   assert.equal(res.status, 403)
 })
 
+test('POST /monitor avisa o dashboard (source: pixel) e NUNCA chama a Meta', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (reqUrl, init) => {
+    calls.push({ url: String(reqUrl), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest()
+    const ctx = makeCtx()
+    const req = new Request('https://sinal.teste.com/monitor', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: 'InitiateCheckout', session_id: 'sess-ic', url: 'https://minhalp.com.br/checkout-click' }),
+    })
+    const res = await worker.fetch(req, env, ctx)
+    assert.equal(res.status, 200)
+    await Promise.all(ctx._tasks)
+
+    assert.equal(calls.length, 1, 'só devia ter UMA chamada de fetch (o ingest) — nenhuma pra graph.facebook.com')
+    assert.doesNotMatch(calls[0].url, /graph\.facebook\.com/)
+    const ingestBody = JSON.parse(calls[0].init.body)
+    assert.equal(ingestBody.event_name, 'InitiateCheckout')
+    assert.equal(ingestBody.source, 'pixel')
+    assert.equal(ingestBody.session_id, 'sess-ic')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('OPTIONS /monitor responde o preflight de CORS', async () => {
+  const env = makeEnv()
+  const req = new Request('https://sinal.teste.com/monitor', {
+    method: 'OPTIONS',
+    headers: { Origin: 'https://minhalp.com.br', 'Access-Control-Request-Method': 'POST' },
+  })
+  const res = await worker.fetch(req, env)
+  assert.equal(res.status, 204)
+  assert.equal(res.headers.get('Access-Control-Allow-Origin'), 'https://minhalp.com.br')
+})
+
+test('POST /monitor rejeita origem fora da allowlist', async () => {
+  const env = makeEnv()
+  const req = new Request('https://sinal.teste.com/monitor', {
+    method: 'POST',
+    headers: { Origin: 'https://site-pirata.com', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event_name: 'InitiateCheckout', session_id: 'abc' }),
+  })
+  const res = await worker.fetch(req, env)
+  assert.equal(res.status, 403)
+})
+
 test('POST /collect aceita origem permitida e envia pro Meta', async () => {
   const originalFetch = globalThis.fetch
   const calls = []

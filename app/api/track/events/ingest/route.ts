@@ -30,6 +30,7 @@ type IngestBody = {
   utm_campaign?: string | null
   utm_content?: string | null
   utm_term?: string | null
+  src?: string | null
   raw_payload?: unknown
 }
 
@@ -76,6 +77,7 @@ export async function POST(request: Request) {
     utm_campaign: body.utm_campaign ?? null,
     utm_content: body.utm_content ?? null,
     utm_term: body.utm_term ?? null,
+    src: body.src ?? null,
     raw_payload: body.raw_payload ?? null,
   })
 

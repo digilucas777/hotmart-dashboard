@@ -22,6 +22,7 @@ type RecentEvent = {
   utm_campaign: string | null
   utm_content: string | null
   utm_term: string | null
+  src: string | null
 }
 
 type Summary = {
@@ -60,6 +61,16 @@ function geoLabel(e: RecentEvent): string | null {
   return parts.length > 0 ? parts.join(', ') : null
 }
 
+function pageSlug(url: string | null): string | null {
+  if (!url) return null
+  try {
+    const path = new URL(url).pathname
+    return path && path !== '/' ? path : '/'
+  } catch {
+    return null
+  }
+}
+
 function originLabel(e: RecentEvent): { label: string; className: string } {
   if (e.fbc) return { label: '📱 Facebook Ads', className: 'text-blue-300' }
   if (e.utm_source) return { label: `🔗 ${e.utm_source}`, className: 'text-indigo-300' }
@@ -86,7 +97,8 @@ function CoverageBar({ label, pct }: { label: string; pct: number | null }) {
 function EventRow({ e }: { e: RecentEvent }) {
   const origin = originLabel(e)
   const geo = geoLabel(e)
-  const utmParts = [e.utm_medium, e.utm_campaign, e.utm_content, e.utm_term].filter(Boolean)
+  const slug = pageSlug(e.url)
+  const isMonitorOnly = e.source === 'pixel'
 
   return (
     <div className="space-y-1.5 rounded-lg px-2.5 py-2 text-xs" style={{ background: 'rgba(255,255,255,0.03)' }}>
@@ -99,20 +111,31 @@ function EventRow({ e }: { e: RecentEvent }) {
               {e.session_hit ? '✅' : '⚠️'}
             </span>
           )}
+          {isMonitorOnly && (
+            <span className="rounded-full bg-white/5 px-1.5 py-0.5 text-[9px] font-normal normal-case text-slate-500" title="Estimativa por clique no link de checkout — não é o InitiateCheckout de verdade da Meta, que continua vindo do pixel nativo da Hotmart">
+              detectado, não enviado à Meta
+            </span>
+          )}
         </span>
         <span className="text-slate-600">{relativeTime(e.received_at)}</span>
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
         <span className={origin.className}>{origin.label}</span>
+        {slug && <span>📄 {slug}</span>}
         {geo && <span>📍 {geo}</span>}
-        {e.ip && <span className="font-mono">{e.ip}</span>}
-        {e.session_id && <span className="font-mono text-slate-600">sid:{e.session_id.slice(0, 8)}</span>}
+        {e.ip && <span className="font-mono">IP: {e.ip}</span>}
+        {e.session_id && (
+          <span className="font-mono text-slate-600" title="ID interno da sessão de navegação — usado pra cruzar essa visita com uma compra depois">
+            sid:{e.session_id.slice(0, 8)}
+          </span>
+        )}
       </div>
-      {(e.utm_source || utmParts.length > 0) && (
+      {(e.utm_source || e.utm_medium || e.utm_campaign || e.src) && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600">
           {e.utm_source && <span>utm_source: <span className="text-slate-400">{e.utm_source}</span></span>}
           {e.utm_medium && <span>utm_medium: <span className="text-slate-400">{e.utm_medium}</span></span>}
           {e.utm_campaign && <span>utm_campaign: <span className="text-slate-400">{e.utm_campaign}</span></span>}
+          {e.src && <span>src: <span className="text-slate-400">{e.src}</span></span>}
         </div>
       )}
     </div>

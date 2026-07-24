@@ -143,6 +143,23 @@ function buildCheckoutDecoratorCode(checkoutDomains) {
     }
     decorateAll();
     new MutationObserver(decorateAll).observe(document.documentElement, { childList: true, subtree: true });
+    // Clique num link de checkout é a melhor aproximação que temos de
+    // "iniciou o checkout" nesta página (a Hotmart processa o InitiateCheckout
+    // de verdade do lado dela, fora do nosso alcance) — manda só pro NOSSO
+    // painel (MONITOR_URL, nunca pra Meta) pra dar uma métrica comparável.
+    var icSent = false;
+    document.addEventListener('click', function(e){
+      if (icSent) return;
+      var a = e.target.closest('a[href]');
+      if (!a || !isCheckoutLink(a.href)) return;
+      icSent = true;
+      fetch(MONITOR_URL, {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_name: 'InitiateCheckout', session_id: sid, url: location.href }),
+      }).catch(function(){});
+    }, true);
   })();`
 }
 
@@ -157,6 +174,7 @@ export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, worker
   // domínio de onde ele foi baixado — uma URL relativa tipo '/collect'
   // mandaria a chamada pro próprio site do cliente, que não tem essa rota.
   var COLLECT_URL = ${jsString(workerOrigin || '')} + '/collect';
+  var MONITOR_URL = ${jsString(workerOrigin || '')} + '/monitor';
   var SESSION_TTL_SECONDS = ${sessionTtlSeconds};
   function getCookie(name){
     var m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]+)'));
@@ -213,6 +231,18 @@ export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, worker
     }
     return {};
   }
+  // "src" é o parâmetro que a Hotmart já usa pra origem de tráfego (fora do
+  // nosso rastreamento) — só exibimos ele no painel de diagnóstico quando
+  // aparece na URL, não usamos pra cruzar sessão (isso continua sendo só o
+  // "sck"). Mesma lógica de "só na 1ª página, guarda e reaproveita" do UTM.
+  function getOrCreateSrc(){
+    var current = new URLSearchParams(location.search).get('src');
+    if (current) {
+      document.cookie = '_ht_src=' + encodeURIComponent(current) + ';path=/;max-age=' + SESSION_TTL_SECONDS + ';SameSite=Lax';
+      return current;
+    }
+    return getCookie('_ht_src');
+  }
   // A sessão (fbp/fbc/geo/ip) só precisa ser gravada uma vez no KV — gravar de
   // novo a cada evento estourava rápido a cota gratuita (1000 gravações/dia).
   // sessionStorage sobrevive entre páginas na mesma aba, então isso marca só a
@@ -230,6 +260,7 @@ export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, worker
   var fbp = getOrCreateFbp();
   var fbc = getOrCreateFbc();
   var utm = getOrCreateUtm();
+  var src = getOrCreateSrc();
   function send(eventName, extra){
     var payload = {
       event_name: eventName,
@@ -238,6 +269,7 @@ export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, worker
       fbc: fbc,
       url: location.href,
       utm: utm,
+      src: src,
       new_session: isNewSession(),
       params: extra || {}
     };

@@ -139,7 +139,7 @@ async function handleCollect(request, env, ctx) {
     // próprio, só logada quando o diagnóstico está ativo.
     try {
       const ttlSeconds = (Number(env.SESSION_TTL_DAYS) || 7) * 86400
-      const sessionData = { fbp: body.fbp || null, fbc: body.fbc || null, ip, userAgent, geo, url: body.url || null, utm: body.utm || null }
+      const sessionData = { fbp: body.fbp || null, fbc: body.fbc || null, ip, userAgent, geo, url: body.url || null, utm: body.utm || null, src: body.src || null }
 
       // Grava a sessão (chave sid:) só na 1ª chamada da sessão inteira (marcada
       // pelo cliente via sessionStorage) — gravar em toda chamada estourava
@@ -199,7 +199,40 @@ async function handleCollect(request, env, ctx) {
     utm_campaign: utm.utm_campaign || null,
     utm_content: utm.utm_content || null,
     utm_term: utm.utm_term || null,
+    src: body.src || null,
     raw_payload: env.DIAGNOSTICO_ATIVO === 'true' ? body : null,
+  })
+
+  return json({ ok: true }, 200, cors)
+}
+
+// Rota só de MONITORAMENTO — nunca chama sendToMeta, só avisa o nosso
+// próprio painel (source: 'pixel'). Usada pelo clique em link de checkout,
+// pra dar uma ideia aproximada de quantos InitiateCheckout deveriam estar
+// acontecendo, comparável com o que a Hotmart já manda direto pra Meta pelo
+// pixel nativo dela — sem nenhum risco de duplicar o envio à Meta, porque
+// essa rota literalmente não tem código nenhum que fale com a Meta.
+async function handleMonitor(request, env, ctx) {
+  const cors = corsHeaders(request, env)
+  if (!isOriginAllowed(request, env)) return json({ error: 'origin not allowed' }, 403, cors)
+
+  const body = await request.json().catch(() => null)
+  if (!body || !body.event_name || !body.session_id) return json({ error: 'invalid payload' }, 400, cors)
+
+  const ip = request.headers.get('CF-Connecting-IP') || ''
+  const geo = extractGeo(request)
+
+  sendToIngest(ctx, env, {
+    event_name: body.event_name,
+    source: 'pixel',
+    ip,
+    session_id: body.session_id,
+    session_hit: false,
+    geo_city: geo.city,
+    geo_region: geo.region,
+    geo_country: geo.country,
+    geo_postal_code: geo.postalCode,
+    url: body.url || null,
   })
 
   return json({ ok: true }, 200, cors)
@@ -313,6 +346,11 @@ async function handleHotmartWebhook(request, env, ctx) {
     utm_campaign: matchedUtm.utm_campaign || null,
     utm_content: matchedUtm.utm_content || null,
     utm_term: matchedUtm.utm_term || null,
+    // Preferência 1: o "src" que a própria Hotmart manda no payload da compra
+    // (mesma fonte que já alimenta vendas.origem) — mais confiável que o da
+    // sessão, que depende do visitante ter passado pela página com o
+    // parâmetro. Preferência 2: o que a sessão de navegação capturou.
+    src: purchase?.origin?.src || matchedSession?.src || null,
     raw_payload: env.DIAGNOSTICO_ATIVO === 'true' ? body : null,
   })
 
@@ -333,6 +371,10 @@ export default {
         return new Response(null, { status: 204, headers: corsHeaders(request, env) })
       }
       if (url.pathname === '/collect' && request.method === 'POST') return handleCollect(request, env, ctx)
+      if (url.pathname === '/monitor' && request.method === 'OPTIONS') {
+        return new Response(null, { status: 204, headers: corsHeaders(request, env) })
+      }
+      if (url.pathname === '/monitor' && request.method === 'POST') return handleMonitor(request, env, ctx)
       if (url.pathname === '/webhook/hotmart') return handleHotmartWebhook(request, env, ctx)
       if (url.pathname === '/health') return handleHealth(env)
       return json({ error: 'not found' }, 404)
