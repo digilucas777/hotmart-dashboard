@@ -1,7 +1,8 @@
 import { sha256Hex } from './hash.js'
 import { buildSnippet } from './snippet.js'
+import { normalizePhone } from './phone.js'
 
-const WORKER_VERSION = '1.0.0'
+const WORKER_VERSION = '1.1.0'
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
@@ -13,8 +14,9 @@ function parseEnvJson(raw, fallback) {
 
 function handleSnippet(env) {
   const triggers = parseEnvJson(env.TRIGGERS_JSON, [])
+  const checkoutDomains = parseEnvJson(env.CHECKOUT_DOMAINS_JSON, [])
   const sessionTtlDays = Number(env.SESSION_TTL_DAYS) || 7
-  const body = buildSnippet({ sessionTtlDays, triggers })
+  const body = buildSnippet({ sessionTtlDays, triggers, checkoutDomains })
   return new Response(body, {
     headers: { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=300' },
   })
@@ -25,6 +27,31 @@ function isOriginAllowed(request, env) {
   if (domains.length === 0) return true
   const origin = request.headers.get('Origin') || request.headers.get('Referer') || ''
   return domains.some(domain => origin.includes(domain))
+}
+
+// Cloudflare já entrega a geolocalização do visitante de graça em toda
+// requisição (request.cf) — não precisa de serviço externo. Os campos
+// ct/st/zp/country do advanced matching da Meta precisam vir hasheados
+// (igual email/telefone), por isso essa função já devolve tudo pronto pra
+// entrar no user_data.
+async function buildGeoUserData(geo) {
+  if (!geo) return {}
+  const result = {}
+  if (geo.city) result.ct = await sha256Hex(String(geo.city).replace(/[^a-zA-Z]/g, ''))
+  if (geo.region) result.st = await sha256Hex(geo.region)
+  if (geo.postalCode) result.zp = await sha256Hex(geo.postalCode)
+  if (geo.country) result.country = await sha256Hex(geo.country)
+  return result
+}
+
+function extractGeo(request) {
+  const cf = request.cf || {}
+  return {
+    city: cf.city || null,
+    region: cf.regionCode || cf.region || null,
+    country: cf.country || null,
+    postalCode: cf.postalCode || null,
+  }
 }
 
 async function sendToMeta({ pixelId, capiToken, testEventCode, eventName, eventId, eventSourceUrl, userData, customData }) {
@@ -64,6 +91,7 @@ async function handleCollect(request, env) {
 
   const ip = request.headers.get('CF-Connecting-IP') || ''
   const userAgent = request.headers.get('User-Agent') || ''
+  const geo = extractGeo(request)
   const eventId = `${body.session_id}:${body.event_name}:${Math.floor(Date.now() / 60000)}`
 
   const sessionEnrichment = env.SESSION_ENRICHMENT_ENABLED === 'true'
@@ -73,8 +101,14 @@ async function handleCollect(request, env) {
     // próprio, só logada quando o diagnóstico está ativo.
     try {
       const ttlSeconds = (Number(env.SESSION_TTL_DAYS) || 7) * 86400
-      const sessionData = { fbp: body.fbp || null, fbc: body.fbc || null, ip, userAgent, url: body.url || null }
-      await env.SESSIONS.put(`sid:${body.session_id}`, JSON.stringify(sessionData), { expirationTtl: ttlSeconds })
+      const sessionData = { fbp: body.fbp || null, fbc: body.fbc || null, ip, userAgent, geo, url: body.url || null }
+
+      // Grava a sessão (chave sid:) só na 1ª chamada da sessão inteira (marcada
+      // pelo cliente via sessionStorage) — gravar em toda chamada estourava
+      // rápido a cota gratuita de 1000 gravações/dia do KV.
+      if (body.new_session) {
+        await env.SESSIONS.put(`sid:${body.session_id}`, JSON.stringify(sessionData), { expirationTtl: ttlSeconds })
+      }
 
       const email = body.params && body.params.email
       if (email) {
@@ -88,7 +122,7 @@ async function handleCollect(request, env) {
     }
   }
 
-  const userData = { client_ip_address: ip, client_user_agent: userAgent }
+  const userData = { client_ip_address: ip, client_user_agent: userAgent, ...(await buildGeoUserData(geo)) }
   if (body.fbp) userData.fbp = body.fbp
   if (body.fbc) userData.fbc = body.fbc
 
@@ -119,6 +153,7 @@ async function handleHotmartWebhook(request, env) {
 
   const buyer = body.data?.buyer || {}
   const purchase = body.data?.purchase || {}
+  const buyerCountry = buyer.address?.country || null
 
   const pixels = parseEnvJson(env.PIXELS_JSON, [])
   if (pixels.length === 0) return json({ error: 'no pixels configured' }, 500)
@@ -126,22 +161,44 @@ async function handleHotmartWebhook(request, env) {
   const userData = {}
   if (buyer.email) userData.em = await sha256Hex(buyer.email)
   if (buyer.name) userData.fn = await sha256Hex(String(buyer.name).split(' ')[0])
-  if (buyer.checkout_phone) userData.ph = await sha256Hex(String(buyer.checkout_phone).replace(/\D/g, ''))
+  if (buyer.checkout_phone) {
+    const normalizedPhone = normalizePhone(buyer.checkout_phone, buyerCountry)
+    if (normalizedPhone) userData.ph = await sha256Hex(normalizedPhone)
+  }
   if (buyer.document) userData.external_id = await sha256Hex(buyer.document)
 
   const sessionEnrichment = env.SESSION_ENRICHMENT_ENABLED === 'true'
-  if (sessionEnrichment && env.SESSIONS && buyer.email) {
-    // Mesma proteção do /collect: uma falha ao ler o KV não pode impedir o
-    // envio do Purchase — nesse caso ele só sai sem o bônus de fbp/fbc.
+  if (sessionEnrichment && env.SESSIONS) {
+    // Uma falha aqui (ex: KV fora do ar) nunca pode impedir o envio do
+    // Purchase — nesse caso ele só sai sem o bônus de fbp/fbc/geo.
     try {
-      const emailHash = await sha256Hex(buyer.email)
-      const stored = await env.SESSIONS.get(`email:${emailHash}`)
-      if (stored) {
-        const session = JSON.parse(stored)
+      let session = null
+
+      // Preferência 1: o "sck" que o script anexou no link de checkout —
+      // cruza direto pelo session_id, funciona mesmo sem formulário de e-mail
+      // antes do checkout.
+      const origin = purchase?.origin
+      const sck = origin && typeof origin === 'object' ? origin.sck : null
+      if (sck) {
+        const stored = await env.SESSIONS.get(`sid:${sck}`)
+        if (stored) session = JSON.parse(stored)
+      }
+
+      // Preferência 2 (melhor esforço): se não achou pelo sck, tenta pelo
+      // e-mail — só funciona se algum gatilho de formulário tiver capturado
+      // o e-mail antes do checkout.
+      if (!session && buyer.email) {
+        const emailHash = await sha256Hex(buyer.email)
+        const stored = await env.SESSIONS.get(`email:${emailHash}`)
+        if (stored) session = JSON.parse(stored)
+      }
+
+      if (session) {
         if (session.fbp) userData.fbp = session.fbp
         if (session.fbc) userData.fbc = session.fbc
         if (session.ip) userData.client_ip_address = session.ip
         if (session.userAgent) userData.client_user_agent = session.userAgent
+        Object.assign(userData, await buildGeoUserData(session.geo))
       }
     } catch (err) {
       if (env.DIAGNOSTICO_ATIVO === 'true') {

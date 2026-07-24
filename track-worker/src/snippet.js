@@ -110,9 +110,46 @@ function buildTriggerCode(trigger) {
   return ''
 }
 
-export function buildSnippet({ sessionTtlDays, triggers }) {
+// Cola o session_id (sid) como ?sck=... nos links que apontam pro checkout —
+// é assim que o webhook depois consegue cruzar a compra (que chega sem saber
+// nada da navegação) com a sessão (fbp/fbc/geo/ip) salva no PageView. Roda no
+// carregamento da página e observa mudanças no DOM (menus/CTAs que só
+// aparecem depois, ex: carregados via JS). Não decora se já tiver um "sck" na
+// URL (não sobrescreve um valor que já esteja lá por outro motivo).
+function buildCheckoutDecoratorCode(checkoutDomains) {
+  if (!checkoutDomains || checkoutDomains.length === 0) return ''
+  return `
+  (function(){
+    var checkoutHosts = ${JSON.stringify(checkoutDomains)};
+    function isCheckoutLink(href){
+      try {
+        var u = new URL(href, location.href);
+        return checkoutHosts.some(function(host){ return u.hostname === host || u.hostname.slice(-host.length - 1) === '.' + host; });
+      } catch (e) { return false; }
+    }
+    function decorate(link){
+      if (link.getAttribute('data-ht-decorated') || !link.href || !isCheckoutLink(link.href)) return;
+      try {
+        var u = new URL(link.href);
+        if (!u.searchParams.has('sck')) {
+          u.searchParams.set('sck', sid);
+          link.href = u.toString();
+        }
+        link.setAttribute('data-ht-decorated', '1');
+      } catch (e) {}
+    }
+    function decorateAll(){
+      document.querySelectorAll('a[href]').forEach(decorate);
+    }
+    decorateAll();
+    new MutationObserver(decorateAll).observe(document.documentElement, { childList: true, subtree: true });
+  })();`
+}
+
+export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains }) {
   const sessionTtlSeconds = Math.max(1, Number(sessionTtlDays) || 7) * 86400
   const triggerCode = (triggers || []).map(buildTriggerCode).join('\n')
+  const checkoutDecoratorCode = buildCheckoutDecoratorCode(checkoutDomains)
 
   return `(function(){
   var COLLECT_URL = '/collect';
@@ -128,21 +165,52 @@ export function buildSnippet({ sessionTtlDays, triggers }) {
     document.cookie = '_ht_sid=' + id + ';path=/;max-age=' + SESSION_TTL_SECONDS + ';SameSite=Lax';
     return id;
   }
-  function getFbc(){
-    var fromCookie = getCookie('_fbc');
-    if (fromCookie) return fromCookie;
+  // A ideia é usar SÓ esse script (sem o pixel nativo da Meta na página), então
+  // ninguém mais cria os cookies _fbp/_fbc — por isso geramos nós mesmos, no
+  // mesmo formato oficial da Meta. Se algum dia a Meta carregar o pixel dela
+  // também, ela reaproveita esses cookies em vez de criar outros (evita
+  // identidades divergentes pro mesmo visitante).
+  function getOrCreateFbp(){
+    var existing = getCookie('_fbp');
+    if (existing) return existing;
+    var id = 'fb.1.' + Date.now() + '.' + Math.floor(Math.random() * 2147483647);
+    document.cookie = '_fbp=' + id + ';path=/;max-age=7776000;SameSite=Lax';
+    return id;
+  }
+  function getOrCreateFbc(){
+    var existing = getCookie('_fbc');
+    if (existing) return existing;
     var params = new URLSearchParams(location.search);
     var fbclid = params.get('fbclid');
-    return fbclid ? ('fb.1.' + Date.now() + '.' + fbclid) : null;
+    if (!fbclid) return null;
+    var id = 'fb.1.' + Date.now() + '.' + fbclid;
+    document.cookie = '_fbc=' + id + ';path=/;max-age=7776000;SameSite=Lax';
+    return id;
+  }
+  // A sessão (fbp/fbc/geo/ip) só precisa ser gravada uma vez no KV — gravar de
+  // novo a cada evento estourava rápido a cota gratuita (1000 gravações/dia).
+  // sessionStorage sobrevive entre páginas na mesma aba, então isso marca só a
+  // 1ª chamada da sessão inteira, não a 1ª de cada página.
+  function isNewSession(){
+    try {
+      if (sessionStorage.getItem('_ht_registered')) return false;
+      sessionStorage.setItem('_ht_registered', '1');
+      return true;
+    } catch (e) {
+      return true;
+    }
   }
   var sid = getOrCreateSid();
+  var fbp = getOrCreateFbp();
+  var fbc = getOrCreateFbc();
   function send(eventName, extra){
     var payload = {
       event_name: eventName,
       session_id: sid,
-      fbp: getCookie('_fbp'),
-      fbc: getFbc(),
+      fbp: fbp,
+      fbc: fbc,
       url: location.href,
+      new_session: isNewSession(),
       params: extra || {}
     };
     var body = JSON.stringify(payload);
@@ -154,6 +222,7 @@ export function buildSnippet({ sessionTtlDays, triggers }) {
   }
   window.HotTrack = { track: send };
   send('PageView');
+${checkoutDecoratorCode}
 ${triggerCode}
 })();`
 }

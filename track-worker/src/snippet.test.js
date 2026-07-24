@@ -37,3 +37,32 @@ test('buildSnippet inclui a validade de sessão em segundos no cookie', () => {
   const code = buildSnippet({ sessionTtlDays: 14, triggers: [] })
   assert.match(code, /SESSION_TTL_SECONDS = 1209600/)
 })
+
+test('buildSnippet gera _fbp e _fbc sozinho (sem depender do pixel nativo da Meta)', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [] })
+  assert.match(code, /function getOrCreateFbp\(\)/)
+  assert.match(code, /_fbp=' \+ id/)
+  assert.match(code, /function getOrCreateFbc\(\)/)
+  assert.match(code, /_fbc=' \+ id/)
+})
+
+test('buildSnippet marca new_session via sessionStorage (1x por sessão, não por página)', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [] })
+  assert.match(code, /function isNewSession\(\)/)
+  assert.match(code, /sessionStorage\.getItem\('_ht_registered'\)/)
+  assert.match(code, /new_session: isNewSession\(\)/)
+})
+
+test('buildSnippet sem domínios de checkout não inclui o decorador de links', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [] })
+  assert.doesNotMatch(code, /isCheckoutLink/)
+})
+
+test('buildSnippet com domínios de checkout inclui o decorador com os hosts certos', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [], checkoutDomains: ['pay.hotmart.com', 'go.hotmart.com'] })
+  assert.match(code, /isCheckoutLink/)
+  assert.match(code, /"pay\.hotmart\.com"/)
+  assert.match(code, /"go\.hotmart\.com"/)
+  assert.match(code, /searchParams\.set\('sck', sid\)/)
+  assert.match(code, /new MutationObserver\(decorateAll\)/)
+})

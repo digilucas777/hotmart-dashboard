@@ -86,7 +86,7 @@ test('POST /collect aceita origem permitida e envia pro Meta', async () => {
   }
 })
 
-test('POST /collect salva sessão e e-mail no KV quando enriquecimento está ligado', async () => {
+test('POST /collect salva sessão e e-mail no KV quando enriquecimento está ligado e new_session é true', async () => {
   const originalFetch = globalThis.fetch
   globalThis.fetch = async () => new Response('{}', { status: 200 })
   try {
@@ -94,12 +94,56 @@ test('POST /collect salva sessão e e-mail no KV quando enriquecimento está lig
     const req = new Request('https://sinal.teste.com/collect', {
       method: 'POST',
       headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event_name: 'Lead', session_id: 'sess1', url: 'https://minhalp.com.br/', params: { email: 'joao@exemplo.com' } }),
+      body: JSON.stringify({ event_name: 'Lead', session_id: 'sess1', url: 'https://minhalp.com.br/', new_session: true, params: { email: 'joao@exemplo.com' } }),
     })
     await worker.fetch(req, env)
     assert.ok(env.SESSIONS._store.has('sid:sess1'))
     const emailKeys = [...env.SESSIONS._store.keys()].filter(k => k.startsWith('email:'))
     assert.equal(emailKeys.length, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('POST /collect NÃO grava a sessão de novo se new_session não vier true (economiza a cota do KV)', async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response('{}', { status: 200 })
+  try {
+    const env = makeEnv()
+    const req = new Request('https://sinal.teste.com/collect', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: 'ViewContent', session_id: 'sess1', url: 'https://minhalp.com.br/produto' }),
+    })
+    await worker.fetch(req, env)
+    assert.equal(env.SESSIONS._store.has('sid:sess1'), false)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('POST /collect inclui geo (hasheado) no evento, a partir de request.cf', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnv()
+    const req = new Request('https://sinal.teste.com/collect', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: 'PageView', session_id: 'sess-geo', url: 'https://minhalp.com.br/' }),
+    })
+    req.cf = { city: 'São Paulo', regionCode: 'SP', country: 'BR', postalCode: '01310-100' }
+    await worker.fetch(req, env)
+    const sentBody = JSON.parse(calls[0].init.body)
+    const userData = sentBody.data[0].user_data
+    assert.equal(userData.ct.length, 64)
+    assert.equal(userData.st.length, 64)
+    assert.equal(userData.zp.length, 64)
+    assert.equal(userData.country.length, 64)
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -142,6 +186,69 @@ test('webhook da Hotmart aprovado hasheia dados do comprador e cruza sessão sal
     assert.equal(userData.em.length, 64)
     assert.equal(userData.fbp, 'fb.1.222')
     assert.equal(sentBody.data[0].event_name, 'Purchase')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart prioriza o cruzamento pelo sck (link de checkout) sobre o e-mail', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnv()
+    // Sessão salva pelo sid (via decorador do link de checkout) tem um fbp
+    // diferente da sessão salva por e-mail — o teste confirma que o sck vence.
+    await env.SESSIONS.put('sid:sess-abc', JSON.stringify({ fbp: 'fb.1.333', fbc: null, ip: '9.9.9.9', userAgent: 'ua-sck', geo: { city: 'Paris', country: 'FR' } }))
+    const emailHash = await sha256Hex('joao@exemplo.com')
+    await env.SESSIONS.put('email:' + emailHash, JSON.stringify({ fbp: 'fb.1.222', fbc: null, ip: '1.2.3.4', userAgent: 'ua-email' }))
+
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'João Silva', email: 'joao@exemplo.com' },
+          purchase: { transaction: 'HP124', price: { value: 97, currency_value: 'BRL' }, origin: { sck: 'sess-abc' } },
+        },
+      }),
+    })
+    await worker.fetch(req, env)
+    const sentBody = JSON.parse(calls[0].init.body)
+    const userData = sentBody.data[0].user_data
+    assert.equal(userData.fbp, 'fb.1.333')
+    assert.equal(userData.ct.length, 64)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart normaliza o telefone com o DDI do país do comprador antes de hashear', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnv()
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'Marie Curie', checkout_phone: '06 12 34 56 78', address: { country: 'FR' } },
+          purchase: { transaction: 'HP125', price: { value: 47, currency_value: 'EUR' } },
+        },
+      }),
+    })
+    await worker.fetch(req, env)
+    const sentBody = JSON.parse(calls[0].init.body)
+    const expectedHash = await sha256Hex('33612345678')
+    assert.equal(sentBody.data[0].user_data.ph, expectedHash)
   } finally {
     globalThis.fetch = originalFetch
   }
