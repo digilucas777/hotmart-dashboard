@@ -85,6 +85,12 @@ test('buildSnippet com domínios de checkout inclui o decorador com os hosts cer
   assert.match(code, /new MutationObserver\(decorateAll\)/)
 })
 
+test('buildSnippet cola "src=rastreamento-tracker" no link de checkout (diferencia venda desse funil de venda de outro pixel)', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [], checkoutDomains: ['pay.hotmart.com'] })
+  assert.match(code, /searchParams\.has\('src'\)/)
+  assert.match(code, /searchParams\.set\('src', 'rastreamento-tracker'\)/)
+})
+
 test('buildSnippet com domínios de checkout manda InitiateCheckout pro MONITOR_URL ao clicar (nunca pro COLLECT_URL/Meta)', () => {
   const code = buildSnippet({ sessionTtlDays: 7, triggers: [], checkoutDomains: ['pay.hotmart.com'], workerOrigin: 'https://sinal.teste.com' })
   assert.match(code, /var MONITOR_URL = "https:\/\/sinal\.teste\.com" \+ '\/monitor'/)
