@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Target, Plus, Pencil, Trash2, HelpCircle, AlertTriangle, Copy, Check } from 'lucide-react'
+import { Target, Plus, Pencil, Trash2, HelpCircle, AlertTriangle, Copy, Check, BarChart3, ChevronDown, ChevronRight } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { InstallationModal } from './_components/InstallationModal'
 import { HelpGuideModal } from './_components/HelpGuideModal'
+import { EventsPanel } from './_components/EventsPanel'
 import type { TrackInstallation } from '@/lib/track/types'
 
 export default function RastreamentoPage() {
@@ -25,6 +26,11 @@ export default function RastreamentoPage() {
   const [deployToast, setDeployToast] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [checkingAccess, setCheckingAccess] = useState(true)
+  const [expandedEvents, setExpandedEvents] = useState<string | null>(null)
+
+  function toggleEvents(id: string) {
+    setExpandedEvents(prev => (prev === id ? null : id))
+  }
 
   const fetchInstallations = useCallback(async () => {
     setLoading(true)
@@ -193,6 +199,24 @@ export default function RastreamentoPage() {
                     </button>
                   </div>
                 </div>
+
+                {inst.status === 'deployed' && (
+                  <>
+                    <button
+                      onClick={() => toggleEvents(inst.id)}
+                      className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-300"
+                    >
+                      {expandedEvents === inst.id ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                      <BarChart3 size={12} />
+                      Eventos
+                    </button>
+                    {expandedEvents === inst.id && (
+                      <div className="mt-3">
+                        <EventsPanel installationId={inst.id} />
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             ))}
           </div>

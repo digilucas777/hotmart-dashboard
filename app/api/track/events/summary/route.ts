@@ -1,0 +1,72 @@
+import { NextResponse } from 'next/server'
+import { getAuthenticatedUser } from '@/app/api/meta/_utils'
+
+type EventRow = { event_name: string; fbp: string | null; fbc: string | null; session_hit: boolean | null }
+type RecentRow = { event_name: string; source: string; session_hit: boolean | null; received_at: string }
+
+export async function GET(request: Request) {
+  const { supabase, user } = await getAuthenticatedUser()
+  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+  const { data: profile } = await supabase.from('user_profiles').select('role').eq('id', user.id).maybeSingle()
+  if (profile?.role !== 'admin') {
+    return NextResponse.json({ error: 'módulo em teste — só administradores podem usar por enquanto' }, { status: 403 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const installationId = searchParams.get('installation_id')
+  if (!installationId) return NextResponse.json({ error: 'installation_id é obrigatório' }, { status: 400 })
+
+  // track_events não tem user_id direto — confirma que a instalação existe
+  // (a query em track_installations já é protegida por RLS: só acha se for
+  // do usuário logado ou se ele for admin).
+  const { data: installation } = await supabase
+    .from('track_installations')
+    .select('id')
+    .eq('id', installationId)
+    .maybeSingle()
+  if (!installation) return NextResponse.json({ error: 'instalação não encontrada' }, { status: 404 })
+
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+
+  const { data: events24h, error } = await supabase
+    .from('track_events')
+    .select('event_name, fbp, fbc, session_hit')
+    .eq('installation_id', installationId)
+    .gte('received_at', since24h)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  const rows = (events24h ?? []) as EventRow[]
+  const counts: Record<string, number> = {}
+  let withFbp = 0
+  let withFbc = 0
+  let purchaseTotal = 0
+  let purchaseMatched = 0
+  for (const row of rows) {
+    counts[row.event_name] = (counts[row.event_name] ?? 0) + 1
+    if (row.fbp) withFbp += 1
+    if (row.fbc) withFbc += 1
+    if (row.event_name === 'Purchase') {
+      purchaseTotal += 1
+      if (row.session_hit) purchaseMatched += 1
+    }
+  }
+
+  const { data: recent } = await supabase
+    .from('track_events')
+    .select('event_name, source, session_hit, received_at')
+    .eq('installation_id', installationId)
+    .order('received_at', { ascending: false })
+    .limit(20)
+
+  return NextResponse.json({
+    counts_24h: counts,
+    coverage_24h: {
+      total: rows.length,
+      with_fbp_pct: rows.length > 0 ? Math.round((withFbp / rows.length) * 100) : null,
+      with_fbc_pct: rows.length > 0 ? Math.round((withFbc / rows.length) * 100) : null,
+      purchase_session_matched_pct: purchaseTotal > 0 ? Math.round((purchaseMatched / purchaseTotal) * 100) : null,
+    },
+    recent: (recent ?? []) as RecentRow[],
+  })
+}
