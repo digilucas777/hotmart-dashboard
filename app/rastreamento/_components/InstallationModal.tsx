@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Plus, Trash2, Rocket } from 'lucide-react'
+import { Plus, Trash2, Rocket, Copy, Check } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -132,6 +132,13 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
   const [error, setError] = useState<string | null>(null)
   const [deploying, setDeploying] = useState(false)
   const [deployError, setDeployError] = useState<string | null>(null)
+  const [copiedScript, setCopiedScript] = useState(false)
+
+  async function handleCopyScript(snippet: string) {
+    await navigator.clipboard.writeText(snippet)
+    setCopiedScript(true)
+    setTimeout(() => setCopiedScript(false), 2000)
+  }
 
   useEffect(() => {
     if (!open) return
@@ -348,6 +355,32 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
             onChange={setLpDomains}
             help="Domínios das LPs que vão disparar eventos pro worker (allowlist de origem)."
           />
+
+          {workerSubdomain.trim() && (
+            <div className="rounded-xl p-3 ring-1 ring-white/10" style={inputStyle}>
+              <p className={labelClass}>Script pra colar na &lt;head&gt; da página</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 truncate text-xs text-cyan-300">
+                  {`<script src="https://${workerSubdomain.trim()}/t.js"></script>`}
+                </code>
+                <button
+                  onClick={() => handleCopyScript(`<script src="https://${workerSubdomain.trim()}/t.js"></script>`)}
+                  className="shrink-0 rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+                  title={copiedScript ? 'Copiado!' : 'Copiar'}
+                >
+                  {copiedScript ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                </button>
+              </div>
+              <div className="mt-2 flex gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-2 text-[11px] text-amber-200">
+                <span>⚠️</span>
+                <p>
+                  Se você já tem o pixel da Meta instalado direto na página, <strong>remova-o</strong> e deixe só
+                  esse script — os dois juntos disparam <code>PageView</code> em dobro (um pelo navegador da
+                  pessoa, sujeito a bloqueio, outro pelo nosso servidor).
+                </p>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Diagnóstico — bloco solto, mesma posição da ferramenta de referência */}

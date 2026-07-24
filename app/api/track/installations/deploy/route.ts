@@ -18,6 +18,7 @@ function readWorkerModules() {
     { filename: 'index.js', content: readFileSync(path.join(dir, 'index.js'), 'utf8') },
     { filename: 'hash.js', content: readFileSync(path.join(dir, 'hash.js'), 'utf8') },
     { filename: 'snippet.js', content: readFileSync(path.join(dir, 'snippet.js'), 'utf8') },
+    { filename: 'phone.js', content: readFileSync(path.join(dir, 'phone.js'), 'utf8') },
   ]
 }
 
@@ -74,6 +75,9 @@ export async function POST(request: Request) {
     const lpDomains = (installation.track_domains ?? [])
       .filter((d: DomainRow) => d.tipo === 'lp')
       .map((d: DomainRow) => d.domain)
+    const checkoutDomains = (installation.track_domains ?? [])
+      .filter((d: DomainRow) => d.tipo === 'checkout')
+      .map((d: DomainRow) => d.domain)
 
     const bindings: WorkerBinding[] = [
       { type: 'kv_namespace', name: 'SESSIONS', namespace_id: kvNamespaceId },
@@ -88,6 +92,7 @@ export async function POST(request: Request) {
       },
       { type: 'secret_text', name: 'WEBHOOK_SECRET', text: installation.webhook_secret },
       { type: 'plain_text', name: 'DOMAINS_JSON', text: JSON.stringify(lpDomains) },
+      { type: 'plain_text', name: 'CHECKOUT_DOMAINS_JSON', text: JSON.stringify(checkoutDomains) },
       { type: 'plain_text', name: 'TRIGGERS_JSON', text: JSON.stringify(installation.track_triggers ?? []) },
       { type: 'plain_text', name: 'SESSION_ENRICHMENT_ENABLED', text: String(installation.session_enrichment_enabled) },
       { type: 'plain_text', name: 'SESSION_TTL_DAYS', text: String(installation.session_ttl_days) },
