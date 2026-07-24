@@ -33,6 +33,20 @@ function makeEnv(overrides = {}) {
   }
 }
 
+function makeEnvWithIngest(overrides = {}) {
+  return makeEnv({
+    INGEST_URL: 'https://dashboard.teste.com/api/track/events/ingest',
+    INGEST_SECRET: 'ingest-secret-123',
+    INSTALLATION_ID: 'inst-1',
+    ...overrides,
+  })
+}
+
+function makeCtx() {
+  const tasks = []
+  return { waitUntil: task => tasks.push(task), _tasks: tasks }
+}
+
 test('GET /t.js retorna javascript com PageView automático', async () => {
   const env = makeEnv()
   const res = await worker.fetch(new Request('https://sinal.teste.com/t.js'), env)
@@ -297,6 +311,75 @@ test('webhook da Hotmart ainda envia o Purchase mesmo se a leitura do KV falhar'
     assert.equal(calls.length, 1)
     const sentBody = JSON.parse(calls[0].init.body)
     assert.equal(sentBody.data[0].event_name, 'Purchase')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('POST /collect avisa o dashboard (ingest) em segundo plano, sem atrasar a resposta', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest()
+    const ctx = makeCtx()
+    const req = new Request('https://sinal.teste.com/collect', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: 'PageView', session_id: 'sess-ingest', url: 'https://minhalp.com.br/' }),
+    })
+    const res = await worker.fetch(req, env, ctx)
+    assert.equal(res.status, 200)
+    await Promise.all(ctx._tasks)
+
+    const ingestCall = calls.find(c => c.url === env.INGEST_URL)
+    assert.ok(ingestCall, 'esperava uma chamada pro INGEST_URL')
+    const ingestBody = JSON.parse(ingestCall.init.body)
+    assert.equal(ingestBody.installation_id, 'inst-1')
+    assert.equal(ingestBody.secret, 'ingest-secret-123')
+    assert.equal(ingestBody.event_name, 'PageView')
+    assert.equal(ingestBody.source, 'capi')
+    assert.equal(ingestBody.session_id, 'sess-ingest')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart avisa o dashboard (ingest) com session_hit true quando cruzou sessão', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest()
+    const ctx = makeCtx()
+    await env.SESSIONS.put('sid:sess-xyz', JSON.stringify({ fbp: 'fb.1.999', fbc: null, ip: '8.8.8.8', userAgent: 'ua', geo: null }))
+
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'Ana Souza', email: 'ana@exemplo.com' },
+          purchase: { transaction: 'HP999', price: { value: 197, currency_value: 'BRL' }, origin: { sck: 'sess-xyz' } },
+        },
+      }),
+    })
+    const res = await worker.fetch(req, env, ctx)
+    assert.equal(res.status, 200)
+    await Promise.all(ctx._tasks)
+
+    const ingestCall = calls.find(c => c.url === env.INGEST_URL)
+    assert.ok(ingestCall, 'esperava uma chamada pro INGEST_URL')
+    const ingestBody = JSON.parse(ingestCall.init.body)
+    assert.equal(ingestBody.event_name, 'Purchase')
+    assert.equal(ingestBody.session_hit, true)
+    assert.equal(ingestBody.session_id, 'sess-xyz')
   } finally {
     globalThis.fetch = originalFetch
   }

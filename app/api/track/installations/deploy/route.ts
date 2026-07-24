@@ -90,6 +90,7 @@ export async function POST(request: Request) {
 
     const bindings: WorkerBinding[] = [
       { type: 'kv_namespace', name: 'SESSIONS', namespace_id: kvNamespaceId },
+      { type: 'plain_text', name: 'INSTALLATION_ID', text: installation.id },
       {
         type: 'secret_text',
         name: 'PIXELS_JSON',

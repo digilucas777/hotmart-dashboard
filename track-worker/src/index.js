@@ -2,7 +2,7 @@ import { sha256Hex } from './hash.js'
 import { buildSnippet } from './snippet.js'
 import { normalizePhone } from './phone.js'
 
-const WORKER_VERSION = '1.1.0'
+const WORKER_VERSION = '1.2.0'
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
@@ -80,7 +80,27 @@ async function sendToMeta({ pixelId, capiToken, testEventCode, eventName, eventI
   return res.ok
 }
 
-async function handleCollect(request, env) {
+// Manda um resumo do evento pro nosso dashboard (tela de diagnóstico/Etapa 4).
+// Nunca usa a service role key — só o secret de ingestão dessa instalação,
+// que só autoriza gravar eventos dela mesma. Roda em segundo plano via
+// ctx.waitUntil (não atrasa a resposta) e nunca derruba o fluxo principal —
+// se faltar INGEST_URL/INGEST_SECRET (deploy antigo) ou a chamada falhar, só
+// loga quando o diagnóstico está ativo.
+function sendToIngest(ctx, env, event) {
+  if (!env.INGEST_URL || !env.INGEST_SECRET || !env.INSTALLATION_ID) return
+  const task = fetch(env.INGEST_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ installation_id: env.INSTALLATION_ID, secret: env.INGEST_SECRET, ...event }),
+  }).catch(err => {
+    if (env.DIAGNOSTICO_ATIVO === 'true') {
+      console.error('[Rastreamento] falha ao enviar pro ingest (não afeta o envio à Meta):', err)
+    }
+  })
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(task)
+}
+
+async function handleCollect(request, env, ctx) {
   if (!isOriginAllowed(request, env)) return json({ error: 'origin not allowed' }, 403)
 
   const body = await request.json().catch(() => null)
@@ -141,10 +161,21 @@ async function handleCollect(request, env) {
     console.log('[Rastreamento] /collect', { event: body.event_name, session_id: body.session_id, resultados: results })
   }
 
+  sendToIngest(ctx, env, {
+    event_name: body.event_name,
+    source: 'capi',
+    fbp: body.fbp || null,
+    fbc: body.fbc || null,
+    ip,
+    session_id: body.session_id,
+    session_hit: false,
+    raw_payload: env.DIAGNOSTICO_ATIVO === 'true' ? body : null,
+  })
+
   return json({ ok: true })
 }
 
-async function handleHotmartWebhook(request, env) {
+async function handleHotmartWebhook(request, env, ctx) {
   const url = new URL(request.url)
   if (url.searchParams.get('secret') !== env.WEBHOOK_SECRET) return json({ error: 'unauthorized' }, 401)
 
@@ -168,6 +199,8 @@ async function handleHotmartWebhook(request, env) {
   if (buyer.document) userData.external_id = await sha256Hex(buyer.document)
 
   const sessionEnrichment = env.SESSION_ENRICHMENT_ENABLED === 'true'
+  let sessionHit = false
+  let matchedSessionId = null
   if (sessionEnrichment && env.SESSIONS) {
     // Uma falha aqui (ex: KV fora do ar) nunca pode impedir o envio do
     // Purchase — nesse caso ele só sai sem o bônus de fbp/fbc/geo.
@@ -181,7 +214,7 @@ async function handleHotmartWebhook(request, env) {
       const sck = origin && typeof origin === 'object' ? origin.sck : null
       if (sck) {
         const stored = await env.SESSIONS.get(`sid:${sck}`)
-        if (stored) session = JSON.parse(stored)
+        if (stored) { session = JSON.parse(stored); matchedSessionId = sck }
       }
 
       // Preferência 2 (melhor esforço): se não achou pelo sck, tenta pelo
@@ -194,6 +227,7 @@ async function handleHotmartWebhook(request, env) {
       }
 
       if (session) {
+        sessionHit = true
         if (session.fbp) userData.fbp = session.fbp
         if (session.fbc) userData.fbc = session.fbc
         if (session.ip) userData.client_ip_address = session.ip
@@ -226,6 +260,17 @@ async function handleHotmartWebhook(request, env) {
     console.log('[Rastreamento] /webhook/hotmart', { transaction: purchase.transaction, resultados: results })
   }
 
+  sendToIngest(ctx, env, {
+    event_name: 'Purchase',
+    source: 'capi',
+    fbp: userData.fbp || null,
+    fbc: userData.fbc || null,
+    ip: userData.client_ip_address || null,
+    session_id: matchedSessionId,
+    session_hit: sessionHit,
+    raw_payload: env.DIAGNOSTICO_ATIVO === 'true' ? body : null,
+  })
+
   return json({ ok: true })
 }
 
@@ -235,12 +280,12 @@ function handleHealth(env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url)
     try {
       if (url.pathname === '/t.js') return handleSnippet(env)
-      if (url.pathname === '/collect' && request.method === 'POST') return handleCollect(request, env)
-      if (url.pathname === '/webhook/hotmart') return handleHotmartWebhook(request, env)
+      if (url.pathname === '/collect' && request.method === 'POST') return handleCollect(request, env, ctx)
+      if (url.pathname === '/webhook/hotmart') return handleHotmartWebhook(request, env, ctx)
       if (url.pathname === '/health') return handleHealth(env)
       return json({ error: 'not found' }, 404)
     } catch (err) {
