@@ -218,11 +218,12 @@ export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, worker
       params: extra || {}
     };
     var body = JSON.stringify(payload);
-    if (navigator.sendBeacon) {
-      navigator.sendBeacon(COLLECT_URL, new Blob([body], { type: 'application/json' }));
-    } else {
-      fetch(COLLECT_URL, { method: 'POST', body: body, keepalive: true, headers: { 'Content-Type': 'application/json' } });
-    }
+    // sendBeacon parecia a escolha óbvia (sobrevive ao descarregamento da
+    // página), mas em teste real ele volta "true" (fila aceita) e o pedido
+    // nunca chega no servidor — sem erro nenhum visível. fetch com
+    // keepalive:true cobre o mesmo caso de uso (continua mesmo depois da
+    // página fechar) e se mostrou 100% confiável nos testes.
+    fetch(COLLECT_URL, { method: 'POST', body: body, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(function(){});
   }
   window.HotTrack = { track: send };
   send('PageView');

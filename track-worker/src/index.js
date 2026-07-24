@@ -12,9 +12,9 @@ function parseEnvJson(raw, fallback) {
   try { return raw ? JSON.parse(raw) : fallback } catch { return fallback }
 }
 
-// O /collect é chamado via navigator.sendBeacon com um Blob de tipo
-// application/json — pro navegador isso conta como requisição "não-simples"
-// e ele manda um preflight OPTIONS antes. Sem responder esse preflight com os
+// O /collect é chamado via fetch com Content-Type application/json pra outro
+// domínio — pro navegador isso conta como requisição "não-simples" e ele
+// manda um preflight OPTIONS antes. Sem responder esse preflight com os
 // cabeçalhos certos, o navegador cancela o POST de verdade silenciosamente
 // (sem erro nenhum no console) — foi exatamente isso que impedia os eventos
 // de chegar, mesmo depois da URL do COLLECT_URL já estar correta.

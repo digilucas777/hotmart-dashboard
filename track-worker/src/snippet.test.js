@@ -43,6 +43,12 @@ test('buildSnippet inclui a validade de sessão em segundos no cookie', () => {
   assert.match(code, /SESSION_TTL_SECONDS = 1209600/)
 })
 
+test('buildSnippet manda o evento via fetch com keepalive, não sendBeacon (sendBeacon se mostrou pouco confiável em teste real)', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [] })
+  assert.doesNotMatch(code, /navigator\.sendBeacon\(/)
+  assert.match(code, /fetch\(COLLECT_URL, \{ method: 'POST', body: body, keepalive: true/)
+})
+
 test('buildSnippet gera _fbp e _fbc sozinho (sem depender do pixel nativo da Meta)', () => {
   const code = buildSnippet({ sessionTtlDays: 7, triggers: [] })
   assert.match(code, /function getOrCreateFbp\(\)/)
