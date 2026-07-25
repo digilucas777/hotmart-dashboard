@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
 
 type RecentEvent = {
@@ -33,8 +33,18 @@ type Summary = {
     with_fbc_pct: number | null
     purchase_session_matched_pct: number | null
   }
-  recent: RecentEvent[]
 }
+
+type EventName = 'PageView' | 'InitiateCheckout' | 'Purchase'
+
+type SectionState = {
+  open: boolean
+  loading: boolean
+  error: string | null
+  events: RecentEvent[] | null // null = nunca foi aberta/buscada ainda
+}
+
+const EVENT_TYPES: EventName[] = ['PageView', 'InitiateCheckout', 'Purchase']
 
 const EVENT_ICON: Record<string, string> = {
   PageView: '👁️',
@@ -64,6 +74,38 @@ function exactTime(iso: string): string {
     day: '2-digit', month: '2-digit', year: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit',
   })
+}
+
+function toLocalDateKey(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+// Últimos 14 dias (mesmo período de retenção) — o usuário escolhe qual dia
+// carregar em vez de um limite fixo de linhas.
+function dateOptions(): { value: string; label: string }[] {
+  const now = new Date()
+  const opts: { value: string; label: string }[] = []
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
+    const value = toLocalDateKey(d)
+    const label = i === 0
+      ? 'Hoje'
+      : i === 1
+        ? 'Ontem'
+        : d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })
+    opts.push({ value, label })
+  }
+  return opts
+}
+
+function dayRangeToISO(dateKey: string): { start: string; end: string } {
+  const [y, m, d] = dateKey.split('-').map(Number)
+  const start = new Date(y, m - 1, d, 0, 0, 0, 0)
+  const end = new Date(y, m - 1, d + 1, 0, 0, 0, 0)
+  return { start: start.toISOString(), end: end.toISOString() }
 }
 
 function geoLabel(e: RecentEvent): string | null {
@@ -160,11 +202,59 @@ function EventRow({ e }: { e: RecentEvent }) {
   )
 }
 
+function EventTypeSection({
+  eventName, countBadge, section, onToggle,
+}: {
+  eventName: EventName
+  countBadge: number
+  section: SectionState
+  onToggle: () => void
+}) {
+  return (
+    <div className="rounded-xl ring-1 ring-white/10" style={{ background: '#111120' }}>
+      <button onClick={onToggle} className="flex w-full items-center justify-between px-3 py-2.5 text-left">
+        <span className="flex items-center gap-2 text-sm font-medium text-slate-200">
+          <span>{EVENT_ICON[eventName]}</span>
+          {eventName}
+          <span className="text-xs font-normal text-slate-500">({countBadge})</span>
+          {section.loading && <Spinner size={12} />}
+        </span>
+        {section.open ? <ChevronDown size={16} className="text-slate-500" /> : <ChevronRight size={16} className="text-slate-500" />}
+      </button>
+      {section.open && (
+        <div className="space-y-1.5 border-t border-white/10 p-3">
+          {section.error ? (
+            <p className="text-xs text-red-300">{section.error}</p>
+          ) : section.events === null ? null : section.events.length === 0 ? (
+            <p className="text-xs text-slate-600">Nenhum evento nesse dia.</p>
+          ) : (
+            section.events.map((e, i) => <EventRow key={i} e={e} />)
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function makeInitialSections(): Record<EventName, SectionState> {
+  return {
+    PageView: { open: false, loading: false, error: null, events: null },
+    InitiateCheckout: { open: false, loading: false, error: null, events: null },
+    Purchase: { open: false, loading: false, error: null, events: null },
+  }
+}
+
 export function EventsPanel({ installationId }: { installationId: string }) {
   const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedDate, setSelectedDate] = useState<string>(() => toLocalDateKey(new Date()))
+  const [sections, setSections] = useState<Record<EventName, SectionState>>(makeInitialSections)
   const isMountedRef = useRef(true)
+  const selectedDateRef = useRef(selectedDate)
+  const sectionsRef = useRef(sections)
+
+  useEffect(() => { sectionsRef.current = sections }, [sections])
 
   async function load(showSpinner: boolean) {
     if (showSpinner) setLoading(true)
@@ -181,12 +271,55 @@ export function EventsPanel({ installationId }: { installationId: string }) {
     setLoading(false)
   }
 
+  async function loadSection(eventName: EventName, dateKey: string) {
+    setSections(prev => ({ ...prev, [eventName]: { ...prev[eventName], loading: true, error: null } }))
+    const { start, end } = dayRangeToISO(dateKey)
+    const params = new URLSearchParams({ installation_id: installationId, event_name: eventName, start, end })
+    const res = await fetch(`/api/track/events/list?${params.toString()}`)
+    const json = await res.json().catch(() => ({}))
+    if (!isMountedRef.current) return
+    // Se a data já mudou de novo enquanto essa resposta estava a caminho,
+    // descarta — senão uma resposta lenta do dia anterior pode sobrescrever
+    // a seção com dados do dia errado.
+    if (dateKey !== selectedDateRef.current) return
+    if (!res.ok) {
+      setSections(prev => ({ ...prev, [eventName]: { ...prev[eventName], loading: false, error: json?.error || 'Não foi possível carregar os eventos.' } }))
+      return
+    }
+    setSections(prev => ({ ...prev, [eventName]: { ...prev[eventName], loading: false, error: null, events: json.events ?? [] } }))
+  }
+
+  function toggleSection(eventName: EventName) {
+    const current = sections[eventName]
+    const willOpen = !current.open
+    setSections(prev => ({ ...prev, [eventName]: { ...prev[eventName], open: willOpen } }))
+    if (willOpen && current.events === null) void loadSection(eventName, selectedDate)
+  }
+
+  function handleDateChange(newDate: string) {
+    setSelectedDate(newDate)
+    selectedDateRef.current = newDate
+    EVENT_TYPES.forEach(ev => {
+      if (sections[ev].open) void loadSection(ev, newDate)
+    })
+  }
+
   useEffect(() => {
     isMountedRef.current = true
     void load(true)
     // Painel "ao vivo": atualiza sozinho enquanto estiver aberto, sem precisar
-    // clicar em Atualizar toda hora.
-    const interval = setInterval(() => void load(false), REFRESH_INTERVAL_MS)
+    // clicar em Atualizar toda hora. Seções abertas só atualizam sozinhas
+    // quando a data selecionada é hoje — um dia passado é histórico, fica
+    // parado até o usuário trocar a data.
+    const interval = setInterval(() => {
+      void load(false)
+      const today = toLocalDateKey(new Date())
+      if (selectedDateRef.current === today) {
+        EVENT_TYPES.forEach(ev => {
+          if (sectionsRef.current[ev].open) void loadSection(ev, selectedDateRef.current)
+        })
+      }
+    }, REFRESH_INTERVAL_MS)
     return () => {
       isMountedRef.current = false
       clearInterval(interval)
@@ -197,8 +330,6 @@ export function EventsPanel({ installationId }: { installationId: string }) {
   if (loading) return <div className="flex justify-center py-6"><Spinner size={18} /></div>
   if (error) return <p className="py-3 text-xs text-red-300">{error}</p>
   if (!summary) return null
-
-  const eventTypes = ['PageView', 'InitiateCheckout', 'Purchase']
 
   return (
     <div className="space-y-4 border-t border-white/10 pt-4">
@@ -216,7 +347,7 @@ export function EventsPanel({ installationId }: { installationId: string }) {
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        {eventTypes.map(ev => (
+        {EVENT_TYPES.map(ev => (
           <div key={ev} className="rounded-xl p-3 text-center ring-1 ring-white/10" style={{ background: '#111120' }}>
             <div className="text-lg">{EVENT_ICON[ev]}</div>
             <div className="text-lg font-bold text-slate-100">{summary.counts_24h[ev] ?? 0}</div>
@@ -233,15 +364,31 @@ export function EventsPanel({ installationId }: { installationId: string }) {
         </div>
       )}
 
-      <div>
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Eventos recentes, por visitante</p>
-        {summary.recent.length === 0 ? (
-          <p className="text-xs text-slate-600">Nenhum evento recebido ainda.</p>
-        ) : (
-          <div className="space-y-1.5">
-            {summary.recent.map((e, i) => <EventRow key={i} e={e} />)}
-          </div>
-        )}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Eventos por dia</p>
+          <select
+            value={selectedDate}
+            onChange={e => handleDateChange(e.target.value)}
+            className="rounded-md border border-white/10 px-2 py-1 text-xs text-slate-300"
+            style={{ background: '#111120' }}
+          >
+            {dateOptions().map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2">
+          {EVENT_TYPES.map(eventName => (
+            <EventTypeSection
+              key={eventName}
+              eventName={eventName}
+              countBadge={summary.counts_24h[eventName] ?? 0}
+              section={sections[eventName]}
+              onToggle={() => toggleSection(eventName)}
+            />
+          ))}
+        </div>
       </div>
     </div>
   )
