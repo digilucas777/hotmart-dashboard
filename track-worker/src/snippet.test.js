@@ -105,3 +105,23 @@ test('buildSnippet captura "src" da URL (exibição no painel, não usado pra cr
   assert.match(code, /'src'/)
   assert.match(code, /src: src/)
 })
+
+test('buildSnippet sem pixelIds não carrega o pixel nativo da Meta', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [] })
+  assert.doesNotMatch(code, /fbevents\.js/)
+  assert.doesNotMatch(code, /fbq\('init'/)
+})
+
+test('buildSnippet com pixelIds carrega o pixel nativo da Meta e inicializa cada um', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [], pixelIds: ['111', '222'] })
+  assert.match(code, /fbevents\.js/)
+  assert.match(code, /fbq\('init', "111"\)/)
+  assert.match(code, /fbq\('init', "222"\)/)
+})
+
+test('buildSnippet manda event_id no PageView e dispara o mesmo ID no pixel nativo (dedup Pixel+CAPI recomendado pela Meta)', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [], pixelIds: ['111'] })
+  assert.match(code, /var eventId = \(eventName === 'PageView' && crypto\.randomUUID\)/)
+  assert.match(code, /event_id: eventId/)
+  assert.match(code, /window\.fbq\('track', 'PageView', \{\}, eventId \? \{ eventID: eventId \} : undefined\)/)
+})

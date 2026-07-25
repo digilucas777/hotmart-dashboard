@@ -33,7 +33,8 @@ function handleSnippet(request, env) {
   const checkoutDomains = parseEnvJson(env.CHECKOUT_DOMAINS_JSON, [])
   const sessionTtlDays = Number(env.SESSION_TTL_DAYS) || 7
   const workerOrigin = new URL(request.url).origin
-  const body = buildSnippet({ sessionTtlDays, triggers, checkoutDomains, workerOrigin })
+  const pixelIds = parseEnvJson(env.PIXEL_IDS_JSON, [])
+  const body = buildSnippet({ sessionTtlDays, triggers, checkoutDomains, workerOrigin, pixelIds })
   return new Response(body, {
     headers: { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=300' },
   })
@@ -71,11 +72,11 @@ function extractGeo(request) {
   }
 }
 
-async function sendToMeta({ pixelId, capiToken, testEventCode, eventName, eventId, eventSourceUrl, userData, customData }) {
+async function sendToMeta({ pixelId, capiToken, testEventCode, eventName, eventId, eventTime, eventSourceUrl, userData, customData }) {
   const payload = {
     data: [{
       event_name: eventName,
-      event_time: Math.floor(Date.now() / 1000),
+      event_time: eventTime || Math.floor(Date.now() / 1000),
       event_id: eventId,
       event_source_url: eventSourceUrl,
       action_source: 'website',
@@ -130,7 +131,11 @@ async function handleCollect(request, env, ctx) {
   const ip = request.headers.get('CF-Connecting-IP') || ''
   const userAgent = request.headers.get('User-Agent') || ''
   const geo = extractGeo(request)
-  const eventId = `${body.session_id}:${body.event_name}:${Math.floor(Date.now() / 60000)}`
+  // Pro PageView, o script já manda um event_id gerado no navegador — é o
+  // mesmo ID que ele usa pra disparar o pixel nativo da Meta (fbq), fazendo
+  // a Meta fundir os dois em 1 evento só em vez de contar em dobro. Só cai
+  // no ID gerado aqui quando o cliente não mandou nenhum.
+  const eventId = body.event_id || `${body.session_id}:${body.event_name}:${Math.floor(Date.now() / 60000)}`
 
   const sessionEnrichment = env.SESSION_ENRICHMENT_ENABLED === 'true'
   if (sessionEnrichment && env.SESSIONS) {
@@ -247,7 +252,12 @@ async function handleHotmartWebhook(request, env, ctx) {
 
   const buyer = body.data?.buyer || {}
   const purchase = body.data?.purchase || {}
-  const buyerCountry = buyer.address?.country || null
+  const product = body.data?.product || {}
+  // O mapa de DDI (normalizePhone) usa sigla ISO ("FR"), mas
+  // buyer.address.country vem por extenso ("France") — tem que ser o
+  // country_iso, senão a busca do DDI nunca bate e o telefone sai sem
+  // prefixo pra ninguém.
+  const buyerCountry = buyer.address?.country_iso || null
 
   const pixels = parseEnvJson(env.PIXELS_JSON, [])
   if (pixels.length === 0) return json({ error: 'no pixels configured' }, 500)
@@ -265,12 +275,24 @@ async function handleHotmartWebhook(request, env, ctx) {
 
   const userData = {}
   if (buyer.email) userData.em = await sha256Hex(buyer.email)
-  if (buyer.name) userData.fn = await sha256Hex(String(buyer.name).split(' ')[0])
+  // Hotmart já manda o nome separado (first_name/last_name) — usar isso é
+  // mais confiável que quebrar buyer.name no primeiro espaço, e a Meta
+  // recomenda mandar sobrenome (ln) também, não só o primeiro nome.
+  const firstName = buyer.first_name || String(buyer.name || '').split(' ')[0]
+  if (firstName) userData.fn = await sha256Hex(firstName)
+  if (buyer.last_name) userData.ln = await sha256Hex(buyer.last_name)
   if (buyer.checkout_phone) {
     const normalizedPhone = normalizePhone(buyer.checkout_phone, buyerCountry)
     if (normalizedPhone) userData.ph = await sha256Hex(normalizedPhone)
   }
+  // external_id devia ser um identificador estável do cliente — o CPF
+  // (buyer.document) só existe pra comprador brasileiro; pra o resto do
+  // mundo (a maioria do público francês/internacional) vem vazio. Nesse
+  // caso, usa o e-mail com hash como external_id também (a Meta permite
+  // repetir o mesmo identificador em campos diferentes) em vez de deixar
+  // o campo inteiro de fora.
   if (buyer.document) userData.external_id = await sha256Hex(buyer.document)
+  else if (buyer.email) userData.external_id = await sha256Hex(buyer.email)
 
   const sessionEnrichment = env.SESSION_ENRICHMENT_ENABLED === 'true'
   let sessionHit = false
@@ -317,6 +339,23 @@ async function handleHotmartWebhook(request, env, ctx) {
     }
   }
 
+  // Endereço de cobrança da própria Hotmart, quando vem preenchido, é mais
+  // preciso que geo por IP (que é só uma estimativa de localização, não o
+  // endereço real) — sobrescreve só os campos que vierem preenchidos aqui,
+  // sem mexer no que já veio da sessão (a Hotmart não expõe "estado" no
+  // endereço do comprador, então "st" continua vindo só da sessão/IP).
+  const billingAddress = buyer.address || {}
+  Object.assign(userData, await buildGeoUserData({
+    city: billingAddress.city || null,
+    postalCode: billingAddress.zipcode || null,
+    country: billingAddress.country_iso || null,
+  }))
+
+  // event_time o mais próximo possível do momento real da aprovação (a
+  // Hotmart manda em milissegundos) — melhor do que "agora", que é só a
+  // hora em que o webhook chegou aqui (pode ter atraso de entrega).
+  const eventTime = purchase.approved_date ? Math.floor(purchase.approved_date / 1000) : undefined
+
   const eventId = `purchase:${purchase.transaction}`
   let results = []
   if (isTrackedSale) {
@@ -326,11 +365,17 @@ async function handleHotmartWebhook(request, env, ctx) {
       testEventCode: pixel.test_event_code,
       eventName: 'Purchase',
       eventId,
-      eventSourceUrl: undefined,
+      eventTime,
+      // A Hotmart não manda a URL de onde a compra saiu, mas a sessão
+      // cruzada (via sck) sabe qual página o comprador visitou por último.
+      eventSourceUrl: matchedSession?.url,
       userData,
       customData: {
         value: purchase.price?.value ?? 0,
         currency: purchase.price?.currency_value ?? 'BRL',
+        content_ids: product.id != null ? [String(product.id)] : undefined,
+        content_name: product.name || undefined,
+        content_type: 'product',
       },
     })))
   }

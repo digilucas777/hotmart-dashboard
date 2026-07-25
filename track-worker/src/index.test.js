@@ -342,7 +342,7 @@ test('webhook da Hotmart normaliza o telefone com o DDI do país do comprador an
       body: JSON.stringify({
         event: 'PURCHASE_APPROVED',
         data: {
-          buyer: { name: 'Marie Curie', checkout_phone: '06 12 34 56 78', address: { country: 'FR' } },
+          buyer: { name: 'Marie Curie', checkout_phone: '06 12 34 56 78', address: { country: 'France', country_iso: 'FR' } },
           purchase: { transaction: 'HP125', price: { value: 47, currency_value: 'EUR' } },
         },
       }),
@@ -351,6 +351,220 @@ test('webhook da Hotmart normaliza o telefone com o DDI do país do comprador an
     const sentBody = JSON.parse(calls[0].init.body)
     const expectedHash = await sha256Hex('33612345678')
     assert.equal(sentBody.data[0].user_data.ph, expectedHash)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart manda sobrenome (ln) e prefere first_name/last_name da Hotmart em vez de quebrar buyer.name', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnv()
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'Xavier Bénéat', first_name: 'Xavier', last_name: 'Bénéat', email: 'xavier@exemplo.com' },
+          purchase: { transaction: 'HP200', price: { value: 39.98, currency_value: 'EUR' } },
+        },
+      }),
+    })
+    await worker.fetch(req, env)
+    const userData = JSON.parse(calls[0].init.body).data[0].user_data
+    assert.equal(userData.fn, await sha256Hex('Xavier'))
+    assert.equal(userData.ln, await sha256Hex('Bénéat'))
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart usa e-mail com hash como external_id quando não tem CPF (comprador não-brasileiro)', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnv()
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'Xavier Bénéat', email: 'xavier@exemplo.com', document: '' },
+          purchase: { transaction: 'HP201', price: { value: 39.98, currency_value: 'EUR' } },
+        },
+      }),
+    })
+    await worker.fetch(req, env)
+    const userData = JSON.parse(calls[0].init.body).data[0].user_data
+    assert.equal(userData.external_id, await sha256Hex('xavier@exemplo.com'))
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart usa purchase.approved_date como event_time (mais preciso que "agora")', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnv()
+    const approvedDateMs = 1784912744000
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'Teste', email: 'teste@exemplo.com' },
+          purchase: { transaction: 'HP202', price: { value: 39.98, currency_value: 'EUR' }, approved_date: approvedDateMs },
+        },
+      }),
+    })
+    await worker.fetch(req, env)
+    const sentBody = JSON.parse(calls[0].init.body)
+    assert.equal(sentBody.data[0].event_time, Math.floor(approvedDateMs / 1000))
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart manda event_source_url da sessão cruzada (a Hotmart não manda isso sozinha)', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnv()
+    await env.SESSIONS.put('sid:sess-url', JSON.stringify({ fbp: 'fb.1.1', fbc: null, ip: '1.1.1.1', userAgent: 'ua', url: 'https://minhalp.com.br/pr/' }))
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'Teste', email: 'teste@exemplo.com' },
+          purchase: { transaction: 'HP203', price: { value: 39.98, currency_value: 'EUR' }, origin: { sck: 'sess-url' } },
+        },
+      }),
+    })
+    await worker.fetch(req, env)
+    const sentBody = JSON.parse(calls[0].init.body)
+    assert.equal(sentBody.data[0].event_source_url, 'https://minhalp.com.br/pr/')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart usa endereço de cobrança da Hotmart (mais preciso que geo por IP) quando vier preenchido', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnv()
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'Teste', email: 'teste@exemplo.com', address: { city: 'Lyon', zipcode: '69001', country_iso: 'FR' } },
+          purchase: { transaction: 'HP204', price: { value: 39.98, currency_value: 'EUR' } },
+        },
+      }),
+    })
+    await worker.fetch(req, env)
+    const userData = JSON.parse(calls[0].init.body).data[0].user_data
+    assert.equal(userData.ct, await sha256Hex('Lyon'))
+    assert.equal(userData.zp, await sha256Hex('69001'))
+    assert.equal(userData.country, await sha256Hex('FR'))
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart manda content_ids/content_name/content_type do produto no Purchase', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnv()
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'Teste', email: 'teste@exemplo.com' },
+          product: { id: 7101989, name: 'Cours de massage tantrique' },
+          purchase: { transaction: 'HP205', price: { value: 39.98, currency_value: 'EUR' } },
+        },
+      }),
+    })
+    await worker.fetch(req, env)
+    const customData = JSON.parse(calls[0].init.body).data[0].custom_data
+    assert.deepEqual(customData.content_ids, ['7101989'])
+    assert.equal(customData.content_name, 'Cours de massage tantrique')
+    assert.equal(customData.content_type, 'product')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('POST /collect usa o event_id mandado pelo cliente (o mesmo que o script usa no pixel nativo, pra Meta fundir os dois)', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnv()
+    const req = new Request('https://sinal.teste.com/collect', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: 'PageView', session_id: 'sess-eid', url: 'https://minhalp.com.br/', event_id: 'client-gerado-uuid-123' }),
+    })
+    await worker.fetch(req, env)
+    const sentBody = JSON.parse(calls[0].init.body)
+    assert.equal(sentBody.data[0].event_id, 'client-gerado-uuid-123')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('POST /collect gera o próprio event_id quando o cliente não manda nenhum', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnv()
+    const req = new Request('https://sinal.teste.com/collect', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: 'PageView', session_id: 'sess-no-eid', url: 'https://minhalp.com.br/' }),
+    })
+    await worker.fetch(req, env)
+    const sentBody = JSON.parse(calls[0].init.body)
+    assert.match(sentBody.data[0].event_id, /^sess-no-eid:PageView:\d+$/)
   } finally {
     globalThis.fetch = originalFetch
   }

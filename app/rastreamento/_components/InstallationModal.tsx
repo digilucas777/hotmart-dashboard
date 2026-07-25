@@ -386,12 +386,12 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
                   {copiedScript ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
                 </button>
               </div>
-              <div className="mt-2 flex gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-2 text-[11px] text-amber-200">
-                <span>⚠️</span>
+              <div className="mt-2 flex gap-2 rounded-lg border border-blue-500/20 bg-blue-500/10 p-2 text-[11px] text-blue-200">
+                <span>ℹ️</span>
                 <p>
-                  Se você já tem o pixel da Meta instalado direto na página, <strong>remova-o</strong> e deixe só
-                  esse script — os dois juntos disparam <code>PageView</code> em dobro (um pelo navegador da
-                  pessoa, sujeito a bloqueio, outro pelo nosso servidor).
+                  Se você já tem o pixel nativo da Meta instalado direto na página, <strong>pode deixar</strong> —
+                  não precisa remover. Esse script já carrega o pixel da Meta sozinho e usa o mesmo ID de evento
+                  nos dois lados, então a Meta funde tudo em 1 evento só (nunca conta em dobro).
                 </p>
               </div>
             </div>

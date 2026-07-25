@@ -110,6 +110,12 @@ export async function POST(request: Request) {
       { type: 'plain_text', name: 'INGEST_URL', text: `${APP_URL}/api/track/events/ingest` },
       { type: 'secret_text', name: 'INGEST_SECRET', text: installation.ingest_secret },
       { type: 'plain_text', name: 'REQUIRE_TRACKER_SRC', text: String(installation.require_tracker_src) },
+      // Só os IDs dos pixels (nunca o capi_token) — vai dentro do /t.js
+      // público, pra ele conseguir carregar e inicializar o pixel nativo da
+      // Meta no navegador sozinho (sem o usuário precisar colar nada na
+      // página). IDs de pixel não são segredo, já ficam visíveis no
+      // view-source de qualquer site que tenha o pixel da Meta instalado.
+      { type: 'plain_text', name: 'PIXEL_IDS_JSON', text: JSON.stringify(pixels.map(p => p.pixel_id)) },
     ]
 
     await deployWorkerScript(token, accountId, scriptName, readWorkerModules(), bindings)

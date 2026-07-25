@@ -110,6 +110,27 @@ function buildTriggerCode(trigger) {
   return ''
 }
 
+// Carrega o pixel nativo da Meta automaticamente — não precisa colar nada na
+// página na mão. É o mesmo código que a própria Meta fornece (só gerado por
+// nós). Serve pra: (1) ferramentas como o Meta Pixel Helper conseguirem
+// detectar o pixel rodando; (2) o PageView do navegador ser cruzado com o
+// nosso PageView via CAPI usando o mesmo event_id, sem contar em dobro —
+// é a arquitetura "Pixel + Conversions API" que a própria Meta recomenda.
+function buildPixelLoaderCode(pixelIds) {
+  if (!pixelIds || pixelIds.length === 0) return ''
+  const initCalls = pixelIds.map(id => `fbq('init', ${jsString(String(id))});`).join('\n  ')
+  return `
+  !function(f,b,e,v,n,t,s)
+  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+  n.queue=[];t=b.createElement(e);t.async=!0;
+  t.src=v;s=b.getElementsByTagName(e)[0];
+  s.parentNode.insertBefore(t,s)}(window, document,'script',
+  'https://connect.facebook.net/en_US/fbevents.js');
+  ${initCalls}`
+}
+
 // Cola o session_id (sid) como ?sck=... nos links que apontam pro checkout —
 // é assim que o webhook depois consegue cruzar a compra (que chega sem saber
 // nada da navegação) com a sessão (fbp/fbc/geo/ip) salva no PageView. Roda no
@@ -174,10 +195,11 @@ function buildCheckoutDecoratorCode(checkoutDomains) {
   })();`
 }
 
-export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, workerOrigin }) {
+export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, workerOrigin, pixelIds }) {
   const sessionTtlSeconds = Math.max(1, Number(sessionTtlDays) || 7) * 86400
   const triggerCode = (triggers || []).map(buildTriggerCode).join('\n')
   const checkoutDecoratorCode = buildCheckoutDecoratorCode(checkoutDomains)
+  const pixelLoaderCode = buildPixelLoaderCode(pixelIds)
 
   return `(function(){
   // Precisa ser uma URL absoluta pro domínio do Worker: esse script roda no
@@ -187,6 +209,7 @@ export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, worker
   var COLLECT_URL = ${jsString(workerOrigin || '')} + '/collect';
   var MONITOR_URL = ${jsString(workerOrigin || '')} + '/monitor';
   var SESSION_TTL_SECONDS = ${sessionTtlSeconds};
+${pixelLoaderCode}
   function getCookie(name){
     var m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]+)'));
     return m ? decodeURIComponent(m[1]) : null;
@@ -273,6 +296,10 @@ export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, worker
   var utm = getOrCreateUtm();
   var src = getOrCreateSrc();
   function send(eventName, extra){
+    // Só gera event_id pro PageView, que é o único evento que também pode
+    // vir do pixel nativo do navegador — é esse ID compartilhado que deixa a
+    // Meta fundir os dois em 1 só, em vez de contar em dobro.
+    var eventId = (eventName === 'PageView' && crypto.randomUUID) ? crypto.randomUUID() : null;
     var payload = {
       event_name: eventName,
       session_id: sid,
@@ -282,7 +309,8 @@ export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, worker
       utm: utm,
       src: src,
       new_session: isNewSession(),
-      params: extra || {}
+      params: extra || {},
+      event_id: eventId
     };
     var body = JSON.stringify(payload);
     // sendBeacon parecia a escolha óbvia (sobrevive ao descarregamento da
@@ -291,6 +319,9 @@ export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, worker
     // keepalive:true cobre o mesmo caso de uso (continua mesmo depois da
     // página fechar) e se mostrou 100% confiável nos testes.
     fetch(COLLECT_URL, { method: 'POST', body: body, keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(function(){});
+    if (eventName === 'PageView' && window.fbq) {
+      window.fbq('track', 'PageView', {}, eventId ? { eventID: eventId } : undefined);
+    }
   }
   window.HotTrack = { track: send };
   send('PageView');
