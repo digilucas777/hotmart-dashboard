@@ -26,8 +26,8 @@ type RecentEvent = {
 }
 
 type Summary = {
-  counts_24h: Record<string, number>
-  coverage_24h: {
+  counts_today: Record<string, number>
+  coverage_today: {
     total: number
     with_fbp_pct: number | null
     with_fbc_pct: number | null
@@ -39,12 +39,16 @@ type EventName = 'PageView' | 'InitiateCheckout' | 'Purchase'
 
 type SectionState = {
   open: boolean
-  loading: boolean
+  loading: boolean // busca inicial (primeiro open ou troca de data)
+  loadingMore: boolean // busca do "carregar mais"
   error: string | null
   events: RecentEvent[] | null // null = nunca foi aberta/buscada ainda
+  offset: number
+  hasMore: boolean
 }
 
 const EVENT_TYPES: EventName[] = ['PageView', 'InitiateCheckout', 'Purchase']
+const PAGE_SIZE = 50
 
 const EVENT_ICON: Record<string, string> = {
   PageView: '👁️',
@@ -106,6 +110,15 @@ function dayRangeToISO(dateKey: string): { start: string; end: string } {
   const start = new Date(y, m - 1, d, 0, 0, 0, 0)
   const end = new Date(y, m - 1, d + 1, 0, 0, 0, 0)
   return { start: start.toISOString(), end: end.toISOString() }
+}
+
+// Meia-noite local até agora — pro bloco "Ao vivo" do topo. Diferente de
+// dayRangeToISO (dia inteiro, usado no filtro por data): aqui o fim é sempre
+// "agora", pra não incluir amanhã nem sobrar hora de ontem.
+function todayRangeToISO(): { start: string; end: string } {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+  return { start: start.toISOString(), end: now.toISOString() }
 }
 
 function geoLabel(e: RecentEvent): string | null {
@@ -203,12 +216,13 @@ function EventRow({ e }: { e: RecentEvent }) {
 }
 
 function EventTypeSection({
-  eventName, countBadge, section, onToggle,
+  eventName, countBadge, section, onToggle, onLoadMore,
 }: {
   eventName: EventName
   countBadge: number
   section: SectionState
   onToggle: () => void
+  onLoadMore: () => void
 }) {
   return (
     <div className="rounded-xl ring-1 ring-white/10" style={{ background: '#111120' }}>
@@ -222,13 +236,29 @@ function EventTypeSection({
         {section.open ? <ChevronDown size={16} className="text-slate-500" /> : <ChevronRight size={16} className="text-slate-500" />}
       </button>
       {section.open && (
-        <div className="space-y-1.5 border-t border-white/10 p-3">
-          {section.error ? (
-            <p className="text-xs text-red-300">{section.error}</p>
-          ) : section.events === null ? null : section.events.length === 0 ? (
-            <p className="text-xs text-slate-600">Nenhum evento nesse dia.</p>
-          ) : (
-            section.events.map((e, i) => <EventRow key={i} e={e} />)
+        <div className="border-t border-white/10">
+          {/* Rolagem própria da seção (não da página) — senão uma seção com
+              muitos eventos empurra as outras duas pra longe. */}
+          <div className="max-h-80 space-y-1.5 overflow-y-auto p-3">
+            {section.error ? (
+              <p className="text-xs text-red-300">{section.error}</p>
+            ) : section.events === null ? null : section.events.length === 0 ? (
+              <p className="text-xs text-slate-600">Nenhum evento nesse dia.</p>
+            ) : (
+              section.events.map((e, i) => <EventRow key={i} e={e} />)
+            )}
+          </div>
+          {section.events !== null && section.events.length > 0 && (section.hasMore || section.loadingMore) && (
+            <div className="flex justify-center border-t border-white/5 p-2">
+              <button
+                onClick={onLoadMore}
+                disabled={section.loadingMore}
+                className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-300 disabled:opacity-50"
+              >
+                {section.loadingMore && <Spinner size={11} />}
+                {section.loadingMore ? 'Carregando...' : 'Carregar mais'}
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -237,11 +267,8 @@ function EventTypeSection({
 }
 
 function makeInitialSections(): Record<EventName, SectionState> {
-  return {
-    PageView: { open: false, loading: false, error: null, events: null },
-    InitiateCheckout: { open: false, loading: false, error: null, events: null },
-    Purchase: { open: false, loading: false, error: null, events: null },
-  }
+  const empty: SectionState = { open: false, loading: false, loadingMore: false, error: null, events: null, offset: 0, hasMore: false }
+  return { PageView: { ...empty }, InitiateCheckout: { ...empty }, Purchase: { ...empty } }
 }
 
 export function EventsPanel({ installationId }: { installationId: string }) {
@@ -259,7 +286,9 @@ export function EventsPanel({ installationId }: { installationId: string }) {
   async function load(showSpinner: boolean) {
     if (showSpinner) setLoading(true)
     setError(null)
-    const res = await fetch(`/api/track/events/summary?installation_id=${installationId}`)
+    const { start, end } = todayRangeToISO()
+    const params = new URLSearchParams({ installation_id: installationId, start, end })
+    const res = await fetch(`/api/track/events/summary?${params.toString()}`)
     const json = await res.json().catch(() => ({}))
     if (!isMountedRef.current) return
     if (!res.ok) {
@@ -271,10 +300,17 @@ export function EventsPanel({ installationId }: { installationId: string }) {
     setLoading(false)
   }
 
-  async function loadSection(eventName: EventName, dateKey: string) {
-    setSections(prev => ({ ...prev, [eventName]: { ...prev[eventName], loading: true, error: null } }))
+  // append=false busca a 1ª página (troca a lista); append=true busca a
+  // próxima e acrescenta ("carregar mais"). limit é sobrescrito só no
+  // refresh automático, pra atualizar exatamente o que já tava carregado
+  // sem resetar o "carregar mais" que o usuário já tinha clicado.
+  async function fetchSection(eventName: EventName, dateKey: string, offset: number, append: boolean, limit: number = PAGE_SIZE) {
+    setSections(prev => ({ ...prev, [eventName]: { ...prev[eventName], loading: !append, loadingMore: append, error: null } }))
     const { start, end } = dayRangeToISO(dateKey)
-    const params = new URLSearchParams({ installation_id: installationId, event_name: eventName, start, end })
+    const params = new URLSearchParams({
+      installation_id: installationId, event_name: eventName, start, end,
+      limit: String(limit), offset: String(offset),
+    })
     const res = await fetch(`/api/track/events/list?${params.toString()}`)
     const json = await res.json().catch(() => ({}))
     if (!isMountedRef.current) return
@@ -283,24 +319,42 @@ export function EventsPanel({ installationId }: { installationId: string }) {
     // a seção com dados do dia errado.
     if (dateKey !== selectedDateRef.current) return
     if (!res.ok) {
-      setSections(prev => ({ ...prev, [eventName]: { ...prev[eventName], loading: false, error: json?.error || 'Não foi possível carregar os eventos.' } }))
+      setSections(prev => ({ ...prev, [eventName]: { ...prev[eventName], loading: false, loadingMore: false, error: json?.error || 'Não foi possível carregar os eventos.' } }))
       return
     }
-    setSections(prev => ({ ...prev, [eventName]: { ...prev[eventName], loading: false, error: null, events: json.events ?? [] } }))
+    const newEvents = (json.events ?? []) as RecentEvent[]
+    setSections(prev => ({
+      ...prev,
+      [eventName]: {
+        ...prev[eventName],
+        loading: false,
+        loadingMore: false,
+        error: null,
+        events: append ? [...(prev[eventName].events ?? []), ...newEvents] : newEvents,
+        offset: offset + newEvents.length,
+        hasMore: Boolean(json.hasMore),
+      },
+    }))
   }
 
   function toggleSection(eventName: EventName) {
     const current = sections[eventName]
     const willOpen = !current.open
     setSections(prev => ({ ...prev, [eventName]: { ...prev[eventName], open: willOpen } }))
-    if (willOpen && current.events === null) void loadSection(eventName, selectedDate)
+    if (willOpen && current.events === null) void fetchSection(eventName, selectedDate, 0, false)
+  }
+
+  function loadMore(eventName: EventName) {
+    const current = sections[eventName]
+    if (current.loadingMore || !current.hasMore) return
+    void fetchSection(eventName, selectedDate, current.offset, true)
   }
 
   function handleDateChange(newDate: string) {
     setSelectedDate(newDate)
     selectedDateRef.current = newDate
     EVENT_TYPES.forEach(ev => {
-      if (sections[ev].open) void loadSection(ev, newDate)
+      if (sections[ev].open) void fetchSection(ev, newDate, 0, false)
     })
   }
 
@@ -310,13 +364,15 @@ export function EventsPanel({ installationId }: { installationId: string }) {
     // Painel "ao vivo": atualiza sozinho enquanto estiver aberto, sem precisar
     // clicar em Atualizar toda hora. Seções abertas só atualizam sozinhas
     // quando a data selecionada é hoje — um dia passado é histórico, fica
-    // parado até o usuário trocar a data.
+    // parado até o usuário trocar a data. O refresh mantém o tamanho da
+    // página que já tava carregada (não desfaz o "carregar mais").
     const interval = setInterval(() => {
       void load(false)
       const today = toLocalDateKey(new Date())
       if (selectedDateRef.current === today) {
         EVENT_TYPES.forEach(ev => {
-          if (sectionsRef.current[ev].open) void loadSection(ev, selectedDateRef.current)
+          const sec = sectionsRef.current[ev]
+          if (sec.open) void fetchSection(ev, selectedDateRef.current, 0, false, sec.events?.length || PAGE_SIZE)
         })
       }
     }, REFRESH_INTERVAL_MS)
@@ -339,7 +395,7 @@ export function EventsPanel({ installationId }: { installationId: string }) {
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
           </span>
-          Ao vivo — últimas 24h
+          Ao vivo — hoje
         </p>
         <button onClick={() => void load(true)} className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300">
           <RefreshCw size={11} /> Atualizar
@@ -350,17 +406,17 @@ export function EventsPanel({ installationId }: { installationId: string }) {
         {EVENT_TYPES.map(ev => (
           <div key={ev} className="rounded-xl p-3 text-center ring-1 ring-white/10" style={{ background: '#111120' }}>
             <div className="text-lg">{EVENT_ICON[ev]}</div>
-            <div className="text-lg font-bold text-slate-100">{summary.counts_24h[ev] ?? 0}</div>
+            <div className="text-lg font-bold text-slate-100">{summary.counts_today[ev] ?? 0}</div>
             <div className="text-[10px] text-slate-500">{ev}</div>
           </div>
         ))}
       </div>
 
-      {summary.coverage_24h.total > 0 && (
+      {summary.coverage_today.total > 0 && (
         <div className="space-y-2.5 rounded-xl p-3 ring-1 ring-white/10" style={{ background: '#111120' }}>
-          <CoverageBar label="Eventos com fbp" pct={summary.coverage_24h.with_fbp_pct} />
-          <CoverageBar label="Eventos com fbc" pct={summary.coverage_24h.with_fbc_pct} />
-          <CoverageBar label="Purchase cruzado com sessão" pct={summary.coverage_24h.purchase_session_matched_pct} />
+          <CoverageBar label="Eventos com fbp" pct={summary.coverage_today.with_fbp_pct} />
+          <CoverageBar label="Eventos com fbc" pct={summary.coverage_today.with_fbc_pct} />
+          <CoverageBar label="Purchase cruzado com sessão" pct={summary.coverage_today.purchase_session_matched_pct} />
         </div>
       )}
 
@@ -383,9 +439,10 @@ export function EventsPanel({ installationId }: { installationId: string }) {
             <EventTypeSection
               key={eventName}
               eventName={eventName}
-              countBadge={summary.counts_24h[eventName] ?? 0}
+              countBadge={summary.counts_today[eventName] ?? 0}
               section={sections[eventName]}
               onToggle={() => toggleSection(eventName)}
+              onLoadMore={() => loadMore(eventName)}
             />
           ))}
         </div>
