@@ -11,19 +11,27 @@ function getServiceClient() {
   })
 }
 
-// Plano gratuito da Cloudflare Workers: 100.000 requisições/dia por conta.
-// Avisa a partir de 80% pra dar tempo do usuário decidir (upgrade ou reduzir uso)
-// antes de bater no limite e começar a ter requisições rejeitadas.
-const DAILY_REQUEST_LIMIT = 100_000
+// Conta já está no plano pago (Workers Paid, US$5/mês) — os limites deixam de
+// ser diários (plano gratuito) e passam a ser MENSAIS e bem maiores. Se um dia
+// outra instalação for feita numa conta Cloudflare diferente ainda no plano
+// gratuito, esses números pra ela ficariam incorretos (hoje só existe 1 conta
+// cadastrada em produção, então não vale complicar com detecção de plano por
+// conta ainda). Avisa a partir de 80% pra dar tempo de decidir antes de bater
+// no limite de verdade.
+const MONTHLY_REQUEST_LIMIT = 10_000_000
 const WARNING_THRESHOLD = 0.8
 
 function scriptNameFor(installationId: string): string {
   return `track-${installationId.replace(/-/g, '').slice(0, 16)}`
 }
 
-async function fetchTodayRequests(token: string, accountId: string, scriptName: string): Promise<number | null> {
+function startOfMonthIso(): string {
   const now = new Date()
-  const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString()
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString()
+}
+
+async function fetchMonthToDateRequests(token: string, accountId: string, scriptName: string): Promise<number | null> {
+  const now = new Date()
 
   const query = `
     query GetWorkerUsage($accountTag: String!, $scriptName: String!, $since: Time!, $until: Time!) {
@@ -45,7 +53,7 @@ async function fetchTodayRequests(token: string, accountId: string, scriptName: 
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       query,
-      variables: { accountTag: accountId, scriptName, since: startOfDay, until: now.toISOString() },
+      variables: { accountTag: accountId, scriptName, since: startOfMonthIso(), until: now.toISOString() },
     }),
   })
   if (!res.ok) return null
@@ -62,12 +70,12 @@ type InstallationRow = {
   cloudflare_account_id: string | null
 }
 
-// Plano gratuito do Workers KV: 4 sub-limites diários SEPARADOS (bem mais
-// apertados que o de requisições do Worker), e por CONTA CLOUDFLARE INTEIRA
-// — não por instalação/namespace. Uma falha de leitura/escrita no KV nunca
-// impede o envio do evento à Meta (ver track-worker/src/index.js), mas
-// mesmo assim vale avisar antes de começar a tomar 429 do KV.
-const KV_DAILY_LIMITS: Record<string, number> = { read: 100_000, write: 1_000, delete: 1_000, list: 1_000 }
+// Plano pago do Workers KV: 4 sub-limites MENSAIS separados (bem maiores que
+// o plano gratuito), por CONTA CLOUDFLARE INTEIRA — não por instalação/
+// namespace. Uma falha de leitura/escrita no KV nunca impede o envio do
+// evento à Meta (ver track-worker/src/index.js), mas mesmo assim vale avisar
+// antes de aproximar do limite de verdade.
+const KV_MONTHLY_LIMITS: Record<string, number> = { read: 10_000_000, write: 1_000_000, delete: 1_000_000, list: 1_000_000 }
 const KV_METRIC_LABELS: Record<string, string> = {
   read: 'leituras no KV',
   write: 'escritas no KV',
@@ -75,16 +83,17 @@ const KV_METRIC_LABELS: Record<string, string> = {
   list: 'listagens no KV',
 }
 
-async function fetchTodayKvOperations(token: string, accountId: string): Promise<Record<string, number> | null> {
+async function fetchMonthToDateKvOperations(token: string, accountId: string): Promise<Record<string, number> | null> {
   const today = new Date().toISOString().slice(0, 10)
+  const monthStart = startOfMonthIso().slice(0, 10)
 
   const query = `
-    query GetKvUsage($accountTag: String!, $date: Date!) {
+    query GetKvUsage($accountTag: String!, $since: Date!, $until: Date!) {
       viewer {
         accounts(filter: { accountTag: $accountTag }) {
           kvOperationsAdaptiveGroups(
             limit: 10
-            filter: { date_geq: $date, date_leq: $date }
+            filter: { date_geq: $since, date_leq: $until }
           ) {
             dimensions { actionType }
             sum { requests }
@@ -97,7 +106,7 @@ async function fetchTodayKvOperations(token: string, accountId: string): Promise
   const res = await fetch('https://api.cloudflare.com/client/v4/graphql', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, variables: { accountTag: accountId, date: today } }),
+    body: JSON.stringify({ query, variables: { accountTag: accountId, since: monthStart, until: today } }),
   })
   if (!res.ok) return null
   const json = await res.json()
@@ -145,21 +154,21 @@ export async function GET(request: Request) {
       }
       const token = decryptSecret(inst.cloudflare_api_token_encrypted as string)
       const scriptName = scriptNameFor(inst.id)
-      const requests = await fetchTodayRequests(token, inst.cloudflare_account_id, scriptName)
+      const requests = await fetchMonthToDateRequests(token, inst.cloudflare_account_id, scriptName)
 
       if (requests === null) {
         resultados.push({ id: inst.id, status: 'consulta_falhou' })
         continue
       }
 
-      if (requests / DAILY_REQUEST_LIMIT >= WARNING_THRESHOLD) {
+      if (requests / MONTHLY_REQUEST_LIMIT >= WARNING_THRESHOLD) {
         await notifyCloudflareUsageWarning({
           userId: inst.user_id,
           installationNome: inst.nome,
           metricLabel: 'requisições',
           metricKey: 'requests',
           count: requests,
-          limit: DAILY_REQUEST_LIMIT,
+          limit: MONTHLY_REQUEST_LIMIT,
         })
         resultados.push({ id: inst.id, status: 'aviso_enviado', requests })
       } else {
@@ -187,13 +196,13 @@ export async function GET(request: Request) {
   for (const [accountId, insts] of contasPorId) {
     try {
       const token = decryptSecret(insts[0]!.cloudflare_api_token_encrypted as string)
-      const ops = await fetchTodayKvOperations(token, accountId)
+      const ops = await fetchMonthToDateKvOperations(token, accountId)
       if (!ops) {
         resultadosKv.push({ accountId, status: 'consulta_falhou' })
         continue
       }
 
-      for (const [actionType, limit] of Object.entries(KV_DAILY_LIMITS)) {
+      for (const [actionType, limit] of Object.entries(KV_MONTHLY_LIMITS)) {
         const count = ops[actionType] ?? 0
         if (count / limit < WARNING_THRESHOLD) {
           resultadosKv.push({ accountId, actionType, status: 'ok', count })
