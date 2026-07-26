@@ -8,6 +8,7 @@ type RecentEvent = {
   event_name: string
   source: string
   session_hit: boolean | null
+  capi_send_ok: boolean | null
   received_at: string
   ip: string | null
   fbp: string | null
@@ -184,6 +185,11 @@ function EventRow({ e }: { e: RecentEvent }) {
           {isMonitorOnly && (
             <span className="rounded-full bg-white/5 px-1.5 py-0.5 text-[9px] font-normal normal-case text-slate-500" title="Estimativa por clique no link de checkout — não é o InitiateCheckout de verdade da Meta, que continua vindo do pixel nativo da Hotmart">
               detectado, não enviado à Meta
+            </span>
+          )}
+          {e.source === 'capi' && e.capi_send_ok === false && (
+            <span className="rounded-full bg-red-500/10 px-1.5 py-0.5 text-[9px] font-normal normal-case text-red-400" title="A Meta recusou esse envio (token inválido, erro da API, etc.) — apesar de aparecer aqui, esse evento NÃO chegou lá">
+              ❌ falhou envio à Meta
             </span>
           )}
         </span>

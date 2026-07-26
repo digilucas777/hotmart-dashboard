@@ -14,6 +14,8 @@ type IngestBody = {
   secret?: string
   event_name?: string
   source?: 'pixel' | 'capi'
+  event_id?: string | null
+  capi_send_ok?: boolean | null
   fbp?: string | null
   fbc?: string | null
   ip?: string | null
@@ -57,10 +59,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const { error } = await admin.from('track_events').insert({
+  const row = {
     installation_id: body.installation_id,
     event_name: body.event_name,
     source: body.source,
+    event_id: body.event_id ?? null,
+    capi_send_ok: body.capi_send_ok ?? null,
     fbp: body.fbp ?? null,
     fbc: body.fbc ?? null,
     ip: body.ip ?? null,
@@ -79,7 +83,18 @@ export async function POST(request: Request) {
     utm_term: body.utm_term ?? null,
     src: body.src ?? null,
     raw_payload: body.raw_payload ?? null,
-  })
+  }
+
+  // Com event_id, faz upsert (dedup por installation_id+event_id) em vez de
+  // inserir sempre — a Hotmart pode reenviar o mesmo webhook de compra (ex:
+  // depois de um 5xx nosso), e sem isso cada reenvio viraria uma 2ª linha de
+  // Purchase, inflando a contagem do próprio painel mesmo a Meta já tendo
+  // deduplicado pelo mesmo event_id do lado dela. Upsert (não "ignora
+  // duplicado") também deixa capi_send_ok corrigido se um reenvio conseguir
+  // o que a 1ª tentativa não conseguiu.
+  const { error } = body.event_id
+    ? await admin.from('track_events').upsert(row, { onConflict: 'installation_id,event_id' })
+    : await admin.from('track_events').insert(row)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })

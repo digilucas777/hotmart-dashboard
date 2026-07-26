@@ -860,3 +860,179 @@ test('webhook da Hotmart manda pra Meta normalmente quando REQUIRE_TRACKER_SRC n
     globalThis.fetch = originalFetch
   }
 })
+
+test('sendToMeta tenta de novo quando a Meta responde erro 5xx (instabilidade passageira) e não desiste na 1ª falha', async () => {
+  const originalFetch = globalThis.fetch
+  let attempts = 0
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('graph.facebook.com')) {
+      attempts += 1
+      if (attempts < 2) return new Response('erro temporário', { status: 503 })
+      return new Response('{}', { status: 200 })
+    }
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest()
+    const ctx = makeCtx()
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: { buyer: { name: 'Retry Ok', email: 'retry@exemplo.com' }, purchase: { transaction: 'HP-RETRY-OK', price: { value: 97, currency_value: 'BRL' } } },
+      }),
+    })
+    await worker.fetch(req, env, ctx)
+    await Promise.all(ctx._tasks)
+    assert.equal(attempts, 2, 'esperava 2 tentativas antes de aceitar sucesso')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart marca capi_send_ok:false no ingest quando a Meta rejeita definitivamente (ex: token inválido) — hoje isso ficava invisível, sempre marcado como enviado', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    if (String(url).includes('graph.facebook.com')) return new Response('token inválido', { status: 400 })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest()
+    const ctx = makeCtx()
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: { buyer: { name: 'Falha Meta', email: 'falha@exemplo.com' }, purchase: { transaction: 'HP-FALHA', price: { value: 97, currency_value: 'BRL' } } },
+      }),
+    })
+    await worker.fetch(req, env, ctx)
+    await Promise.all(ctx._tasks)
+
+    const metaCalls = calls.filter(c => c.url.includes('graph.facebook.com'))
+    assert.equal(metaCalls.length, 1, 'erro 4xx não deveria gerar retry (não adianta tentar de novo com o mesmo token inválido)')
+
+    const ingestCall = calls.find(c => c.url === env.INGEST_URL)
+    const ingestBody = JSON.parse(ingestCall.init.body)
+    assert.equal(ingestBody.capi_send_ok, false)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart marca capi_send_ok:true no ingest quando a Meta aceita, e manda event_id estável (purchase:<transaction>) pra evitar duplicar no nosso próprio painel se a Hotmart reenviar o webhook', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest()
+    const ctx = makeCtx()
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: { buyer: { name: 'Sucesso', email: 'sucesso@exemplo.com' }, purchase: { transaction: 'HP-SUCESSO', price: { value: 97, currency_value: 'BRL' } } },
+      }),
+    })
+    await worker.fetch(req, env, ctx)
+    await Promise.all(ctx._tasks)
+
+    const ingestCall = calls.find(c => c.url === env.INGEST_URL)
+    const ingestBody = JSON.parse(ingestCall.init.body)
+    assert.equal(ingestBody.capi_send_ok, true)
+    assert.equal(ingestBody.event_id, 'purchase:HP-SUCESSO')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart não marca capi_send_ok (fica null/ausente) quando a venda nem foi enviada por causa do REQUIRE_TRACKER_SRC — capi_send_ok só faz sentido pra quem foi de fato tentado', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest({ REQUIRE_TRACKER_SRC: 'true' })
+    const ctx = makeCtx()
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'Outro Pixel', email: 'outro@exemplo.com' },
+          purchase: { transaction: 'HP-OUTRO-PIXEL', price: { value: 97, currency_value: 'BRL' }, origin: { src: 'outro-pixel-qualquer' } },
+        },
+      }),
+    })
+    await worker.fetch(req, env, ctx)
+    await Promise.all(ctx._tasks)
+
+    assert.equal(calls.filter(c => c.url.includes('graph.facebook.com')).length, 0)
+    const ingestCall = calls.find(c => c.url === env.INGEST_URL)
+    const ingestBody = JSON.parse(ingestCall.init.body)
+    assert.equal(ingestBody.capi_send_ok, null)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('POST /collect manda event_id e capi_send_ok:true pro ingest quando a Meta aceita o PageView', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest()
+    const ctx = makeCtx()
+    const req = new Request('https://sinal.teste.com/collect', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: 'PageView', session_id: 'sess-evtid', event_id: 'evt-abc-123' }),
+    })
+    await worker.fetch(req, env, ctx)
+    await Promise.all(ctx._tasks)
+
+    const ingestCall = calls.find(c => c.url === env.INGEST_URL)
+    const ingestBody = JSON.parse(ingestCall.init.body)
+    assert.equal(ingestBody.event_id, 'evt-abc-123')
+    assert.equal(ingestBody.capi_send_ok, true)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('POST /collect marca capi_send_ok:false quando a Meta rejeita o PageView (hoje ficava marcado como "capi" mesmo falhando)', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    if (String(url).includes('graph.facebook.com')) return new Response('erro', { status: 400 })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest()
+    const ctx = makeCtx()
+    const req = new Request('https://sinal.teste.com/collect', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: 'PageView', session_id: 'sess-falha-pv' }),
+    })
+    await worker.fetch(req, env, ctx)
+    await Promise.all(ctx._tasks)
+
+    const ingestCall = calls.find(c => c.url === env.INGEST_URL)
+    const ingestBody = JSON.parse(ingestCall.init.body)
+    assert.equal(ingestBody.capi_send_ok, false)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})

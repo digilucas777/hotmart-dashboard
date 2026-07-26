@@ -56,7 +56,7 @@ export async function GET(request: Request) {
   // devolve limit+1 linhas quando existem.
   const { data: events, error } = await supabase
     .from('track_events')
-    .select('event_name, source, session_hit, received_at, ip, fbp, fbc, session_id, geo_city, geo_region, geo_country, url, utm_source, utm_medium, utm_campaign, utm_content, utm_term, src')
+    .select('event_name, source, session_hit, capi_send_ok, received_at, ip, fbp, fbc, session_id, geo_city, geo_region, geo_country, url, utm_source, utm_medium, utm_campaign, utm_content, utm_term, src')
     .eq('installation_id', installationId)
     .eq('event_name', eventName)
     .gte('received_at', start)

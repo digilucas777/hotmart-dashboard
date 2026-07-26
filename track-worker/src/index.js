@@ -72,6 +72,17 @@ function extractGeo(request) {
   }
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+// Até 3 tentativas — mas só quando faz sentido tentar de novo. Erro 4xx (token
+// revogado, payload rejeitado) vai falhar do mesmo jeito numa 2ª tentativa, então
+// desiste na hora; só erro de rede ou 5xx (instabilidade passageira da própria
+// Meta) justifica insistir. Isso existe porque uma venda que falha aqui e a
+// gente só loga (sem re-tentar) é uma venda perdida pra sempre do lado da Meta,
+// sem nenhum aviso — o dado real de compra na Hotmart não muda, só o que
+// manda/não manda pra Meta.
 async function sendToMeta({ pixelId, capiToken, testEventCode, eventName, eventId, eventTime, eventSourceUrl, userData, customData }) {
   const payload = {
     data: [{
@@ -86,16 +97,31 @@ async function sendToMeta({ pixelId, capiToken, testEventCode, eventName, eventI
   }
   if (testEventCode) payload.test_event_code = testEventCode
 
-  const res = await fetch(`https://graph.facebook.com/v20.0/${pixelId}/events?access_token=${encodeURIComponent(capiToken)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    console.error(`[Rastreamento] pixel ${pixelId} evento ${eventName} falhou: ${res.status} ${text}`)
+  const url = `https://graph.facebook.com/v20.0/${pixelId}/events?access_token=${encodeURIComponent(capiToken)}`
+  const maxAttempts = 3
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (res.ok) return true
+      const text = await res.text()
+      const isRetryable = res.status >= 500
+      if (!isRetryable || attempt === maxAttempts) {
+        console.error(`[Rastreamento] pixel ${pixelId} evento ${eventName} falhou (tentativa ${attempt}/${maxAttempts}): ${res.status} ${text}`)
+        return false
+      }
+    } catch (err) {
+      if (attempt === maxAttempts) {
+        console.error(`[Rastreamento] pixel ${pixelId} evento ${eventName} falhou de rede (tentativa ${attempt}/${maxAttempts}):`, err)
+        return false
+      }
+    }
+    await sleep(200 * attempt)
   }
-  return res.ok
+  return false
 }
 
 // Manda um resumo do evento pro nosso dashboard (tela de diagnóstico/Etapa 4).
@@ -179,6 +205,7 @@ async function handleCollect(request, env, ctx) {
     userData,
     customData: body.params || {},
   })))
+  const capiSendOk = results.length > 0 && results.every(Boolean)
 
   if (env.DIAGNOSTICO_ATIVO === 'true') {
     console.log('[Rastreamento] /collect', { event: body.event_name, session_id: body.session_id, resultados: results })
@@ -188,6 +215,8 @@ async function handleCollect(request, env, ctx) {
   sendToIngest(ctx, env, {
     event_name: body.event_name,
     source: 'capi',
+    event_id: eventId,
+    capi_send_ok: capiSendOk,
     fbp: body.fbp || null,
     fbc: body.fbc || null,
     ip,
@@ -358,6 +387,7 @@ async function handleHotmartWebhook(request, env, ctx) {
 
   const eventId = `purchase:${purchase.transaction}`
   let results = []
+  let capiSendOk = null
   if (isTrackedSale) {
     results = await Promise.all(pixels.map(pixel => sendToMeta({
       pixelId: pixel.pixel_id,
@@ -378,6 +408,7 @@ async function handleHotmartWebhook(request, env, ctx) {
         content_type: 'product',
       },
     })))
+    capiSendOk = results.length > 0 && results.every(Boolean)
   }
 
   if (env.DIAGNOSTICO_ATIVO === 'true') {
@@ -393,6 +424,8 @@ async function handleHotmartWebhook(request, env, ctx) {
   sendToIngest(ctx, env, {
     event_name: 'Purchase',
     source: isTrackedSale ? 'capi' : 'pixel',
+    event_id: eventId,
+    capi_send_ok: capiSendOk,
     fbp: userData.fbp || null,
     fbc: userData.fbc || null,
     ip: userData.client_ip_address || null,
