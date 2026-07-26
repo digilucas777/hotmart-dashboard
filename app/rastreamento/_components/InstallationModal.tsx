@@ -145,11 +145,18 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
   const [deploying, setDeploying] = useState(false)
   const [deployError, setDeployError] = useState<string | null>(null)
   const [copiedScript, setCopiedScript] = useState(false)
+  const [copiedWebhook, setCopiedWebhook] = useState(false)
 
   async function handleCopyScript(snippet: string) {
     await navigator.clipboard.writeText(snippet)
     setCopiedScript(true)
     setTimeout(() => setCopiedScript(false), 2000)
+  }
+
+  async function handleCopyWebhookUrl(url: string) {
+    await navigator.clipboard.writeText(url)
+    setCopiedWebhook(true)
+    setTimeout(() => setCopiedWebhook(false), 2000)
   }
 
   useEffect(() => {
@@ -463,6 +470,29 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
         <section className="space-y-3">
           <SectionHeader number={4} title="Webhook de compra" />
 
+          {installation && (
+            <div className="rounded-xl p-3 ring-1 ring-white/10" style={inputStyle}>
+              <p className={labelClass}>URL do webhook (cole na Hotmart)</p>
+              {installation.webhook_url ? (
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 truncate text-xs text-cyan-300">{installation.webhook_url}</code>
+                  <button
+                    onClick={() => handleCopyWebhookUrl(installation.webhook_url as string)}
+                    className="shrink-0 rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+                    title={copiedWebhook ? 'Copiado!' : 'Copiar'}
+                  >
+                    {copiedWebhook ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                  </button>
+                </div>
+              ) : (
+                <code className="block truncate text-xs text-slate-500">defina o subdomínio do worker (seção 2) pra gerar a URL</code>
+              )}
+            </div>
+          )}
+          {!installation && (
+            <p className="text-[11px] text-slate-600">A URL e o secret do webhook são gerados depois de salvar pela primeira vez.</p>
+          )}
+
           <div className="flex gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-200">
             <span>⚠️</span>
             <p>
@@ -521,16 +551,6 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
                 </select>
               </div>
             </div>
-          )}
-
-          {installation && (
-            <div className="rounded-xl p-3 ring-1 ring-white/10" style={inputStyle}>
-              <p className={labelClass}>URL do webhook</p>
-              <code className="block truncate text-xs text-cyan-300">{installation.webhook_url ?? 'defina o subdomínio do worker pra gerar a URL'}</code>
-            </div>
-          )}
-          {!installation && (
-            <p className="text-[11px] text-slate-600">A URL e o secret do webhook são gerados depois de salvar pela primeira vez.</p>
           )}
         </section>
       </div>

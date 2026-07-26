@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Target, Plus, Pencil, Trash2, HelpCircle, AlertTriangle, Copy, Check, BarChart3, ChevronDown, ChevronRight } from 'lucide-react'
+import { Target, Plus, Pencil, Trash2, HelpCircle, AlertTriangle, Copy, Check, BarChart3, ChevronDown, ChevronRight, ScanSearch } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -22,6 +22,8 @@ export default function RastreamentoPage() {
   const [confirmDelete, setConfirmDelete] = useState<TrackInstallation | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [copiedScriptId, setCopiedScriptId] = useState<string | null>(null)
+  const [scriptCheck, setScriptCheck] = useState<Record<string, { loading: boolean; error?: string; results?: { domain: string; found: boolean; error?: string }[] }>>({})
   const [savedPopup, setSavedPopup] = useState<TrackInstallation | null>(null)
   const [deployToast, setDeployToast] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -96,6 +98,28 @@ export default function RastreamentoPage() {
     await navigator.clipboard.writeText(installation.webhook_url)
     setCopiedId(installation.id)
     setTimeout(() => setCopiedId(prev => (prev === installation.id ? null : prev)), 2000)
+  }
+
+  async function handleCopySnippet(installation: TrackInstallation) {
+    if (!installation.worker_subdomain) return
+    await navigator.clipboard.writeText(`<script src="https://${installation.worker_subdomain}/t.js"></script>`)
+    setCopiedScriptId(installation.id)
+    setTimeout(() => setCopiedScriptId(prev => (prev === installation.id ? null : prev)), 2000)
+  }
+
+  async function handleCheckScript(installation: TrackInstallation) {
+    setScriptCheck(prev => ({ ...prev, [installation.id]: { loading: true } }))
+    const res = await fetch('/api/track/installations/check-script', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: installation.id }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      setScriptCheck(prev => ({ ...prev, [installation.id]: { loading: false, error: json?.error || 'Não foi possível verificar agora.' } }))
+      return
+    }
+    setScriptCheck(prev => ({ ...prev, [installation.id]: { loading: false, results: json.results } }))
   }
 
   return (
@@ -199,6 +223,48 @@ export default function RastreamentoPage() {
                     </button>
                   </div>
                 </div>
+
+                {inst.status === 'deployed' && inst.worker_subdomain && (
+                  <div className="mt-3 space-y-2 rounded-lg p-2.5 ring-1 ring-white/10" style={{ background: '#111120' }}>
+                    <p className="text-[10px] font-medium text-slate-500">Script pra colar na &lt;head&gt; da página</p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 truncate text-[11px] text-cyan-300">
+                        {`<script src="https://${inst.worker_subdomain}/t.js"></script>`}
+                      </code>
+                      <button
+                        onClick={() => handleCopySnippet(inst)}
+                        className="shrink-0 rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+                        title={copiedScriptId === inst.id ? 'Copiado!' : 'Copiar'}
+                      >
+                        {copiedScriptId === inst.id ? <Check size={13} className="text-green-400" /> : <Copy size={13} />}
+                      </button>
+                    </div>
+                    <div className="flex gap-1.5 rounded-lg border border-blue-500/20 bg-blue-500/10 p-2 text-[10px] text-blue-200">
+                      <span>ℹ️</span>
+                      <p>Se já tem o pixel nativo da Meta na página, pode deixar — esse script carrega ele sozinho e funde tudo em 1 evento (nunca conta em dobro).</p>
+                    </div>
+                    <button
+                      onClick={() => void handleCheckScript(inst)}
+                      disabled={scriptCheck[inst.id]?.loading}
+                      className="flex items-center gap-1.5 text-[11px] text-indigo-400 hover:text-indigo-300 disabled:opacity-60"
+                    >
+                      {scriptCheck[inst.id]?.loading ? <Spinner size={11} /> : <ScanSearch size={12} />}
+                      Verificar se o script está instalado
+                    </button>
+                    {scriptCheck[inst.id]?.error && (
+                      <p className="text-[11px] text-red-300">{scriptCheck[inst.id]?.error}</p>
+                    )}
+                    {scriptCheck[inst.id]?.results && (
+                      <div className="space-y-1 border-t border-white/5 pt-2">
+                        {scriptCheck[inst.id]!.results!.map(r => (
+                          <p key={r.domain} className={`text-[11px] ${r.found ? 'text-green-400' : 'text-amber-400'}`}>
+                            {r.found ? '✅' : '⚠️'} {r.domain} — {r.found ? 'script encontrado' : r.error ? r.error : 'script não encontrado na página inicial'}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {inst.status === 'deployed' && (
                   <>
