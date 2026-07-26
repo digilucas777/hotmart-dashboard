@@ -349,17 +349,19 @@ export async function notifyCloakerRecovered(params: { userId: string; siteName:
 export async function notifyCloudflareUsageWarning(params: {
   userId: string
   installationNome: string
-  requests: number
+  metricLabel: string
+  metricKey: string
+  count: number
   limit: number
 }) {
   try {
     if (!ensureVapidConfigured()) return
-    const percent = Math.round((params.requests / params.limit) * 100)
+    const percent = Math.round((params.count / params.limit) * 100)
     await sendPushToUser(params.userId, {
       title: `⚠️ Rastreamento "${params.installationNome}" perto do limite`,
-      body: `${params.requests.toLocaleString('pt-BR')} de ${params.limit.toLocaleString('pt-BR')} requisições hoje (${percent}%) no plano gratuito da Cloudflare.`,
+      body: `${params.count.toLocaleString('pt-BR')} de ${params.limit.toLocaleString('pt-BR')} ${params.metricLabel} hoje (${percent}%) no plano gratuito da Cloudflare.`,
       url: '/rastreamento',
-      tag: `track-usage-${params.installationNome}`,
+      tag: `track-usage-${params.installationNome}-${params.metricKey}`,
     })
   } catch (err) {
     console.error('[PUSH] notifyCloudflareUsageWarning falhou:', err)
