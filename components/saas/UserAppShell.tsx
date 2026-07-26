@@ -21,6 +21,7 @@ import {
   Settings,
   ShieldCheck,
   ShoppingCart,
+  Target,
   Trash2,
   UserRound,
   X,
@@ -29,11 +30,15 @@ import { supabase } from '@/lib/supabase'
 import type { Projeto } from '@/lib/types'
 import { DashSpeedLogo } from './DashSpeedLogo'
 
+// Mesma lista (e mesma ordem) do menu principal em components/layout/Sidebar.tsx
+// — são dois componentes de sidebar separados, então um item novo lá precisa
+// ser replicado aqui manualmente.
 const navItems = [
   { label: 'Dashboards', icon: LayoutGrid, href: '/dashboard' },
   { label: 'Vendas', icon: ShoppingCart, href: '/vendas' },
   { label: 'Relatórios', icon: FileText, href: '/relatorios' },
   { label: 'Sites', icon: Radio, href: '/sites' },
+  { label: 'Rastreamento', icon: Target, href: '/rastreamento' },
   { label: 'Integrações', icon: Plug, href: '/integracoes' },
   { label: 'Configurações', icon: Settings, href: '/configuracoes' },
 ]
