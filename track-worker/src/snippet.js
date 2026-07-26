@@ -175,15 +175,32 @@ function buildCheckoutDecoratorCode(checkoutDomains) {
     }
     decorateAll();
     new MutationObserver(decorateAll).observe(document.documentElement, { childList: true, subtree: true });
+    // Players com Shadow DOM (ex: VTURB) escondem o <a> de comprar de dentro
+    // de um componente próprio — nem o querySelectorAll nem o MutationObserver
+    // acima enxergam esse link (Shadow DOM não aparece em buscas do document
+    // "de fora"), então o sck/-tracker nunca era colado nele e a compra sempre
+    // chegava sem sessão cruzada (sem fbp/fbc). e.composedPath() atravessa
+    // Shadow DOM (mesmo "closed") e devolve o caminho real do clique — por
+    // isso decoramos de novo aqui, em cima da hora, como rede de segurança
+    // (decorate() já ignora quem já foi decorado, então repetir é barato).
+    function findLinkInPath(e){
+      var path = typeof e.composedPath === 'function' ? e.composedPath() : [e.target];
+      for (var i = 0; i < path.length; i++) {
+        var node = path[i];
+        if (node && node.tagName === 'A' && node.href) return node;
+      }
+      return null;
+    }
     // Clique num link de checkout é a melhor aproximação que temos de
     // "iniciou o checkout" nesta página (a Hotmart processa o InitiateCheckout
     // de verdade do lado dela, fora do nosso alcance) — manda só pro NOSSO
     // painel (MONITOR_URL, nunca pra Meta) pra dar uma métrica comparável.
     var icSent = false;
     document.addEventListener('click', function(e){
-      if (icSent) return;
-      var a = e.target.closest('a[href]');
+      var a = findLinkInPath(e);
       if (!a || !isCheckoutLink(a.href)) return;
+      decorate(a);
+      if (icSent) return;
       icSent = true;
       fetch(MONITOR_URL, {
         method: 'POST',

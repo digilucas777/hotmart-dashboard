@@ -99,6 +99,13 @@ test('buildSnippet com domínios de checkout manda InitiateCheckout pro MONITOR_
   assert.match(code, /event_name: 'InitiateCheckout'/)
 })
 
+test('buildSnippet acha o link de checkout via composedPath no clique, mesmo se o botão estiver dentro de Shadow DOM (ex: player VTURB) — closest()/querySelectorAll não enxergam esses casos', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [], checkoutDomains: ['pay.hotmart.com'] })
+  assert.match(code, /function findLinkInPath/)
+  assert.match(code, /e\.composedPath/)
+  assert.doesNotMatch(code, /e\.target\.closest\('a\[href\]'\)/)
+})
+
 test('buildSnippet captura "src" da URL (exibição no painel, não usado pra cruzar sessão)', () => {
   const code = buildSnippet({ sessionTtlDays: 7, triggers: [] })
   assert.match(code, /function getOrCreateSrc\(\)/)
