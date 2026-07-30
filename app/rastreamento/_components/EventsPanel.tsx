@@ -364,6 +364,19 @@ export function EventsPanel({ installationId }: { installationId: string }) {
     })
   }
 
+  // Botão "Atualizar": antes só recarregava os contadores do topo — agora
+  // também refaz toda seção já aberta (mantendo o tanto que já tava
+  // carregado), num clique só, em vez de precisar fechar/reabrir a setinha
+  // pra ver dado novo ali.
+  async function handleManualRefresh() {
+    await Promise.all([
+      load(true),
+      ...EVENT_TYPES
+        .filter(ev => sections[ev].open)
+        .map(ev => fetchSection(ev, selectedDate, 0, false, sections[ev].events?.length || PAGE_SIZE)),
+    ])
+  }
+
   useEffect(() => {
     isMountedRef.current = true
     void load(true)
@@ -403,7 +416,7 @@ export function EventsPanel({ installationId }: { installationId: string }) {
           </span>
           Ao vivo — hoje
         </p>
-        <button onClick={() => void load(true)} className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300">
+        <button onClick={() => void handleManualRefresh()} className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300">
           <RefreshCw size={11} /> Atualizar
         </button>
       </div>

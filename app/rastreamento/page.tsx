@@ -24,6 +24,7 @@ export default function RastreamentoPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [copiedScriptId, setCopiedScriptId] = useState<string | null>(null)
   const [scriptCheck, setScriptCheck] = useState<Record<string, { loading: boolean; error?: string; results?: { domain: string; found: boolean; error?: string }[] }>>({})
+  const [scriptCheckUrl, setScriptCheckUrl] = useState<Record<string, string>>({})
   const [savedPopup, setSavedPopup] = useState<TrackInstallation | null>(null)
   const [deployToast, setDeployToast] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -109,10 +110,11 @@ export default function RastreamentoPage() {
 
   async function handleCheckScript(installation: TrackInstallation) {
     setScriptCheck(prev => ({ ...prev, [installation.id]: { loading: true } }))
+    const url = (scriptCheckUrl[installation.id] ?? '').trim()
     const res = await fetch('/api/track/installations/check-script', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: installation.id }),
+      body: JSON.stringify({ id: installation.id, url: url || undefined }),
     })
     const json = await res.json().catch(() => ({}))
     if (!res.ok) {
@@ -243,14 +245,26 @@ export default function RastreamentoPage() {
                       <span>ℹ️</span>
                       <p>Se já tem o pixel nativo da Meta na página, pode deixar — esse script carrega ele sozinho e funde tudo em 1 evento (nunca conta em dobro).</p>
                     </div>
-                    <button
-                      onClick={() => void handleCheckScript(inst)}
-                      disabled={scriptCheck[inst.id]?.loading}
-                      className="flex items-center gap-1.5 text-[11px] text-indigo-400 hover:text-indigo-300 disabled:opacity-60"
-                    >
-                      {scriptCheck[inst.id]?.loading ? <Spinner size={11} /> : <ScanSearch size={12} />}
-                      Verificar se o script está instalado
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={scriptCheckUrl[inst.id] ?? ''}
+                        onChange={e => setScriptCheckUrl(prev => ({ ...prev, [inst.id]: e.target.value }))}
+                        placeholder="Opcional: cole a URL de uma página específica pra checar só ela"
+                        className="min-w-0 flex-1 rounded-md border border-white/10 bg-black/20 px-2 py-1 text-[11px] text-slate-300 placeholder-slate-600 outline-none focus:border-indigo-500/50"
+                      />
+                      <button
+                        onClick={() => void handleCheckScript(inst)}
+                        disabled={scriptCheck[inst.id]?.loading}
+                        className="flex shrink-0 items-center gap-1.5 text-[11px] text-indigo-400 hover:text-indigo-300 disabled:opacity-60"
+                      >
+                        {scriptCheck[inst.id]?.loading ? <Spinner size={11} /> : <ScanSearch size={12} />}
+                        Verificar
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-slate-600">
+                      Sem URL, verifica a página inicial de cada domínio cadastrado. Com uma URL colada ali em cima, verifica só ela.
+                    </p>
                     {scriptCheck[inst.id]?.error && (
                       <p className="text-[11px] text-red-300">{scriptCheck[inst.id]?.error}</p>
                     )}
