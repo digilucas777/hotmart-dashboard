@@ -283,6 +283,7 @@ export function EventsPanel({ installationId }: { installationId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState<string>(() => toLocalDateKey(new Date()))
   const [sections, setSections] = useState<Record<EventName, SectionState>>(makeInitialSections)
+  const [manualRefreshing, setManualRefreshing] = useState(false)
   const isMountedRef = useRef(true)
   const selectedDateRef = useRef(selectedDate)
   const sectionsRef = useRef(sections)
@@ -369,12 +370,17 @@ export function EventsPanel({ installationId }: { installationId: string }) {
   // carregado), num clique só, em vez de precisar fechar/reabrir a setinha
   // pra ver dado novo ali.
   async function handleManualRefresh() {
-    await Promise.all([
-      load(true),
-      ...EVENT_TYPES
-        .filter(ev => sections[ev].open)
-        .map(ev => fetchSection(ev, selectedDate, 0, false, sections[ev].events?.length || PAGE_SIZE)),
-    ])
+    setManualRefreshing(true)
+    try {
+      await Promise.all([
+        load(true),
+        ...EVENT_TYPES
+          .filter(ev => sections[ev].open)
+          .map(ev => fetchSection(ev, selectedDate, 0, false, sections[ev].events?.length || PAGE_SIZE)),
+      ])
+    } finally {
+      setManualRefreshing(false)
+    }
   }
 
   useEffect(() => {
@@ -416,8 +422,14 @@ export function EventsPanel({ installationId }: { installationId: string }) {
           </span>
           Ao vivo — hoje
         </p>
-        <button onClick={() => void handleManualRefresh()} className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300">
-          <RefreshCw size={11} /> Atualizar
+        <button
+          onClick={() => void handleManualRefresh()}
+          disabled={manualRefreshing}
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-indigo-300 ring-1 ring-indigo-500/30 transition-colors hover:bg-indigo-500/15 hover:text-indigo-100 disabled:opacity-60"
+          style={{ background: 'rgba(99,102,241,0.1)' }}
+        >
+          {manualRefreshing ? <Spinner size={13} /> : <RefreshCw size={13} />}
+          {manualRefreshing ? 'Atualizando...' : 'Atualizar'}
         </button>
       </div>
 
