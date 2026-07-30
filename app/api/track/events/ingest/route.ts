@@ -85,17 +85,34 @@ export async function POST(request: Request) {
     raw_payload: body.raw_payload ?? null,
   }
 
-  // Com event_id, faz upsert (dedup por installation_id+event_id) em vez de
-  // inserir sempre — a Hotmart pode reenviar o mesmo webhook de compra (ex:
-  // depois de um 5xx nosso), e sem isso cada reenvio viraria uma 2ª linha de
-  // Purchase, inflando a contagem do próprio painel mesmo a Meta já tendo
-  // deduplicado pelo mesmo event_id do lado dela. Upsert (não "ignora
-  // duplicado") também deixa capi_send_ok corrigido se um reenvio conseguir
-  // o que a 1ª tentativa não conseguiu.
-  const { error } = body.event_id
-    ? await admin.from('track_events').upsert(row, { onConflict: 'installation_id,event_id' })
-    : await admin.from('track_events').insert(row)
+  // Dedup por installation_id+event_id: a Hotmart pode reenviar o mesmo
+  // webhook de compra (ex: depois de um 5xx nosso), e sem isso cada reenvio
+  // viraria uma 2ª linha de Purchase, inflando a contagem do próprio painel
+  // mesmo a Meta já tendo deduplicado pelo mesmo event_id do lado dela.
+  //
+  // NÃO usar .upsert(..., { onConflict }) aqui: o índice único de
+  // installation_id+event_id é PARCIAL (`where event_id is not null`, pra
+  // não brigar com os eventos antigos sem event_id) — Postgres rejeita
+  // ON CONFLICT contra um índice parcial que o comando não referencia com a
+  // mesma condição WHERE, e o upsert do Supabase não permite passar isso.
+  // Isso já causou um bug real: todo insert com event_id (PageView/Purchase)
+  // vinha falhando com "no unique or exclusion constraint matching" — 500
+  // silencioso (o Worker só loga isso com DIAGNOSTICO_ATIVO ligado), payload
+  // sumia sem deixar rastro nenhum no painel. Insert simples + fallback pra
+  // update só quando bate o unique (23505) evita esse problema de vez.
+  const insertResult = await admin.from('track_events').insert(row)
+  if (insertResult.error) {
+    if (body.event_id && insertResult.error.code === '23505') {
+      const { error: updateError } = await admin
+        .from('track_events')
+        .update(row)
+        .eq('installation_id', body.installation_id)
+        .eq('event_id', body.event_id)
+      if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
+    } else {
+      return NextResponse.json({ error: insertResult.error.message }, { status: 500 })
+    }
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
