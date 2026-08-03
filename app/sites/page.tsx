@@ -44,7 +44,7 @@ type MonitoredSite = {
   folders: MonitoredPageFolder[]
 }
 
-type ConfirmDelete = { kind: 'site' | 'page'; id: string; label: string }
+type ConfirmDelete = { kind: 'site' | 'page' | 'folder'; id: string; label: string }
 
 // Ação que muda configuração (ativar/desativar cloacker, pausar/retomar) —
 // sempre passa por um card de confirmação centralizado antes de executar.
@@ -247,14 +247,31 @@ export default function SitesPage() {
     })
   }
 
-  // Cada pasta (e a seção "sem pasta") abre/fecha independente, tipo um
-  // explorador de arquivos — só mostra as páginas dela quando clicada.
+  // Cada pasta abre/fecha independente, tipo um explorador de arquivos — só
+  // mostra as páginas dela quando clicada. "Sem pasta" é o oposto: já vem
+  // aberta de cara (é onde toda página nova cai antes de ser organizada),
+  // só fecha se o usuário clicar pra fechar — por isso rastreamos ela numa
+  // lista separada de "fechadas manualmente" em vez de "abertas".
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+  const [manuallyClosedSemPasta, setManuallyClosedSemPasta] = useState<Set<string>>(new Set())
   function folderKey(siteId: string, folderId: string | null) {
     return `${siteId}:${folderId ?? 'sem-pasta'}`
   }
+  function isFolderGroupOpen(siteId: string, folderId: string | null) {
+    const key = folderKey(siteId, folderId)
+    return folderId === null ? !manuallyClosedSemPasta.has(key) : expandedFolders.has(key)
+  }
   function toggleFolderExpanded(siteId: string, folderId: string | null) {
     const key = folderKey(siteId, folderId)
+    if (folderId === null) {
+      setManuallyClosedSemPasta(prev => {
+        const next = new Set(prev)
+        if (next.has(key)) next.delete(key)
+        else next.add(key)
+        return next
+      })
+      return
+    }
     setExpandedFolders(prev => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
@@ -386,6 +403,10 @@ export default function SitesPage() {
     setDeleting(true)
     if (confirmDelete.kind === 'site') {
       await supabase.from('monitored_sites').delete().eq('id', confirmDelete.id)
+    } else if (confirmDelete.kind === 'folder') {
+      // Não precisa mover as páginas manualmente: pasta_id tem ON DELETE
+      // SET NULL (migration 052), então elas caem sozinhas em "Sem pasta".
+      await supabase.from('monitored_page_folders').delete().eq('id', confirmDelete.id)
     } else {
       await supabase.from('monitored_pages').delete().eq('id', confirmDelete.id)
     }
@@ -723,24 +744,35 @@ export default function SitesPage() {
                   <div className="space-y-3">
                     {groupPagesByFolder(site).map(group => {
                       const key = folderKey(site.id, group.folder?.id ?? null)
-                      const isFolderOpen = expandedFolders.has(key)
+                      const isFolderOpen = isFolderGroupOpen(site.id, group.folder?.id ?? null)
                       return (
                       <div
                         key={key}
                         onDragOver={e => { if (pageDrag) e.preventDefault() }}
                         onDrop={e => { e.preventDefault(); handlePageDrop(site, group, group.pages.length) }}
                       >
-                        <button
-                          onClick={() => toggleFolderExpanded(site.id, group.folder?.id ?? null)}
-                          className="mb-1 flex w-full items-center gap-1.5 px-1 text-left hover:text-slate-400"
-                        >
-                          {isFolderOpen ? <ChevronDown size={12} className="shrink-0 text-slate-600" /> : <ChevronRight size={12} className="shrink-0 text-slate-600" />}
-                          {group.folder ? <Folder size={11} className="shrink-0 text-slate-600" /> : null}
-                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">
-                            {group.folder ? group.folder.nome : 'Sem pasta'}
-                          </span>
-                          <span className="text-[10px] text-slate-700">({group.pages.length})</span>
-                        </button>
+                        <div className="mb-1 flex items-center gap-1.5 px-1">
+                          <button
+                            onClick={() => toggleFolderExpanded(site.id, group.folder?.id ?? null)}
+                            className="flex flex-1 items-center gap-1.5 text-left hover:text-slate-400"
+                          >
+                            {isFolderOpen ? <ChevronDown size={12} className="shrink-0 text-slate-600" /> : <ChevronRight size={12} className="shrink-0 text-slate-600" />}
+                            {group.folder ? <Folder size={11} className="shrink-0 text-slate-600" /> : null}
+                            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                              {group.folder ? group.folder.nome : 'Sem pasta'}
+                            </span>
+                            <span className="text-[10px] text-slate-700">({group.pages.length})</span>
+                          </button>
+                          {group.folder && (
+                            <button
+                              onClick={() => setConfirmDelete({ kind: 'folder', id: group.folder!.id, label: group.folder!.nome })}
+                              className="shrink-0 rounded-lg p-1 text-slate-600 transition-colors hover:bg-red-500/15 hover:text-red-400"
+                              title="Excluir pasta"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          )}
+                        </div>
                         {isFolderOpen && (
                         <div className="space-y-1.5">
                           {group.pages.length === 0 && (
@@ -1111,6 +1143,11 @@ export default function SitesPage() {
                 <>
                   Tem certeza que quer excluir o site <span className="font-semibold">&quot;{confirmDelete.label}&quot;</span>?
                   Todas as páginas cadastradas nele também serão excluídas e a checagem automática vai parar imediatamente. Essa ação não pode ser desfeita.
+                </>
+              ) : confirmDelete?.kind === 'folder' ? (
+                <>
+                  Tem certeza que quer excluir a pasta <span className="font-semibold">&quot;{confirmDelete.label}&quot;</span>?
+                  As páginas dela <strong>não</strong> serão excluídas — só voltam pra &quot;Sem pasta&quot;. Essa ação não pode ser desfeita.
                 </>
               ) : (
                 <>
