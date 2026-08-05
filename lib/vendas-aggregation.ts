@@ -10,16 +10,28 @@ import { formatBRL, formatUSD, type WidgetComputedData } from './utils'
 // e pro anterior.
 export type SummaryRow = { status: string; moeda: string; cnt: number; total: number }
 
+// Até 2 tentativas: contas com volume alto (milhares de vendas/mês) fazem
+// essa agregação ocasionalmente estourar timeout/instabilidade passageira do
+// Postgres, e sem retry isso vira o erro "Não foi possível carregar os dados
+// de vendas" — a troca de período parece "travada no período antigo" porque
+// summaryCurrent/summaryPrevious nunca chegam a ser atualizados quando a
+// busca falha. Cancelamento intencional (troca de período/projeto no meio da
+// busca) não deve virar retry, só erro de verdade.
 export async function fetchVendasSummary(projetoId: string, from: Date, to: Date, signal?: AbortSignal): Promise<SummaryRow[]> {
-  let query = supabase.rpc('get_vendas_summary', {
-    p_projeto_id: projetoId,
-    p_from: from.toISOString(),
-    p_to: to.toISOString(),
-  })
-  if (signal) query = query.abortSignal(signal)
-  const { data, error } = await query
-  if (error) throw error
-  return (data ?? []) as SummaryRow[]
+  const maxAttempts = 2
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let query = supabase.rpc('get_vendas_summary', {
+      p_projeto_id: projetoId,
+      p_from: from.toISOString(),
+      p_to: to.toISOString(),
+    })
+    if (signal) query = query.abortSignal(signal)
+    const { data, error } = await query
+    if (!error) return (data ?? []) as SummaryRow[]
+    if (signal?.aborted || attempt === maxAttempts) throw error
+    await new Promise(resolve => setTimeout(resolve, 400))
+  }
+  throw new Error('fetchVendasSummary: esgotou tentativas')
 }
 
 function sumWhere(rows: SummaryRow[], pred: (r: SummaryRow) => boolean): { cnt: number; total: number } {

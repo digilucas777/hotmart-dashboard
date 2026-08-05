@@ -717,7 +717,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       // não vinculado" quando na verdade era um erro silencioso de carregamento.
       console.error('[fetchVendas] falha ao carregar vendas:', err)
       setErrorToast('Não foi possível carregar os dados de vendas. Tente atualizar novamente.')
-      setTimeout(() => setErrorToast(null), 8000)
       throw err
     } finally {
       // Só mexe no loading se esta ainda for a busca vigente — senão uma busca cancelada
@@ -903,7 +902,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       setTimeout(() => setSuccessToast(null), 5000)
     } catch {
       setErrorToast('Erro ao atualizar — tente novamente')
-      setTimeout(() => setErrorToast(null), 8000)
     } finally {
       setIsRefreshing(false)
     }
@@ -2247,12 +2245,18 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       )}
 
       {errorToast && (
-        <div className="fixed inset-x-4 top-1/2 z-[60] flex -translate-y-1/2 justify-center">
-          <div className="flex max-w-md items-start gap-3 rounded-2xl border border-red-400/40 bg-red-600 px-5 py-4 text-sm font-semibold text-white shadow-2xl shadow-red-900/40">
-            <AlertTriangle size={18} className="mt-0.5 shrink-0" />
-            <span>{errorToast}</span>
-            <button onClick={() => setErrorToast(null)} className="ml-1 shrink-0 opacity-80 hover:opacity-100">
-              <X size={16} />
+        // Fecha clicando em qualquer lugar (fora, em cima do próprio aviso, ou no
+        // X) — a caixa interna não para a propagação do clique de propósito, então
+        // ela também fecha ao ser clicada diretamente, além do fundo.
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4"
+          onClick={() => setErrorToast(null)}
+        >
+          <div className="flex max-w-md items-start gap-3 rounded-2xl border border-red-500/30 bg-[#2a1416]/95 px-5 py-4 text-sm font-medium text-red-100 shadow-2xl shadow-black/40 backdrop-blur-sm">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-400" />
+            <span className="flex-1">{errorToast}</span>
+            <button onClick={() => setErrorToast(null)} className="shrink-0 rounded-lg p-1.5 text-red-300/80 transition-colors hover:bg-white/10 hover:text-red-100">
+              <X size={20} />
             </button>
           </div>
         </div>
