@@ -61,6 +61,7 @@ function WidgetRendererBase({
   combinedVendas,
   period,
   exchangeRate,
+  exchangeRateIsFallback = false,
   custoTotal = 0,
   custoManualTotal = 0,
   custoUSD = 0,
@@ -85,6 +86,7 @@ function WidgetRendererBase({
   combinedVendas?: Venda[]
   period: Period
   exchangeRate: number
+  exchangeRateIsFallback?: boolean
   custoTotal?: number
   custoManualTotal?: number
   custoUSD?: number
@@ -159,6 +161,14 @@ function WidgetRendererBase({
       ? (computeWidgetDataFromSummary(summaryCurrent, config.data_source, exchangeRate, effectiveCusto, effectiveCustoUSD)
         ?? computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, effectiveCusto, effectiveCustoUSD, customRange))
       : computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, effectiveCusto, effectiveCustoUSD, customRange)
+
+  // "Taxa: R$X/USD" (widget total_converted) some sem aviso se essa taxa for o
+  // valor de emergência do /api/exchange-rate — sem isso, o mesmo período
+  // pode mostrar dois faturamentos diferentes (câmbio real numa carga, câmbio
+  // de emergência noutra) sem nenhum sinal de que o número não é confiável.
+  if (exchangeRateIsFallback && data.kind === 'metric' && config.data_source === 'total_converted' && data.subValue) {
+    data.subValue = `${data.subValue} ⚠️ cotação indisponível, valor aproximado`
+  }
 
   const isBRL = !isMetaWidget && getValueFormat(config.data_source) === 'brl'
   const comparison = !isMetaWidget && data.kind === 'metric' && summaryCurrent && summaryPrevious

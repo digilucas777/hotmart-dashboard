@@ -188,14 +188,22 @@ export async function GET(_request: Request) {
   if (accountIds.length === 0 && legacyAccountId) accountIds = [legacyAccountId]
   if (accountIds.length === 0) return NextResponse.json({ error: 'no_accounts' }, { status: 400 })
 
-  let taxa = 5.85
-  try {
-    const fx = await fetch('https://api.frankfurter.app/latest?from=USD&to=BRL', { signal: AbortSignal.timeout(5000) })
-    if (fx.ok) {
-      const fxData = (await fx.json()) as { rates: { BRL: number } }
-      taxa = fxData.rates.BRL ?? 5.85
-    }
-  } catch { /* fallback 5.85 */ }
+  // Até 3 tentativas contra o Frankfurter antes de aceitar o fallback — uma
+  // única tentativa sem retry deixava esse ROAS mudar de valor entre uma
+  // carga e outra (mesmo gasto/receita, câmbio de emergência numa delas)
+  // sempre que a chamada externa desse uma instabilidade passageira.
+  let taxa = 5.0
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const fx = await fetch('https://api.frankfurter.app/latest?from=USD&to=BRL', { signal: AbortSignal.timeout(5000) })
+      if (fx.ok) {
+        const fxData = (await fx.json()) as { rates: { BRL: number } }
+        taxa = fxData.rates.BRL ?? 5.0
+        break
+      }
+    } catch { /* tenta de novo, exceto na última */ }
+    if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 300 * attempt))
+  }
   console.log('[ROAS] taxa_cambio usada:', taxa)
 
   try {

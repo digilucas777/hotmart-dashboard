@@ -59,6 +59,7 @@ type Props = {
   combinedVendas: Venda[]
   period: Period
   exchangeRate: number
+  exchangeRateIsFallback?: boolean
   custoTotal: number
   custoManualTotal?: number
   custoUSD?: number
@@ -87,6 +88,7 @@ export function DashboardGrid({
   combinedVendas,
   period,
   exchangeRate,
+  exchangeRateIsFallback = false,
   custoTotal,
   custoManualTotal = 0,
   custoUSD = 0,
@@ -176,6 +178,7 @@ export function DashboardGrid({
               combinedVendas={combinedVendas}
               period={period}
               exchangeRate={exchangeRate}
+              exchangeRateIsFallback={exchangeRateIsFallback}
               custoTotal={custoTotal}
               custoManualTotal={custoManualTotal}
               custoUSD={custoUSD}

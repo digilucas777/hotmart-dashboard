@@ -417,7 +417,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   })
-  const [exchangeRate, setExchangeRate] = useState(5.85)
+  const [exchangeRate, setExchangeRate] = useState(5.0)
+  // true quando /api/exchange-rate não conseguiu a cotação real e devolveu
+  // o valor fixo de emergência — sem isso, "Total Convertido"/"Comissão"
+  // mudam de valor entre uma carga e outra (mesmos dados de venda, câmbio
+  // diferente) sem nenhum aviso de que o número não é confiável.
+  const [exchangeRateIsFallback, setExchangeRateIsFallback] = useState(false)
   const [theme, setTheme] = useState<DashboardTheme>('dark')
   const [loading, setLoading] = useState(true)
   // Métricas (via get_vendas_summary) carregam rápido e usam `loading`. As vendas cruas
@@ -532,7 +537,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     const toStr = toLocalDate(new Date(to.getTime() - 1))
     fetch(`/api/exchange-rate?from=${fromStr}&to=${toStr}`)
       .then(r => r.json())
-      .then((d: { rate: number }) => setExchangeRate(d.rate ?? 5.85))
+      .then((d: { rate: number; fallback?: boolean }) => {
+        setExchangeRate(d.rate ?? 5.0)
+        setExchangeRateIsFallback(!!d.fallback)
+      })
       .catch(() => {})
   }, [period, customDateRange])
 
@@ -2078,6 +2086,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             combinedVendas={displayCombinedVendas}
             period={period}
             exchangeRate={exchangeRate}
+            exchangeRateIsFallback={exchangeRateIsFallback}
             custoTotal={displayCustoTotal}
             custoManualTotal={custoManualTotal}
             custoUSD={custoManualTotalUSD}

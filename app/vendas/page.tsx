@@ -33,7 +33,7 @@ export default function VendasPage() {
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null)
-  const [exchangeRate, setExchangeRate] = useState(5.85)
+  const [exchangeRate, setExchangeRate] = useState(5.0)
 
   const [period, setPeriod] = useState<Period>('thisMonth')
   const [customFrom, setCustomFrom] = useState<string>(() => {
@@ -113,7 +113,7 @@ export default function VendasPage() {
     const toStr = toLocalDate(new Date(to.getTime() - 1))
     fetch(`/api/exchange-rate?from=${fromStr}&to=${toStr}`)
       .then(r => r.json())
-      .then((d: { rate: number }) => setExchangeRate(d.rate ?? 5.85))
+      .then((d: { rate: number }) => setExchangeRate(d.rate ?? 5.0))
       .catch(() => {})
   }, [period, customDateRange])
 

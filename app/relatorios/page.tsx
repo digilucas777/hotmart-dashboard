@@ -228,7 +228,7 @@ function buildPeriodoLabel(period: string, customFrom?: string, customTo?: strin
   return `de ${fmt(from)} a ${fmt(new Date(to.getTime() - day))}`
 }
 
-function buildMetricValue(vendas: Venda[], metric: WidgetDataSource, insights?: MetaInsights | null, isMetaConnected?: boolean, exchangeRate = 5.85, custoManualBRL = 0) {
+function buildMetricValue(vendas: Venda[], metric: WidgetDataSource, insights?: MetaInsights | null, isMetaConnected?: boolean, exchangeRate = 5.0, custoManualBRL = 0) {
   const approved = vendas.filter(v => v.status === 'approved')
   const refunded = vendas.filter(v => v.status === 'refunded')
   const chargebacks = vendas.filter(v => v.status === 'chargeback')
@@ -333,7 +333,7 @@ export default function RelatoriosPage() {
   const [metaInsights, setMetaInsights] = useState<MetaInsights | null>(null)
   const [isMetaConnected, setIsMetaConnected] = useState(false)
   const [custoManualBRL, setCustoManualBRL] = useState(0)
-  const [exchangeRate, setExchangeRate] = useState(5.85)
+  const [exchangeRate, setExchangeRate] = useState(5.0)
   const [selectedTemplate, setSelectedTemplate] = useState<'recuperacao' | 'trafego' | null>(null)
   const [copied, setCopied] = useState(false)
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null)
@@ -412,7 +412,7 @@ export default function RelatoriosPage() {
     const toStr = toLocalDate(new Date(to.getTime() - 1))
     fetch(`/api/exchange-rate?from=${fromStr}&to=${toStr}`)
       .then(r => r.json())
-      .then((d: { rate: number }) => setExchangeRate(d.rate ?? 5.85))
+      .then((d: { rate: number }) => setExchangeRate(d.rate ?? 5.0))
       .catch(() => {})
   }, [form.periodo, customFrom, customTo])
 
