@@ -44,16 +44,20 @@ export async function GET(req: NextRequest) {
 
     const productId = get('product_id')
     const productName = get('product_name')
-    const transactionId = get('transaction_id') ?? get('order_id')
-    if (!transactionId) {
-      return NextResponse.json({ error: 'transaction_id/order_id ausente' }, { status: 400 })
-    }
 
     if (productId && productName) {
       await supabase.from('produtos').upsert(
         { hotmart_id: productId, nome: productName },
         { onConflict: 'hotmart_id' },
       )
+    }
+
+    const transactionId = get('transaction_id') ?? get('order_id')
+    if (!transactionId) {
+      return NextResponse.json({
+        ok: true,
+        info: 'produto cadastrado, sem transaction_id/order_id — venda não registrada',
+      })
     }
 
     const evento = get('event')
