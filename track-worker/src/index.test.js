@@ -251,6 +251,70 @@ test('POST /collect inclui geo (hasheado) no evento, a partir de request.cf', as
   }
 })
 
+test('POST /collect hasheia email/telefone/nome capturados por formulário e coloca no user_data (em/fn/ln/ph/external_id), em vez de só custom_data', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnv()
+    const req = new Request('https://sinal.teste.com/collect', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_name: 'Lead',
+        session_id: 'sess-lead',
+        url: 'https://minhalp.com.br/',
+        params: { email: 'joao@exemplo.com', phone: '06 12 34 56 78', nome: 'João Silva' },
+      }),
+    })
+    req.cf = { country: 'FR' }
+    await worker.fetch(req, env)
+    const sentBody = JSON.parse(calls[0].init.body)
+    const userData = sentBody.data[0].user_data
+    const customData = sentBody.data[0].custom_data
+    assert.equal(userData.em, await sha256Hex('joao@exemplo.com'))
+    assert.equal(userData.external_id, userData.em)
+    assert.equal(userData.fn, await sha256Hex('João'))
+    assert.equal(userData.ln, await sha256Hex('Silva'))
+    assert.equal(userData.ph, await sha256Hex('33612345678'))
+    assert.equal(customData.email, undefined, 'email não devia sobrar no custom_data depois de ir pro user_data')
+    assert.equal(customData.phone, undefined)
+    assert.equal(customData.nome, undefined)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('POST /collect mantém outros campos de params (não relacionados a identidade) no custom_data normalmente', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnv()
+    const req = new Request('https://sinal.teste.com/collect', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_name: 'VideoProgress',
+        session_id: 'sess-video',
+        url: 'https://minhalp.com.br/',
+        params: { percentual: 75 },
+      }),
+    })
+    await worker.fetch(req, env)
+    const sentBody = JSON.parse(calls[0].init.body)
+    assert.equal(sentBody.data[0].custom_data.percentual, 75)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('webhook da Hotmart rejeita secret errado', async () => {
   const env = makeEnv()
   const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=errado', {

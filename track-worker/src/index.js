@@ -195,6 +195,30 @@ async function handleCollect(request, env, ctx) {
   if (body.fbp) userData.fbp = body.fbp
   if (body.fbc) userData.fbc = body.fbc
 
+  // O gatilho form_submit já captura email/telefone/nome na hora do envio —
+  // antes isso só ia pro custom_data (a Meta não usa esse campo pra casar
+  // identidade). Hasheando aqui e colocando no user_data (mesmos campos que
+  // o webhook de Purchase já usa: em/fn/ln/ph/external_id), o evento de Lead
+  // ganha o mesmo nível de correspondência avançada, sem depender de cruzar
+  // sessão depois. Remove do custom_data pra não mandar o dado cru 2x.
+  const customData = { ...(body.params || {}) }
+  if (customData.email) {
+    userData.em = await sha256Hex(customData.email)
+    userData.external_id = userData.em
+    delete customData.email
+  }
+  if (customData.nome) {
+    const [firstName, ...rest] = String(customData.nome).trim().split(/\s+/)
+    if (firstName) userData.fn = await sha256Hex(firstName)
+    if (rest.length) userData.ln = await sha256Hex(rest.join(' '))
+    delete customData.nome
+  }
+  if (customData.phone) {
+    const normalizedPhone = normalizePhone(customData.phone, geo.country)
+    if (normalizedPhone) userData.ph = await sha256Hex(normalizedPhone)
+    delete customData.phone
+  }
+
   const results = await Promise.all(pixels.map(pixel => sendToMeta({
     pixelId: pixel.pixel_id,
     capiToken: pixel.capi_token,
@@ -203,7 +227,7 @@ async function handleCollect(request, env, ctx) {
     eventId,
     eventSourceUrl: body.url,
     userData,
-    customData: body.params || {},
+    customData,
   })))
   const capiSendOk = results.length > 0 && results.every(Boolean)
 
