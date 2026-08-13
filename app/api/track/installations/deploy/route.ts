@@ -59,7 +59,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'adicione ao menos um pixel antes de fazer deploy' }, { status: 400 })
   }
 
-  const token = decryptSecret(installation.cloudflare_api_token_encrypted)
+  // .trim() é necessário aqui (mesmo já tendo sido colado com espaço/quebra de
+  // linha no passado): esse token vira literalmente o valor do header
+  // Authorization mais abaixo, e um caractere de espaço em branco sobrando faz
+  // a própria Cloudflare rejeitar a requisição inteira com "Invalid request
+  // headers" — um erro genérico que não indica claramente a causa.
+  const token = decryptSecret(installation.cloudflare_api_token_encrypted).trim()
 
   try {
     const verification = await verifyToken(token)
@@ -96,7 +101,7 @@ export async function POST(request: Request) {
         name: 'PIXELS_JSON',
         text: JSON.stringify(pixels.map(p => ({
           pixel_id: p.pixel_id,
-          capi_token: p.capi_token_encrypted ? decryptSecret(p.capi_token_encrypted) : '',
+          capi_token: p.capi_token_encrypted ? decryptSecret(p.capi_token_encrypted).trim() : '',
           test_event_code: p.test_event_code,
         }))),
       },

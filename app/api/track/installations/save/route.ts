@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     updated_at: new Date().toISOString(),
   }
   if (body.cloudflare_api_token) {
-    installationFields.cloudflare_api_token_encrypted = encryptSecret(body.cloudflare_api_token)
+    installationFields.cloudflare_api_token_encrypted = encryptSecret(body.cloudflare_api_token.trim())
   }
 
   let installationId = body.id
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
       pixel_id: pixel.pixel_id.trim(),
       test_event_code: pixel.test_event_code?.trim() || null,
     }
-    if (pixel.capi_token) row.capi_token_encrypted = encryptSecret(pixel.capi_token)
+    if (pixel.capi_token) row.capi_token_encrypted = encryptSecret(pixel.capi_token.trim())
     return row
   })
 
