@@ -66,6 +66,24 @@ export async function POST(request: Request) {
   // headers" — um erro genérico que não indica claramente a causa.
   const token = decryptSecret(installation.cloudflare_api_token_encrypted).trim()
 
+  // Diagnóstico temporário: o trim() (commit anterior) não resolveu o erro
+  // "Invalid request headers" da Cloudflare — sinal de que o problema não é
+  // espaço/quebra de linha nas pontas, e sim algo no MEIO do token (só
+  // trim() não pega). Loga só metadados (nunca o token em si) pra achar
+  // exatamente o quê, sem expor o segredo nos logs.
+  {
+    const chars = [...token]
+    const badIndex = chars.findIndex(c => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) > 0x7e)
+    console.error('[track-deploy-diag]', JSON.stringify({
+      length: token.length,
+      allPrintableAscii: badIndex === -1,
+      badIndex,
+      badCharCode: badIndex >= 0 ? chars[badIndex].charCodeAt(0) : null,
+      firstCharCode: token.charCodeAt(0),
+      lastCharCode: token.charCodeAt(token.length - 1),
+    }))
+  }
+
   try {
     const verification = await verifyToken(token)
     if (!verification.ok) {
