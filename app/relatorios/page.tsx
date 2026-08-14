@@ -903,7 +903,7 @@ export default function RelatoriosPage() {
                           <input value={connectionName} onChange={e => setConnectionName(e.target.value)} className={`${fieldClass} w-full`} placeholder="Nome da conexão" />
                           <input value={connectionPhone} onChange={e => setConnectionPhone(e.target.value)} className={`${fieldClass} w-full`} placeholder="Número do WhatsApp" />
                           <input value={evolutionUrl} onChange={e => setEvolutionUrl(e.target.value)} className={`${fieldClass} w-full`} placeholder="URL Evolution API" />
-                          <input value={evolutionApiKey} onChange={e => setEvolutionApiKey(e.target.value)} className={`${fieldClass} w-full`} placeholder="API key da Evolution" type="password" />
+                          <input value={evolutionApiKey} onChange={e => setEvolutionApiKey(e.target.value)} className={`${fieldClass} w-full`} placeholder="API key da Evolution" type="password" autoComplete="new-password" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" />
                           <input value={evolutionInstance} onChange={e => setEvolutionInstance(e.target.value)} className={`${fieldClass} w-full`} placeholder="Nome da instância" />
                           <Button onClick={generateQrCode} disabled={saving || !evolutionUrl.trim() || !evolutionApiKey.trim() || !evolutionInstance.trim()}>
                             <MessageCircle size={14} />
@@ -925,7 +925,7 @@ export default function RelatoriosPage() {
                         <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-blue-400">Via Cloud API Oficial (Meta)</p>
                         <div className="space-y-2">
                           <input value={phoneNumberId} onChange={e => setPhoneNumberId(e.target.value)} className={`${fieldClass} w-full`} placeholder="Phone Number ID da Meta" />
-                          <input value={accessToken} onChange={e => setAccessToken(e.target.value)} className={`${fieldClass} w-full`} placeholder="Access Token WhatsApp Cloud API" type="password" />
+                          <input value={accessToken} onChange={e => setAccessToken(e.target.value)} className={`${fieldClass} w-full`} placeholder="Access Token WhatsApp Cloud API" type="password" autoComplete="new-password" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" />
                           <Button onClick={connectWhatsApp} disabled={saving || !connectionPhone.trim() || !phoneNumberId.trim() || !accessToken.trim()}>
                             <Phone size={14} />
                             Conectar
