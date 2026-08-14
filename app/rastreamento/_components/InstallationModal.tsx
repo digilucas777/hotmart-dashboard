@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Plus, Trash2, Rocket, Copy, Check } from 'lucide-react'
+import { Plus, Trash2, Rocket, Copy, Check, Eye, EyeOff } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -30,12 +30,12 @@ function nextKey() {
   return `k${keyCounter}`
 }
 
-type PixelForm = { _key: string; id?: string; pixel_id: string; capi_token: string; hasToken: boolean; test_event_code: string }
+type PixelForm = { _key: string; id?: string; pixel_id: string; capi_token: string; hasToken: boolean; showToken: boolean; test_event_code: string }
 type DomainForm = { _key: string; id?: string; domain: string; tipo: TrackDomainTipo }
 type TriggerForm = { _key: string; id?: string; tipo: TrackTriggerTipo; meta_event: string; config: Record<string, unknown>; ativo: boolean }
 
 function emptyPixel(): PixelForm {
-  return { _key: nextKey(), pixel_id: '', capi_token: '', hasToken: false, test_event_code: '' }
+  return { _key: nextKey(), pixel_id: '', capi_token: '', hasToken: false, showToken: false, test_event_code: '' }
 }
 function emptyDomain(tipo: TrackDomainTipo): DomainForm {
   return { _key: nextKey(), domain: '', tipo }
@@ -131,6 +131,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
   const [workerSubdomain, setWorkerSubdomain] = useState('')
   const [cloudflareToken, setCloudflareToken] = useState('')
   const [hasCloudflareToken, setHasCloudflareToken] = useState(false)
+  const [showCloudflareToken, setShowCloudflareToken] = useState(false)
   const [pixels, setPixels] = useState<PixelForm[]>([emptyPixel()])
   const [lpDomains, setLpDomains] = useState<DomainForm[]>([emptyDomain('lp')])
   const [checkoutDomains, setCheckoutDomains] = useState<DomainForm[]>([])
@@ -169,7 +170,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
       setPixels(installation.pixels.length > 0
         ? installation.pixels.map(p => ({
             _key: nextKey(), id: p.id, pixel_id: p.pixel_id, capi_token: '',
-            hasToken: !!p.capi_token_masked, test_event_code: p.test_event_code ?? '',
+            hasToken: !!p.capi_token_masked, showToken: false, test_event_code: p.test_event_code ?? '',
           }))
         : [emptyPixel()])
       const lp = installation.domains.filter(d => d.tipo === 'lp')
@@ -298,14 +299,24 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
         <section>
           <SectionHeader number={1} title="Conectar Cloudflare" />
           <label className={labelClass}>Cloudflare API Token</label>
-          <input
-            type="password"
-            value={cloudflareToken}
-            onChange={e => setCloudflareToken(e.target.value)}
-            placeholder={hasCloudflareToken ? '•••• já salvo — deixe em branco pra manter' : 'Cole aqui o token gerado na Cloudflare'}
-            className={inputClass}
-            style={inputStyle}
-          />
+          <div className="relative">
+            <input
+              type={showCloudflareToken ? 'text' : 'password'}
+              value={cloudflareToken}
+              onChange={e => setCloudflareToken(e.target.value)}
+              placeholder={hasCloudflareToken ? '•••• já salvo — deixe em branco pra manter' : 'Cole aqui o token gerado na Cloudflare'}
+              className={`${inputClass} pr-10`}
+              style={inputStyle}
+            />
+            <button
+              type="button"
+              onClick={() => setShowCloudflareToken(v => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+              title={showCloudflareToken ? 'Ocultar token' : 'Mostrar token (confira antes de salvar)'}
+            >
+              {showCloudflareToken ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
           <p className="mt-1 text-[11px] text-slate-600">
             Nesta etapa o token só é salvo (criptografado) — a conexão real com a Cloudflare acontece numa etapa futura.{' '}
             <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noreferrer" className="text-indigo-400 hover:text-indigo-300">
@@ -345,14 +356,24 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
                     </button>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2">
-                    <input
-                      type="password"
-                      value={p.capi_token}
-                      onChange={e => updatePixel(p._key, { capi_token: e.target.value })}
-                      placeholder={p.hasToken ? '•••• já salvo — manter' : 'Token da CAPI (opcional)'}
-                      className={inputClass}
-                      style={{ background: '#0b0b14' }}
-                    />
+                    <div className="relative">
+                      <input
+                        type={p.showToken ? 'text' : 'password'}
+                        value={p.capi_token}
+                        onChange={e => updatePixel(p._key, { capi_token: e.target.value })}
+                        placeholder={p.hasToken ? '•••• já salvo — manter' : 'Token da CAPI (opcional)'}
+                        className={`${inputClass} pr-10`}
+                        style={{ background: '#0b0b14' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => updatePixel(p._key, { showToken: !p.showToken })}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                        title={p.showToken ? 'Ocultar token' : 'Mostrar token (confira antes de salvar)'}
+                      >
+                        {p.showToken ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
                     <input
                       type="text"
                       value={p.test_event_code}
