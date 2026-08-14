@@ -53,7 +53,20 @@ export async function POST(request: Request) {
     updated_at: new Date().toISOString(),
   }
   if (body.cloudflare_api_token) {
-    installationFields.cloudflare_api_token_encrypted = encryptSecret(body.cloudflare_api_token.trim())
+    const cloudflareToken = body.cloudflare_api_token.trim()
+    // Token de API da Cloudflare de verdade sempre tem 40+ caracteres. Um
+    // valor bem mais curto é sinal de autofill do navegador/gerenciador de
+    // senhas tomando conta do campo (é type="password", pra mascarar o
+    // token) — já aconteceu de verdade: uma senha salva de outro site foi
+    // parar aqui sem o usuário perceber, sobrescrevendo o token real. Rejeita
+    // aqui, na hora de salvar, em vez de só falhar depois no deploy.
+    if (cloudflareToken.length < 40) {
+      return NextResponse.json(
+        { error: 'o token da Cloudflare colado não parece válido (token de API real tem 40+ caracteres) — confira com o botão de olho se não é uma senha salva pelo navegador por engano' },
+        { status: 400 },
+      )
+    }
+    installationFields.cloudflare_api_token_encrypted = encryptSecret(cloudflareToken)
   }
 
   let installationId = body.id

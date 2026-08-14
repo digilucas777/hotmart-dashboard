@@ -307,6 +307,10 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
               placeholder={hasCloudflareToken ? '•••• já salvo — deixe em branco pra manter' : 'Cole aqui o token gerado na Cloudflare'}
               className={`${inputClass} pr-10`}
               style={inputStyle}
+              autoComplete="new-password"
+              data-lpignore="true"
+              data-1p-ignore="true"
+              data-bwignore="true"
             />
             <button
               type="button"
@@ -364,6 +368,10 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
                         placeholder={p.hasToken ? '•••• já salvo — manter' : 'Token da CAPI (opcional)'}
                         className={`${inputClass} pr-10`}
                         style={{ background: '#0b0b14' }}
+                        autoComplete="new-password"
+                        data-lpignore="true"
+                        data-1p-ignore="true"
+                        data-bwignore="true"
                       />
                       <button
                         type="button"
