@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { after } from 'next/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { notifySale, resolveNotifCategory, resolveProjetos } from '@/lib/push'
+import { fetchSaleFromAnyAccount, fetchCommissionsFromAnyAccount } from '@/lib/hotmart/api'
 
 
 const supabase = createClient(
@@ -46,68 +47,6 @@ function sameCurrencyValue(commissions: HotmartCommission[], currency: string, m
 
 function roundMoney(value: number) {
   return parseFloat(value.toFixed(2))
-}
-
-async function getHotmartToken(clientId: string, clientSecret: string): Promise<string | null> {
-  const res = await fetch('https://api-sec-vlc.hotmart.com/security/oauth/token', {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: 'grant_type=client_credentials',
-  })
-  if (!res.ok) return null
-  const { access_token } = await res.json()
-  return access_token ?? null
-}
-
-async function fetchSaleItem(token: string, transactionId: string): Promise<any | null> {
-  const res = await fetch(
-    `https://developers.hotmart.com/payments/api/v1/sales/history?transaction=${encodeURIComponent(transactionId)}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  )
-  if (!res.ok) return null
-  const data = await res.json()
-  return data?.items?.[0] ?? null
-}
-
-const HOTMART_ACCOUNTS = [
-  { id: process.env.HOTMART_CLIENT_ID, secret: process.env.HOTMART_CLIENT_SECRET },
-  { id: process.env.HOTMART_CLIENT_ID_2, secret: process.env.HOTMART_CLIENT_SECRET_2 },
-  { id: process.env.HOTMART_CLIENT_ID_3, secret: process.env.HOTMART_CLIENT_SECRET_3 },
-]
-
-async function fetchSaleFromAnyAccount(transactionId: string): Promise<any | null> {
-  for (const account of HOTMART_ACCOUNTS) {
-    if (!account.id || !account.secret) continue
-    const token = await getHotmartToken(account.id, account.secret)
-    if (!token) continue
-    const item = await fetchSaleItem(token, transactionId)
-    if (item) return item
-  }
-  return null
-}
-
-async function fetchCommissionsItem(token: string, transactionId: string): Promise<any | null> {
-  const res = await fetch(
-    `https://developers.hotmart.com/payments/api/v1/sales/commissions?transaction=${encodeURIComponent(transactionId)}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  )
-  if (!res.ok) return null
-  const data = await res.json()
-  return data?.items?.[0] ?? null
-}
-
-async function fetchCommissionsFromAnyAccount(transactionId: string): Promise<any | null> {
-  for (const account of HOTMART_ACCOUNTS) {
-    if (!account.id || !account.secret) continue
-    const token = await getHotmartToken(account.id, account.secret)
-    if (!token) continue
-    const item = await fetchCommissionsItem(token, transactionId)
-    if (item) return item
-  }
-  return null
 }
 
 export async function POST(req: NextRequest) {

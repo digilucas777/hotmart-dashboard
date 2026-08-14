@@ -1,0 +1,16 @@
+name: Reconciliar vendas disputadas/chargeback com a Hotmart
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Chamar endpoint de reconciliação
+        run: |
+          curl -sf --connect-timeout 10 --max-time 60 -X GET "https://hotmart-dashboard-woad.vercel.app/api/cron/reconcile-disputed-sales" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
