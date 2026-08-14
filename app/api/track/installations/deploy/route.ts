@@ -66,22 +66,16 @@ export async function POST(request: Request) {
   // headers" — um erro genérico que não indica claramente a causa.
   const token = decryptSecret(installation.cloudflare_api_token_encrypted).trim()
 
-  // Diagnóstico temporário: o trim() (commit anterior) não resolveu o erro
-  // "Invalid request headers" da Cloudflare — sinal de que o problema não é
-  // espaço/quebra de linha nas pontas, e sim algo no MEIO do token (só
-  // trim() não pega). Loga só metadados (nunca o token em si) pra achar
-  // exatamente o quê, sem expor o segredo nos logs.
-  {
-    const chars = [...token]
-    const badIndex = chars.findIndex(c => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) > 0x7e)
-    console.error('[track-deploy-diag]', JSON.stringify({
-      length: token.length,
-      allPrintableAscii: badIndex === -1,
-      badIndex,
-      badCharCode: badIndex >= 0 ? chars[badIndex].charCodeAt(0) : null,
-      firstCharCode: token.charCodeAt(0),
-      lastCharCode: token.charCodeAt(token.length - 1),
-    }))
+  // Token de API da Cloudflare de verdade sempre tem 40 caracteres — um valor
+  // bem mais curto (ex: e-mail ou texto colado por engano no campo errado)
+  // ainda assim chega até aqui e só falha lá na frente com "Invalid request
+  // headers" da própria Cloudflare, um erro genérico que não aponta a causa.
+  // Confere antes e devolve um aviso que a pessoa consegue agir.
+  if (token.length < 40) {
+    return NextResponse.json(
+      { error: 'o token da Cloudflare colado na seção 1 não parece válido (token de API real tem 40 caracteres) — copie de novo em dash.cloudflare.com/profile/api-tokens e salve antes de fazer deploy' },
+      { status: 400 },
+    )
   }
 
   try {
