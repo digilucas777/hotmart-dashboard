@@ -49,6 +49,26 @@ function roundMoney(value: number) {
   return parseFloat(value.toFixed(2))
 }
 
+// A Hotmart manda muito mais eventos do que só os de compra (ex.:
+// CLUB_FIRST_ACCESS, SUBSCRIPTION_CANCELLATION, CLUB_MODULE_COMPLETED,
+// UPDATE_SUBSCRIPTION_CHARGE_DATE) — nenhum deles tem `data.purchase`, então
+// não tem `transaction`/preço/comissão pra extrair. Antes desta allowlist,
+// qualquer evento não mapeado em mapStatus() caía no fallback 'pending' e
+// era processado como se fosse uma venda pendente de verdade: virava uma
+// linha lixo em `vendas` (hotmart_id nulo, sem produto real) e quebrava o
+// dedup de notificação (`notified_sale_events.hotmart_id` é NOT NULL).
+const PURCHASE_EVENTS = new Set([
+  'PURCHASE_APPROVED',
+  'PURCHASE_REFUNDED',
+  'PURCHASE_CANCELED',
+  'PURCHASE_COMPLETE',
+  'PURCHASE_PROTEST',
+  'PURCHASE_CHARGEBACK',
+  'PURCHASE_DELAYED',
+  'PURCHASE_OUT_OF_SHOPPING_CART',
+  'PURCHASE_BILLET_PRINTED',
+])
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -57,6 +77,11 @@ export async function POST(req: NextRequest) {
 
     if (!dados) {
       return NextResponse.json({ error: 'Sem dados' }, { status: 400 })
+    }
+
+    if (!PURCHASE_EVENTS.has(evento)) {
+      console.log(`[WEBHOOK] evento ignorado (não é venda): ${evento}`)
+      return NextResponse.json({ ok: true, ignorado: evento })
     }
 
     const hotmart_produto_id = String(dados.product?.id)
