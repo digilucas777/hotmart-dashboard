@@ -44,6 +44,31 @@ export async function fetchSaleFromAnyAccount(transactionId: string): Promise<an
   return null
 }
 
+// Pra checar MUITAS transações na mesma execução (reconciliação periódica) —
+// pedir um token novo pra cada conta a cada transação era o motivo real da
+// rotina beirar o timeout: com 180 vendas × até 3 contas, isso é até 540
+// idas e vindas de autenticação só pra achar em qual conta cada venda está.
+// Aqui autentica 1x por conta (as 3, em paralelo) e reaproveita esses tokens
+// pra toda transação verificada na mesma execução.
+export type HotmartAccountToken = { token: string }
+
+export async function getHotmartAccountTokens(): Promise<HotmartAccountToken[]> {
+  const tokens = await Promise.all(
+    HOTMART_ACCOUNTS
+      .filter((a): a is { id: string; secret: string } => !!a.id && !!a.secret)
+      .map(a => getHotmartToken(a.id, a.secret)),
+  )
+  return tokens.filter((t): t is string => !!t).map(token => ({ token }))
+}
+
+export async function fetchSaleWithTokens(transactionId: string, accounts: HotmartAccountToken[]): Promise<any | null> {
+  for (const account of accounts) {
+    const item = await fetchSaleItem(account.token, transactionId)
+    if (item) return item
+  }
+  return null
+}
+
 export async function fetchCommissionsItem(token: string, transactionId: string): Promise<any | null> {
   const res = await fetch(
     `https://developers.hotmart.com/payments/api/v1/sales/commissions?transaction=${encodeURIComponent(transactionId)}`,

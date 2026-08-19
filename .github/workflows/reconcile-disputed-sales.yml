@@ -8,9 +8,20 @@ on:
 jobs:
   reconcile:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 4
     steps:
+      # A rotina virou concorrente (8 vendas de cada vez, token da Hotmart
+      # reaproveitado em vez de pedido de novo pra cada uma) e deve rodar em
+      # segundos agora — mas o --max-time generoso é a margem de segurança
+      # de verdade: a execução real (2026-08-19T20:15) demorou 63s com a
+      # versão sequencial antiga e passou raspando do limite de 60s que
+      # tinha antes, derrubando o job mesmo com a Vercel respondendo 200.
+      # "-w" + "|| true" faz aparecer status/tempo mesmo quando falha, em vez
+      # do job só dizer "failed" sem nenhuma pista de causa (como aconteceu).
       - name: Chamar endpoint de reconciliação
         run: |
-          curl -sf --connect-timeout 10 --max-time 60 -X GET "https://hotmart-dashboard-woad.vercel.app/api/cron/reconcile-disputed-sales" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          curl -s --connect-timeout 10 --max-time 180 -X GET "https://hotmart-dashboard-woad.vercel.app/api/cron/reconcile-disputed-sales" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -w '\nhttp_status=%{http_code} tempo_total=%{time_total}s\n' -o /tmp/resp.json || (cat /tmp/resp.json; exit 1)
+          cat /tmp/resp.json
+          grep -q '"ok":true' /tmp/resp.json

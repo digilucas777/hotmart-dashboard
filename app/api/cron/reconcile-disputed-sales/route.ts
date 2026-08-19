@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { fetchSaleFromAnyAccount, mapHotmartApiStatus } from '@/lib/hotmart/api'
+import { getHotmartAccountTokens, fetchSaleWithTokens, mapHotmartApiStatus } from '@/lib/hotmart/api'
+
+// Cada venda checada faz 1 chamada de rede à Hotmart (às vezes mais de uma,
+// se não achar na 1ª conta) — checar uma de cada vez deixava a rotina beirar
+// (e às vezes estourar) o timeout de 60s do curl que dispara isso. 8 em
+// paralelo por vez é suficiente pra rodar em segundos mesmo com centenas de
+// vendas, sem martelar a API da Hotmart com tudo de uma vez só.
+const CONCURRENCIA = 8
 
 function getServiceClient() {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -28,8 +35,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const admin = getServiceClient()
-  if (!admin) return NextResponse.json({ error: 'service key not configured' }, { status: 500 })
+  const adminClient = getServiceClient()
+  if (!adminClient) return NextResponse.json({ error: 'service key not configured' }, { status: 500 })
+  const admin = adminClient
 
   const { data: vendas, error } = await admin
     .from('vendas')
@@ -39,21 +47,22 @@ export async function GET(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!vendas || vendas.length === 0) return NextResponse.json({ ok: true, checadas: 0, corrigidas: 0 })
 
+  const accounts = await getHotmartAccountTokens()
   const resultados: { hotmart_id: string; de: string; para?: string; status: string }[] = []
   let corrigidas = 0
 
-  for (const venda of vendas as { hotmart_id: string; status: string }[]) {
+  async function reconciliarVenda(venda: { hotmart_id: string; status: string }) {
     try {
-      const item = await fetchSaleFromAnyAccount(venda.hotmart_id)
+      const item = await fetchSaleWithTokens(venda.hotmart_id, accounts)
       if (!item) {
         resultados.push({ hotmart_id: venda.hotmart_id, de: venda.status, status: 'nao_encontrada_na_api' })
-        continue
+        return
       }
 
       const statusReal = mapHotmartApiStatus(item.purchase?.status)
       if (statusReal === venda.status) {
         resultados.push({ hotmart_id: venda.hotmart_id, de: venda.status, status: 'sem_mudanca' })
-        continue
+        return
       }
 
       const { error: updateError } = await admin
@@ -62,7 +71,7 @@ export async function GET(request: Request) {
         .eq('hotmart_id', venda.hotmart_id)
       if (updateError) {
         resultados.push({ hotmart_id: venda.hotmart_id, de: venda.status, status: `erro_update: ${updateError.message}` })
-        continue
+        return
       }
 
       corrigidas += 1
@@ -76,5 +85,10 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, checadas: vendas.length, corrigidas, resultados })
+  const lista = vendas as { hotmart_id: string; status: string }[]
+  for (let i = 0; i < lista.length; i += CONCURRENCIA) {
+    await Promise.all(lista.slice(i, i + CONCURRENCIA).map(reconciliarVenda))
+  }
+
+  return NextResponse.json({ ok: true, checadas: lista.length, corrigidas, resultados })
 }
