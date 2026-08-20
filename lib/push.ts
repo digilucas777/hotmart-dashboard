@@ -367,3 +367,26 @@ export async function notifyCloudflareUsageWarning(params: {
     console.error('[PUSH] notifyCloudflareUsageWarning falhou:', err)
   }
 }
+
+// Diferente das outras notificações desta lista: essa só é chamada quando a
+// Supabase JÁ voltou a responder (o cron de saúde só a dispara depois de uma
+// checagem que teve sucesso) — por isso pode ler push_subscriptions
+// normalmente. O aviso de QUEDA em si não pode passar por aqui: se a
+// Supabase está fora do ar, não tem como ler quem tem inscrição pra avisar.
+// Esse lado (queda) é coberto pelo próprio e-mail automático que o GitHub
+// Actions manda pro dono do repositório quando o job de checagem falha.
+export async function notifySupabaseRecovered() {
+  try {
+    if (!ensureVapidConfigured()) return
+    const { data: subs } = await supabase.from('push_subscriptions').select('user_id')
+    const userIds = [...new Set((subs ?? []).map((s: { user_id: string }) => s.user_id))]
+    await Promise.all(userIds.map(userId => sendPushToUser(userId, {
+      title: '✅ Sistema normalizado',
+      body: 'A instabilidade técnica foi resolvida — os dados já estão carregando normalmente.',
+      url: '/dashboard',
+      tag: 'supabase-status',
+    })))
+  } catch (err) {
+    console.error('[PUSH] notifySupabaseRecovered falhou:', err)
+  }
+}

@@ -100,18 +100,35 @@ export function UserAppShell() {
   const [dragIndex, setDragIndex] = useState<number | null>(null)
 
   async function loadDashboards() {
-    const { data, error: projectsError } = await supabase
-      .from('projetos')
-      .select('*')
-      .order('ordem', { ascending: true })
-      .order('data_criacao', { ascending: false })
+    setError('')
+    // A consulta ao Supabase não tem timeout nenhum por padrão — numa
+    // instabilidade real da própria Supabase (já aconteceu: gateway deles
+    // degradado, conexão nem completa), o fetch interno fica pendurado
+    // indefinidamente, sem nunca resolver nem rejeitar. Sem esse limite, a
+    // tela ficava com o esqueleto "carregando" pulsando pra sempre, sem
+    // nenhuma explicação — exatamente o que pareceu "só fica atualizando".
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 15000)
 
-    if (projectsError) {
-      setError('Não foi possível carregar seus dashboards.')
-      return
+    try {
+      const { data, error: projectsError } = await supabase
+        .from('projetos')
+        .select('*')
+        .order('ordem', { ascending: true })
+        .order('data_criacao', { ascending: false })
+        .abortSignal(controller.signal)
+
+      if (projectsError) {
+        setError('Não foi possível carregar seus dashboards. Tente de novo em alguns instantes.')
+        return
+      }
+
+      setDashboards((data ?? []) as Projeto[])
+    } catch {
+      setError('Estamos com instabilidade técnica pra carregar seus dados. Tente de novo em alguns instantes.')
+    } finally {
+      clearTimeout(timeoutId)
     }
-
-    setDashboards((data ?? []) as Projeto[])
   }
 
   async function loadSiteStats() {
@@ -456,6 +473,19 @@ export function UserAppShell() {
                 {[0, 1, 2, 3, 4, 5].map(item => (
                   <div key={item} className="h-56 animate-pulse rounded-2xl border border-white/10 bg-white/[0.035]" />
                 ))}
+              </div>
+            ) : error && dashboards.length === 0 ? (
+              // Diferente do estado "nenhum dashboard ainda" abaixo: aqui a busca
+              // falhou (ex: instabilidade da Supabase), não sabemos se a pessoa tem
+              // dashboards ou não — mostrar "crie seu primeiro dashboard" nessa hora
+              // dava a entender que os dashboards dela tinham sido apagados.
+              <div className="mt-6 rounded-3xl border border-dashed border-red-400/20 bg-[#0b0d14] p-10 text-center">
+                <button
+                  onClick={() => { setLoading(true); loadDashboards().finally(() => setLoading(false)) }}
+                  className="mt-2 inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 px-5 py-3 text-sm font-black text-white"
+                >
+                  Tentar de novo
+                </button>
               </div>
             ) : dashboards.length === 0 ? (
               <div className="mt-6 rounded-3xl border border-dashed border-white/15 bg-[#0b0d14] p-10 text-center">
