@@ -217,3 +217,26 @@ export async function fetchDistinctAfiliados(hotmartIds: string[]): Promise<stri
   if (error) throw error
   return ((data ?? []) as { afiliado_nome: string }[]).map(r => r.afiliado_nome)
 }
+
+// Mesma lógica em 2 etapas já usada em app/vendas/page.tsx pra escopar vendas
+// por projeto (projeto_produtos -> produtos.hotmart_id), extraída aqui pra
+// reaproveitar na tela de dashboards combinados sem duplicar a consulta.
+export async function fetchHotmartIdsForProjetos(projetoIds: string[]): Promise<string[]> {
+  if (projetoIds.length === 0) return []
+  const { data: pp, error: ppError } = await supabase
+    .from('projeto_produtos')
+    .select('produto_id')
+    .in('projeto_id', projetoIds)
+  if (ppError) throw ppError
+
+  const produtoIds = Array.from(new Set((pp ?? []).map((r: { produto_id: string }) => r.produto_id)))
+  if (produtoIds.length === 0) return []
+
+  const { data: prods, error: prodsError } = await supabase
+    .from('produtos')
+    .select('hotmart_id')
+    .in('id', produtoIds)
+  if (prodsError) throw prodsError
+
+  return (prods ?? []).map((r: { hotmart_id: string }) => r.hotmart_id)
+}

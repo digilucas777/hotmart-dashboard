@@ -46,6 +46,15 @@ export type Projeto = {
   deleted_at?: string | null
 }
 
+export type DashboardCombo = {
+  id: string
+  user_id: string
+  nome: string
+  projeto_ids: string[]
+  ordem: number
+  created_at: string
+}
+
 export type Produto = {
   id: string
   hotmart_id: string
