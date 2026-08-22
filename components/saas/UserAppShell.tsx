@@ -11,6 +11,7 @@ import {
   FileText,
   GripVertical,
   ImageIcon,
+  Layers,
   LayoutDashboard,
   LayoutGrid,
   Loader2,
@@ -27,8 +28,9 @@ import {
   X,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import type { Projeto } from '@/lib/types'
+import type { Projeto, DashboardCombo } from '@/lib/types'
 import { DashSpeedLogo } from './DashSpeedLogo'
+import { CombineDashboardsModal } from './CombineDashboardsModal'
 
 // Mesma lista (e mesma ordem) do menu principal em components/layout/Sidebar.tsx
 // — são dois componentes de sidebar separados, então um item novo lá precisa
@@ -98,6 +100,11 @@ export function UserAppShell() {
   const [dashboardTemplate, setDashboardTemplate] = useState<'blank' | 'meta-traffic'>('blank')
   const [error, setError] = useState('')
   const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [combos, setCombos] = useState<DashboardCombo[]>([])
+  const [comboModalOpen, setComboModalOpen] = useState(false)
+  const [editingCombo, setEditingCombo] = useState<DashboardCombo | null>(null)
+  const [deleteComboTarget, setDeleteComboTarget] = useState<DashboardCombo | null>(null)
+  const [deletingCombo, setDeletingCombo] = useState(false)
 
   async function loadDashboards() {
     setError('')
@@ -139,6 +146,14 @@ export function UserAppShell() {
     setSiteStats({ total: ativas.length, ok: ativas.length - problema, problema })
   }
 
+  async function loadCombos() {
+    const { data } = await supabase
+      .from('dashboard_combos')
+      .select('*')
+      .order('created_at', { ascending: true })
+    setCombos((data ?? []) as DashboardCombo[])
+  }
+
   useEffect(() => {
     let active = true
 
@@ -153,7 +168,10 @@ export function UserAppShell() {
           .select('role')
           .eq('id', user.id)
           .maybeSingle()
-        if (active && profile?.role === 'admin') setIsAdmin(true)
+        if (active && profile?.role === 'admin') {
+          setIsAdmin(true)
+          void loadCombos()
+        }
       }
     })
 
@@ -389,6 +407,19 @@ export function UserAppShell() {
     await loadDashboards()
   }
 
+  async function deleteCombo() {
+    if (!deleteComboTarget) return
+    setDeletingCombo(true)
+    const { error: deleteError } = await supabase.from('dashboard_combos').delete().eq('id', deleteComboTarget.id)
+    setDeletingCombo(false)
+    if (deleteError) {
+      setError('Não foi possível excluir esta combinação agora.')
+      return
+    }
+    setCombos(prev => prev.filter(c => c.id !== deleteComboTarget.id))
+    setDeleteComboTarget(null)
+  }
+
   return (
     <div className="min-h-screen bg-[#07080d] text-white">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-white/10 bg-[#0b0d14]/90 p-5 backdrop-blur-2xl lg:block">
@@ -459,13 +490,24 @@ export function UserAppShell() {
                 <h2 className="text-lg font-black">Todos os dashboards</h2>
                 <p className="mt-1 text-sm text-slate-400">Crie, abra e edite os dashboards que já usam a estrutura atual.</p>
               </div>
-              <button
-                onClick={() => setShowCreate(true)}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-300/30 bg-white/[0.04] px-5 py-3 text-sm font-black text-cyan-100 transition-colors hover:border-cyan-300/50 hover:bg-white/[0.08]"
-              >
-                <Plus size={16} />
-                Novo dashboard
-              </button>
+              <div className="flex gap-2">
+                {isAdmin && (
+                  <button
+                    onClick={() => { setEditingCombo(null); setComboModalOpen(true) }}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-violet-300/30 bg-white/[0.04] px-5 py-3 text-sm font-black text-violet-200 transition-colors hover:border-violet-300/50 hover:bg-white/[0.08]"
+                  >
+                    <Layers size={16} />
+                    Combinar dashboards
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowCreate(true)}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-300/30 bg-white/[0.04] px-5 py-3 text-sm font-black text-cyan-100 transition-colors hover:border-cyan-300/50 hover:bg-white/[0.08]"
+                >
+                  <Plus size={16} />
+                  Novo dashboard
+                </button>
+              </div>
             </div>
 
             {loading ? (
@@ -592,6 +634,50 @@ export function UserAppShell() {
               </div>
             )}
           </section>
+
+          {isAdmin && (
+            <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.04] p-6">
+              <div>
+                <h2 className="text-lg font-black">Combinados</h2>
+                <p className="mt-1 text-sm text-slate-400">Faturamento e métricas de vários projetos somados numa tela só.</p>
+              </div>
+
+              {combos.length === 0 ? (
+                <p className="mt-4 text-sm text-slate-500">
+                  Nenhuma combinação criada ainda — use o botão &quot;Combinar dashboards&quot; acima.
+                </p>
+              ) : (
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {combos.map(combo => (
+                    <div key={combo.id} className="rounded-2xl border border-white/10 bg-[#0b0d14] p-4">
+                      <p className="font-bold">{combo.nome}</p>
+                      <p className="mt-1 text-xs text-slate-500">{combo.projeto_ids.length} projeto(s)</p>
+                      <div className="mt-3 grid grid-cols-3 gap-2">
+                        <Link
+                          href={`/dashboard/combinado/${combo.id}`}
+                          className="col-span-1 flex h-9 items-center justify-center rounded-xl bg-gradient-to-r from-cyan-400 to-violet-500 text-xs font-black text-white"
+                        >
+                          Abrir
+                        </Link>
+                        <button
+                          onClick={() => { setEditingCombo(combo); setComboModalOpen(true) }}
+                          className="flex h-9 items-center justify-center rounded-xl border border-white/10 text-xs font-bold text-slate-300 hover:text-white"
+                        >
+                          <Edit3 size={13} />
+                        </button>
+                        <button
+                          onClick={() => setDeleteComboTarget(combo)}
+                          className="flex h-9 items-center justify-center rounded-xl border border-white/10 text-xs font-bold text-slate-400 hover:border-red-300/35 hover:text-red-200"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
           <section className="mt-8 grid gap-4 lg:grid-cols-2">
             <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-black/20">
@@ -872,6 +958,56 @@ export function UserAppShell() {
               >
                 {deleting && <Loader2 size={16} className="animate-spin" />}
                 Excluir dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {userId && (
+        <CombineDashboardsModal
+          open={comboModalOpen}
+          onClose={() => setComboModalOpen(false)}
+          projetos={dashboards}
+          userId={userId}
+          combo={editingCombo}
+          onSaved={saved => {
+            setCombos(prev => {
+              const exists = prev.some(c => c.id === saved.id)
+              return exists ? prev.map(c => (c.id === saved.id ? saved : c)) : [...prev, saved]
+            })
+            setComboModalOpen(false)
+          }}
+        />
+      )}
+
+      {deleteComboTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-[#0b0d14] p-6 shadow-2xl shadow-black/60">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/10 text-red-200">
+              <Trash2 size={21} />
+            </div>
+            <h2 className="mt-5 text-xl font-black">Excluir esta combinação?</h2>
+            <p className="mt-2 text-sm text-slate-500">
+              &quot;{deleteComboTarget.nome}&quot; será removida. Isso não afeta os dashboards individuais.
+            </p>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => setDeleteComboTarget(null)}
+                disabled={deletingCombo}
+                className="h-12 flex-1 rounded-2xl border border-white/10 text-sm font-black text-slate-300 transition-colors hover:text-white disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={deleteCombo}
+                disabled={deletingCombo}
+                className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-red-500 text-sm font-black text-white shadow-[0_0_28px_rgba(239,68,68,0.25)] transition-transform hover:-translate-y-0.5 disabled:opacity-60"
+              >
+                {deletingCombo && <Loader2 size={16} className="animate-spin" />}
+                Excluir combinação
               </button>
             </div>
           </div>
