@@ -71,9 +71,18 @@ export async function fetchSaleWithTokens(transactionId: string, accounts: Hotma
 export async function fetchCommissionsItem(token: string, transactionId: string): Promise<any | null> {
   const res = await fetch(
     `https://developers.hotmart.com/payments/api/v1/sales/commissions?transaction=${encodeURIComponent(transactionId)}`,
-    { headers: { Authorization: `Bearer ${token}` } },
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+      },
+    },
   )
-  if (!res.ok) return null
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    console.log(`[fetchCommissionsItem DIAG2] ${transactionId}: status=${res.status} body=${body.slice(0, 200)}`)
+    return null
+  }
   const data = await res.json()
   return data?.items?.[0] ?? null
 }
