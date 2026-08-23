@@ -79,7 +79,11 @@ export async function fetchSaleWithTokens(transactionId: string, accounts: Hotma
 // daqui — esse arquivo roda em runtime Node (por causa do Supabase) tanto no
 // webhook quanto no cron de backfill.
 export async function fetchCommissionsViaProxy(transactionId: string): Promise<any | null> {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://dashspeed.site'
+  // Usa o domínio .vercel.app (não o domínio customizado) de propósito: o
+  // domínio customizado redireciona (308) pra "www.", e esse redirect é
+  // cross-origin — o fetch derruba o header Authorization ao seguir
+  // redirects assim, fazendo essa chamada interna falhar silenciosamente.
+  const siteUrl = 'https://hotmart-dashboard-woad.vercel.app'
   const cronSecret = process.env.CRON_SECRET
   if (!cronSecret) return null
   const res = await fetch(
