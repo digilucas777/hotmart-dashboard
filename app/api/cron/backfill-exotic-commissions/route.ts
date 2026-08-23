@@ -14,11 +14,7 @@ function roundMoney(value: number) {
   return parseFloat(value.toFixed(2))
 }
 
-// Mais baixo que o da reconciliação de disputas (8): /sales/commissions se
-// mostrou sensível a carga concorrente (400 "invalid_parameter" espúrio sob
-// 8 chamadas simultâneas, confirmado na prática — ver comentário em
-// fetchCommissionsItem). 3 é suficiente pra não voltar a rodar sequencial.
-const CONCURRENCIA = 3
+const CONCURRENCIA = 1
 
 // Bug real encontrado (2026-08-23, venda HP3471604048 sinalizada pelo
 // usuário): pra vendas em moeda exótica (não BRL/USD) COM coprodução, o
