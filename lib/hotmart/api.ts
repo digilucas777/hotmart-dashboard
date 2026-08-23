@@ -21,9 +21,13 @@ export async function getHotmartToken(clientId: string, clientSecret: string): P
   if (!res.ok) return null
   const rawText = await res.text()
   const { access_token } = JSON.parse(rawText)
-  const tokenInRawText = access_token ? rawText.includes(access_token) : false
-  console.log(`[getHotmartToken DIAG] access_token len=${access_token?.length} tail=${access_token?.slice(-20)} presenteIntactoNoRawText=${tokenInRawText}`)
-  return access_token ?? null
+  if (!access_token) return null
+  // Confirmado na prática (2026-08-23): a própria Hotmart às vezes devolve o
+  // access_token já URL-encoded dentro do JSON (com "=" virando "%3D") —
+  // testado byte a byte, o texto bruto da resposta já vem assim, não é
+  // corrupção nossa. Decodifica antes de usar; em quem já vier limpo (sem
+  // "%"), decodeURIComponent não muda nada.
+  return decodeURIComponent(access_token)
 }
 
 export async function fetchSaleItem(token: string, transactionId: string): Promise<any | null> {
