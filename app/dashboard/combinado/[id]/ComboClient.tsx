@@ -189,19 +189,19 @@ export function ComboClient({ comboId }: { comboId: string }) {
 
   return (
     <div className="min-h-screen bg-[#07080d] text-white">
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#07080d]/80 px-4 py-4 backdrop-blur-2xl sm:px-6">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 text-slate-400 hover:text-white">
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#07080d]/80 backdrop-blur-2xl">
+        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <Link href="/dashboard" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 text-slate-400 hover:text-white">
               <ArrowLeft size={17} />
             </Link>
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200/70">Combinado</p>
-              <h1 className="mt-1 text-xl font-black sm:text-2xl">{combo.nome}</h1>
-              <p className="mt-0.5 text-xs text-slate-500">{projetos.map(p => p.nome).join(' + ')}</p>
+              <h1 className="mt-1 truncate text-xl font-black sm:text-2xl">{combo.nome}</h1>
+              <p className="mt-0.5 truncate text-xs text-slate-500">{projetos.map(p => p.nome).join(' + ')}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <button onClick={() => setShowEdit(true)} className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 text-slate-300 hover:text-white" title="Editar">
               <Pencil size={16} />
             </button>
@@ -212,7 +212,7 @@ export function ComboClient({ comboId }: { comboId: string }) {
         </div>
       </header>
 
-      <main className="px-4 py-6 sm:px-6 sm:py-8">
+      <main className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8">
         <PeriodFilter
           value={period}
           onChange={setPeriod}
