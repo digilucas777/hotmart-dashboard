@@ -20,8 +20,9 @@ export async function getHotmartToken(clientId: string, clientSecret: string): P
   })
   if (!res.ok) return null
   const rawText = await res.text()
-  console.log(`[getHotmartToken DIAG] raw response len=${rawText.length} tail=${rawText.slice(-40)}`)
   const { access_token } = JSON.parse(rawText)
+  const tokenInRawText = access_token ? rawText.includes(access_token) : false
+  console.log(`[getHotmartToken DIAG] access_token len=${access_token?.length} tail=${access_token?.slice(-20)} presenteIntactoNoRawText=${tokenInRawText}`)
   return access_token ?? null
 }
 
