@@ -90,6 +90,17 @@ export async function fetchCommissionsFromAnyAccount(transactionId: string): Pro
   return null
 }
 
+// Mesmo motivo do fetchSaleWithTokens: reaproveita tokens já obtidos em vez
+// de autenticar de novo pra cada transação — usado pelo backfill de vendas
+// em moeda exótica com coprodução (app/api/cron/backfill-exotic-commissions).
+export async function fetchCommissionsWithTokens(transactionId: string, accounts: HotmartAccountToken[]): Promise<any | null> {
+  for (const account of accounts) {
+    const item = await fetchCommissionsItem(account.token, transactionId)
+    if (item) return item
+  }
+  return null
+}
+
 // Enum de status da Sales History API da Hotmart (developers.hotmart.com) —
 // vocabulário DIFERENTE do nome dos eventos de webhook (PURCHASE_APPROVED
 // etc). Usado só pra reconciliação: traduz o status "de verdade" (API) pro

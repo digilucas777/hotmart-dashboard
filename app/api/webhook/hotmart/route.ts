@@ -316,10 +316,27 @@ export async function POST(req: NextRequest) {
     if (hotmartId && hasCoprod && priceCurrency !== 'BRL' && priceCurrency !== 'USD' && taxaHotmart > 0) {
       after(async () => {
         try {
-          const item = await fetchCommissionsFromAnyAccount(hotmartId)
-          const commissionsApi = (item?.commissions ?? []) as any[]
+          // Bug real encontrado (2026-08-23, HP3471604048): a Hotmart ainda não
+          // tinha processado o split de comissões entre produtor/coprodutor no
+          // instante em que esse after() rodava (fração de segundo depois do
+          // webhook) — /sales/commissions respondia 200 só com a fatia do
+          // produtor, sem o coprodutor, e às vezes nem isso. Confirmado
+          // manualmente horas depois: a mesma chamada já retornava o
+          // breakdown completo. Sem retry, isso ficava marcado como "sem
+          // resposta" e a venda ficava PARA SEMPRE com o valor síncrono
+          // incompleto (só a fatia que o payload original enxergava, ex:
+          // US$0,28 numa venda de US$27,60 de verdade). Até 4 tentativas com
+          // espera crescente dá tempo da Hotmart terminar de processar antes
+          // de desistir.
+          let commissionsApi: any[] = []
+          for (let tentativa = 1; tentativa <= 4; tentativa++) {
+            const item = await fetchCommissionsFromAnyAccount(hotmartId)
+            commissionsApi = (item?.commissions ?? []) as any[]
+            if (commissionsApi.length > 0) break
+            if (tentativa < 4) await new Promise(resolve => setTimeout(resolve, tentativa * 5000))
+          }
           if (commissionsApi.length === 0) {
-            console.log(`[WEBHOOK EXOTIC FEE] ${hotmartId}: sem resposta de /sales/commissions, mantém valor síncrono`)
+            console.log(`[WEBHOOK EXOTIC FEE] ${hotmartId}: sem resposta de /sales/commissions após 4 tentativas, mantém valor síncrono`)
             sendNotification(valorOperacionalFinal)
             return
           }
