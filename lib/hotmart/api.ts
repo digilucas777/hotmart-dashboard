@@ -20,7 +20,15 @@ export async function getHotmartToken(clientId: string, clientSecret: string): P
   })
   if (!res.ok) return null
   const { access_token } = await res.json()
-  return access_token ?? null
+  if (!access_token) return null
+  // Descoberto na prática (2026-08-23): em produção (Vercel), esse token —
+  // que é um blob base64 terminado em "=" ou "==" — chegava na Hotmart com
+  // esses sinais de igual virados em "%3D" (URL-encoded), invalidando o
+  // token inteiro e derrubando /sales/commissions com 400 "invalid_parameter"
+  // pra TODA venda, sempre (reproduzido e confirmado: local funcionava, só
+  // em produção vinha corrompido). decodeURIComponent reverte isso; em quem
+  // já vier certo (sem "%"), não faz diferença nenhuma.
+  return decodeURIComponent(access_token)
 }
 
 export async function fetchSaleItem(token: string, transactionId: string): Promise<any | null> {
