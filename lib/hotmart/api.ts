@@ -74,8 +74,15 @@ export async function fetchCommissionsItem(token: string, transactionId: string)
     `https://developers.hotmart.com/payments/api/v1/sales/commissions?transaction=${encodeURIComponent(transactionId)}`,
     { headers: { Authorization: `Bearer ${token}` } },
   )
-  if (!res.ok) return null
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    console.log(`[fetchCommissionsItem DIAG] ${transactionId}: status=${res.status} body=${body.slice(0, 300)}`)
+    return null
+  }
   const data = await res.json()
+  if (!data?.items?.[0]) {
+    console.log(`[fetchCommissionsItem DIAG] ${transactionId}: status=200 sem items, body=${JSON.stringify(data).slice(0, 300)}`)
+  }
   return data?.items?.[0] ?? null
 }
 
