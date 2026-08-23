@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Loader2, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { getPeriodRange } from '@/lib/utils'
-import { fetchVendasSummary, fetchHotmartIdsForProjetos, type SummaryRow } from '@/lib/vendas-aggregation'
+import { getPeriodRange, formatBRL, formatUSD } from '@/lib/utils'
+import { fetchVendasSummary, fetchHotmartIdsForProjetos, computeWidgetDataFromSummary, type SummaryRow } from '@/lib/vendas-aggregation'
 import type { DashboardCombo, Projeto, Venda, Period } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
 import { SalesTable } from '@/components/dashboard/SalesTable'
@@ -37,7 +37,10 @@ export function ComboClient({ comboId }: { comboId: string }) {
   })
   const [exchangeRate, setExchangeRate] = useState(5.0)
   const [summary, setSummary] = useState<SummaryRow[]>([])
+  const [summaryByProjeto, setSummaryByProjeto] = useState<{ projetoId: string; summary: SummaryRow[] }[]>([])
+  const [custosManualRaw, setCustosManualRaw] = useState<{ projeto_id: string; valor: number; moeda: string }[]>([])
   const [loadingSummary, setLoadingSummary] = useState(true)
+  const [loadingCustos, setLoadingCustos] = useState(true)
   const [summaryError, setSummaryError] = useState(false)
   const [vendas, setVendas] = useState<Venda[]>([])
   const [loadingVendas, setLoadingVendas] = useState(true)
@@ -111,8 +114,11 @@ export function ComboClient({ comboId }: { comboId: string }) {
   const fetchAll = useCallback(async () => {
     if (!combo || combo.projeto_ids.length === 0) {
       setSummary([])
+      setSummaryByProjeto([])
+      setCustosManualRaw([])
       setVendas([])
       setLoadingSummary(false)
+      setLoadingCustos(false)
       setLoadingVendas(false)
       return
     }
@@ -131,10 +137,29 @@ export function ComboClient({ comboId }: { comboId: string }) {
       )
       if (controller.signal.aborted) return
       setSummary(results.flat())
+      setSummaryByProjeto(combo.projeto_ids.map((id, i) => ({ projetoId: id, summary: results[i] ?? [] })))
     } catch {
       if (!controller.signal.aborted) setSummaryError(true)
     } finally {
       if (!controller.signal.aborted) setLoadingSummary(false)
+    }
+
+    setLoadingCustos(true)
+    try {
+      const toLocalDate = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      const fromDate = toLocalDate(from)
+      const toDate = toLocalDate(new Date(to.getTime() - 1))
+      const { data } = await supabase
+        .from('custos_manuais')
+        .select('valor, moeda, projeto_id')
+        .in('projeto_id', combo.projeto_ids)
+        .gte('data', fromDate)
+        .lte('data', toDate)
+      if (controller.signal.aborted) return
+      setCustosManualRaw((data ?? []) as { valor: number; moeda: string; projeto_id: string }[])
+    } finally {
+      if (!controller.signal.aborted) setLoadingCustos(false)
     }
 
     setLoadingVendas(true)
@@ -161,6 +186,24 @@ export function ComboClient({ comboId }: { comboId: string }) {
   useEffect(() => {
     void fetchAll()
   }, [fetchAll])
+
+  // Mesma fórmula de custoManualTotal/custoManualTotalUSD do DashboardClient
+  // (dashboard individual), só que agrupada por projeto pra alimentar a seção
+  // "Por projeto" e os cards de gasto/lucro combinados.
+  const perProjeto = useMemo(() => {
+    if (!combo) return []
+    return combo.projeto_ids.map(id => {
+      const nome = projetos.find(p => p.id === id)?.nome ?? id
+      const projSummary = summaryByProjeto.find(s => s.projetoId === id)?.summary ?? []
+      const custosDoProjeto = custosManualRaw.filter(r => r.projeto_id === id)
+      const custoTotal = custosDoProjeto.reduce((sum, r) => sum + (r.moeda === 'BRL' ? r.valor : r.valor * exchangeRate), 0)
+      const custoUSD = custosDoProjeto.filter(r => r.moeda === 'USD').reduce((sum, r) => sum + r.valor, 0)
+      return { projetoId: id, nome, summary: projSummary, custoTotal, custoUSD }
+    })
+  }, [combo, projetos, summaryByProjeto, custosManualRaw, exchangeRate])
+
+  const comboCustoTotal = useMemo(() => perProjeto.reduce((sum, p) => sum + p.custoTotal, 0), [perProjeto])
+  const comboCustoUSD = useMemo(() => perProjeto.reduce((sum, p) => sum + p.custoUSD, 0), [perProjeto])
 
   async function deleteCombo() {
     if (!combo) return
@@ -227,15 +270,70 @@ export function ComboClient({ comboId }: { comboId: string }) {
             Não foi possível carregar as métricas combinadas.{' '}
             <button onClick={() => void fetchAll()} className="font-bold underline">Tentar de novo</button>
           </div>
-        ) : loadingSummary ? (
+        ) : loadingSummary || loadingCustos ? (
           <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {[0, 1, 2, 3].map(i => <div key={i} className="h-28 animate-pulse rounded-2xl border border-white/10 bg-white/[0.035]" />)}
           </div>
         ) : (
           <div className="mt-6">
-            <ComboMetricCards summary={summary} exchangeRate={exchangeRate} />
+            <ComboMetricCards summary={summary} exchangeRate={exchangeRate} custoTotal={comboCustoTotal} custoUSD={comboCustoUSD} />
           </div>
         )}
+
+        <div className="mt-10">
+          <h2 className="mb-4 text-lg font-black">Por projeto</h2>
+          {loadingSummary || loadingCustos ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {(combo.projeto_ids.length > 0 ? combo.projeto_ids : ['a', 'b', 'c']).map(id => (
+                <div key={id} className="h-40 animate-pulse rounded-2xl border border-white/10 bg-white/[0.035]" />
+              ))}
+            </div>
+          ) : perProjeto.length === 0 ? (
+            <p className="text-sm text-slate-500">Nenhum projeto nesta combinação.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {perProjeto.map(p => {
+                const faturamento = computeWidgetDataFromSummary(p.summary, 'total_converted', exchangeRate)
+                const faturamentoBRL = computeWidgetDataFromSummary(p.summary, 'total_brl', exchangeRate)
+                const faturamentoUSD = computeWidgetDataFromSummary(p.summary, 'total_usd', exchangeRate)
+                const lucro = computeWidgetDataFromSummary(p.summary, 'lucro', exchangeRate, p.custoTotal, p.custoUSD)
+                return (
+                  <div key={p.projetoId} className="rounded-2xl border border-white/10 bg-[#0b0d14] p-5">
+                    <p className="truncate text-sm font-black text-white">{p.nome}</p>
+
+                    <div className="mt-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Faturamento</p>
+                      <p className="mt-1 text-lg font-black text-white">{faturamento?.kind === 'metric' ? faturamento.value : '—'}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {faturamentoBRL?.kind === 'metric' ? faturamentoBRL.value : formatBRL(0)} BRL
+                        {' + '}
+                        {faturamentoUSD?.kind === 'metric' ? faturamentoUSD.value : formatUSD(0)} USD
+                      </p>
+                    </div>
+
+                    <div className="mt-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Gasto</p>
+                      {p.custoTotal > 0 ? (
+                        <>
+                          <p className="mt-1 text-lg font-black text-white">{formatBRL(p.custoTotal)}</p>
+                          {p.custoUSD > 0 && <p className="mt-0.5 text-xs text-slate-500">{formatUSD(p.custoUSD)} USD</p>}
+                        </>
+                      ) : (
+                        <p className="mt-1 text-xs text-slate-500">Sem custo cadastrado</p>
+                      )}
+                    </div>
+
+                    <div className="mt-3 border-t border-white/10 pt-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Lucro</p>
+                      <p className="mt-1 text-lg font-black text-white">{lucro?.kind === 'metric' ? lucro.value : '—'}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">{lucro?.kind === 'metric' ? lucro.subValue : ''}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
 
         <div className="mt-10">
           <h2 className="mb-4 text-lg font-black">Transações</h2>
