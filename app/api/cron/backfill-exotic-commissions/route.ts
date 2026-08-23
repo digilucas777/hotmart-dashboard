@@ -59,6 +59,7 @@ export async function GET(request: Request) {
   if (!vendas || vendas.length === 0) return NextResponse.json({ ok: true, checadas: 0, corrigidas: 0 })
 
   const accounts = await getHotmartAccountTokens()
+  console.log(`[BACKFILL EXOTIC] contas com token válido: ${accounts.length}`)
   const resultados: { hotmart_id: string; status: string; valor_corrigido?: number }[] = []
   let corrigidas = 0
 
@@ -67,6 +68,7 @@ export async function GET(request: Request) {
       const item = await fetchCommissionsWithTokens(venda.hotmart_id, accounts)
       const commissionsApi = (item?.commissions ?? []) as any[]
       if (commissionsApi.length === 0) {
+        console.log(`[BACKFILL EXOTIC DIAG] ${venda.hotmart_id}: item=${JSON.stringify(item)}`)
         resultados.push({ hotmart_id: venda.hotmart_id, status: 'sem_resposta_da_api' })
         return
       }
