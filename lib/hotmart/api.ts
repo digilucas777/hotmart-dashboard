@@ -86,7 +86,7 @@ export async function fetchCommissionsItem(token: string, transactionId: string)
       return data?.items?.[0] ?? null
     }
     const body = await res.text().catch(() => '')
-    console.log(`[fetchCommissionsItem DIAG] ${transactionId} tentativa=${tentativa} token=${token.slice(0, 8)}...: status=${res.status} body=${body.slice(0, 200)}`)
+    console.log(`[fetchCommissionsItem DIAG] ${transactionId} tentativa=${tentativa} tokenLen=${token.length} token=${token.slice(0, 8)}...${token.slice(-8)}: status=${res.status} body=${body.slice(0, 200)}`)
     if (tentativa < 3) await new Promise(resolve => setTimeout(resolve, tentativa * 800))
   }
   return null
