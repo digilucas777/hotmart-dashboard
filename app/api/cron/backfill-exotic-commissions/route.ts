@@ -14,7 +14,7 @@ function roundMoney(value: number) {
   return parseFloat(value.toFixed(2))
 }
 
-const CONCURRENCIA = 1
+const CONCURRENCIA = 5
 
 // Bug real encontrado (2026-08-23, venda HP3471604048 sinalizada pelo
 // usuário): pra vendas em moeda exótica (não BRL/USD) COM coprodução, o

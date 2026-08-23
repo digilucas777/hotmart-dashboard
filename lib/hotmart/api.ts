@@ -19,15 +19,8 @@ export async function getHotmartToken(clientId: string, clientSecret: string): P
     body: 'grant_type=client_credentials',
   })
   if (!res.ok) return null
-  const rawText = await res.text()
-  const { access_token } = JSON.parse(rawText)
-  if (!access_token) return null
-  // Confirmado na prática (2026-08-23): a própria Hotmart às vezes devolve o
-  // access_token já URL-encoded dentro do JSON (com "=" virando "%3D") —
-  // testado byte a byte, o texto bruto da resposta já vem assim, não é
-  // corrupção nossa. Decodifica antes de usar; em quem já vier limpo (sem
-  // "%"), decodeURIComponent não muda nada.
-  return decodeURIComponent(access_token)
+  const { access_token } = await res.json()
+  return access_token ?? null
 }
 
 export async function fetchSaleItem(token: string, transactionId: string): Promise<any | null> {
@@ -57,15 +50,14 @@ export async function fetchSaleFromAnyAccount(transactionId: string): Promise<an
 // idas e vindas de autenticação só pra achar em qual conta cada venda está.
 // Aqui autentica 1x por conta (as 3, em paralelo) e reaproveita esses tokens
 // pra toda transação verificada na mesma execução.
-export type HotmartAccountToken = { token: string }
+export type HotmartAccountToken = { id: string; secret: string; token: string }
 
 export async function getHotmartAccountTokens(): Promise<HotmartAccountToken[]> {
-  const tokens = await Promise.all(
-    HOTMART_ACCOUNTS
-      .filter((a): a is { id: string; secret: string } => !!a.id && !!a.secret)
-      .map(a => getHotmartToken(a.id, a.secret)),
-  )
-  return tokens.filter((t): t is string => !!t).map(token => ({ token }))
+  const validAccounts = HOTMART_ACCOUNTS.filter((a): a is { id: string; secret: string } => !!a.id && !!a.secret)
+  const tokens = await Promise.all(validAccounts.map(a => getHotmartToken(a.id, a.secret)))
+  return validAccounts
+    .map((a, i) => ({ id: a.id, secret: a.secret, token: tokens[i] }))
+    .filter((a): a is HotmartAccountToken => !!a.token)
 }
 
 export async function fetchSaleWithTokens(transactionId: string, accounts: HotmartAccountToken[]): Promise<any | null> {
@@ -76,27 +68,14 @@ export async function fetchSaleWithTokens(transactionId: string, accounts: Hotma
   return null
 }
 
-// Descoberto na prática (2026-08-23): sob carga concorrente, /sales/commissions
-// às vezes devolve 400 "invalid_parameter" pra uma chamada idêntica a uma que
-// funciona segundos depois (confirmado: mesma transação, mesmo token válido,
-// retry manual bem-sucedido logo em seguida) — parece um rate-limit da própria
-// Hotmart disfarçado de erro de parâmetro, não um erro de verdade. 3 tentativas
-// com pequeno espaçamento cobre isso sem atrasar demais quem chama em lote.
 export async function fetchCommissionsItem(token: string, transactionId: string): Promise<any | null> {
-  for (let tentativa = 1; tentativa <= 3; tentativa++) {
-    const res = await fetch(
-      `https://developers.hotmart.com/payments/api/v1/sales/commissions?transaction=${encodeURIComponent(transactionId)}`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    )
-    if (res.ok) {
-      const data = await res.json()
-      return data?.items?.[0] ?? null
-    }
-    const body = await res.text().catch(() => '')
-    console.log(`[fetchCommissionsItem DIAG] ${transactionId} tentativa=${tentativa} tokenLen=${token.length} token=${token.slice(0, 8)}...${token.slice(-8)}: status=${res.status} body=${body.slice(0, 200)}`)
-    if (tentativa < 3) await new Promise(resolve => setTimeout(resolve, tentativa * 800))
-  }
-  return null
+  const res = await fetch(
+    `https://developers.hotmart.com/payments/api/v1/sales/commissions?transaction=${encodeURIComponent(transactionId)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!res.ok) return null
+  const data = await res.json()
+  return data?.items?.[0] ?? null
 }
 
 export async function fetchCommissionsFromAnyAccount(transactionId: string): Promise<any | null> {
@@ -110,13 +89,23 @@ export async function fetchCommissionsFromAnyAccount(transactionId: string): Pro
   return null
 }
 
-// Mesmo motivo do fetchSaleWithTokens: reaproveita tokens já obtidos em vez
-// de autenticar de novo pra cada transação — usado pelo backfill de vendas
-// em moeda exótica com coprodução (app/api/cron/backfill-exotic-commissions).
+// Descoberto na prática (2026-08-23): o token cacheado de uma conta pode já
+// ter sido invalidado por OUTRO processo que reautenticou a mesma conta
+// nesse meio tempo (o webhook recebendo vendas reais, ou o cron de
+// reconciliação, rodando em paralelo a este) — a Hotmart parece invalidar o
+// token anterior de um client_id assim que um novo é emitido. Por isso, se o
+// token cacheado falhar, busca um token novo na hora antes de desistir dessa
+// conta.
 export async function fetchCommissionsWithTokens(transactionId: string, accounts: HotmartAccountToken[]): Promise<any | null> {
   for (const account of accounts) {
     const item = await fetchCommissionsItem(account.token, transactionId)
     if (item) return item
+
+    const freshToken = await getHotmartToken(account.id, account.secret)
+    if (freshToken && freshToken !== account.token) {
+      const retryItem = await fetchCommissionsItem(freshToken, transactionId)
+      if (retryItem) return retryItem
+    }
   }
   return null
 }
