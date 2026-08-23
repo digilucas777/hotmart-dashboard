@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { after } from 'next/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { notifySale, resolveNotifCategory, resolveProjetos } from '@/lib/push'
-import { fetchSaleFromAnyAccount, fetchCommissionsFromAnyAccount } from '@/lib/hotmart/api'
+import { fetchSaleFromAnyAccount, fetchCommissionsViaProxy } from '@/lib/hotmart/api'
 
 
 const supabase = createClient(
@@ -330,7 +330,7 @@ export async function POST(req: NextRequest) {
           // de desistir.
           let commissionsApi: any[] = []
           for (let tentativa = 1; tentativa <= 4; tentativa++) {
-            const item = await fetchCommissionsFromAnyAccount(hotmartId)
+            const item = await fetchCommissionsViaProxy(hotmartId)
             commissionsApi = (item?.commissions ?? []) as any[]
             if (commissionsApi.length > 0) break
             if (tentativa < 4) await new Promise(resolve => setTimeout(resolve, tentativa * 5000))

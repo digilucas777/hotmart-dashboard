@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getHotmartAccountTokens, fetchCommissionsWithTokens } from '@/lib/hotmart/api'
+import { fetchCommissionsViaProxy } from '@/lib/hotmart/api'
 
 function getServiceClient() {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -58,13 +58,12 @@ export async function GET(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!vendas || vendas.length === 0) return NextResponse.json({ ok: true, checadas: 0, corrigidas: 0 })
 
-  const accounts = await getHotmartAccountTokens()
   const resultados: { hotmart_id: string; status: string; valor_corrigido?: number }[] = []
   let corrigidas = 0
 
   async function corrigirVenda(venda: { hotmart_id: string; status: string; taxa_hotmart: number | null }) {
     try {
-      const item = await fetchCommissionsWithTokens(venda.hotmart_id, accounts)
+      const item = await fetchCommissionsViaProxy(venda.hotmart_id)
       const commissionsApi = (item?.commissions ?? []) as any[]
       if (commissionsApi.length === 0) {
         resultados.push({ hotmart_id: venda.hotmart_id, status: 'sem_resposta_da_api' })
