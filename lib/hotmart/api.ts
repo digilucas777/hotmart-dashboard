@@ -69,21 +69,25 @@ export async function fetchSaleWithTokens(transactionId: string, accounts: Hotma
   return null
 }
 
+// Descoberto na prática (2026-08-23): sob carga concorrente, /sales/commissions
+// às vezes devolve 400 "invalid_parameter" pra uma chamada idêntica a uma que
+// funciona segundos depois (confirmado: mesma transação, mesmo token válido,
+// retry manual bem-sucedido logo em seguida) — parece um rate-limit da própria
+// Hotmart disfarçado de erro de parâmetro, não um erro de verdade. 3 tentativas
+// com pequeno espaçamento cobre isso sem atrasar demais quem chama em lote.
 export async function fetchCommissionsItem(token: string, transactionId: string): Promise<any | null> {
-  const res = await fetch(
-    `https://developers.hotmart.com/payments/api/v1/sales/commissions?transaction=${encodeURIComponent(transactionId)}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  )
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    console.log(`[fetchCommissionsItem DIAG] ${transactionId}: status=${res.status} body=${body.slice(0, 300)}`)
-    return null
+  for (let tentativa = 1; tentativa <= 3; tentativa++) {
+    const res = await fetch(
+      `https://developers.hotmart.com/payments/api/v1/sales/commissions?transaction=${encodeURIComponent(transactionId)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+    if (res.ok) {
+      const data = await res.json()
+      return data?.items?.[0] ?? null
+    }
+    if (tentativa < 3) await new Promise(resolve => setTimeout(resolve, tentativa * 800))
   }
-  const data = await res.json()
-  if (!data?.items?.[0]) {
-    console.log(`[fetchCommissionsItem DIAG] ${transactionId}: status=200 sem items, body=${JSON.stringify(data).slice(0, 300)}`)
-  }
-  return data?.items?.[0] ?? null
+  return null
 }
 
 export async function fetchCommissionsFromAnyAccount(transactionId: string): Promise<any | null> {

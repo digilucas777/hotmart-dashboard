@@ -14,7 +14,11 @@ function roundMoney(value: number) {
   return parseFloat(value.toFixed(2))
 }
 
-const CONCURRENCIA = 8
+// Mais baixo que o da reconciliação de disputas (8): /sales/commissions se
+// mostrou sensível a carga concorrente (400 "invalid_parameter" espúrio sob
+// 8 chamadas simultâneas, confirmado na prática — ver comentário em
+// fetchCommissionsItem). 3 é suficiente pra não voltar a rodar sequencial.
+const CONCURRENCIA = 3
 
 // Bug real encontrado (2026-08-23, venda HP3471604048 sinalizada pelo
 // usuário): pra vendas em moeda exótica (não BRL/USD) COM coprodução, o
@@ -59,7 +63,6 @@ export async function GET(request: Request) {
   if (!vendas || vendas.length === 0) return NextResponse.json({ ok: true, checadas: 0, corrigidas: 0 })
 
   const accounts = await getHotmartAccountTokens()
-  console.log(`[BACKFILL EXOTIC] contas com token válido: ${accounts.length}`)
   const resultados: { hotmart_id: string; status: string; valor_corrigido?: number }[] = []
   let corrigidas = 0
 
@@ -68,7 +71,6 @@ export async function GET(request: Request) {
       const item = await fetchCommissionsWithTokens(venda.hotmart_id, accounts)
       const commissionsApi = (item?.commissions ?? []) as any[]
       if (commissionsApi.length === 0) {
-        console.log(`[BACKFILL EXOTIC DIAG] ${venda.hotmart_id}: item=${JSON.stringify(item)}`)
         resultados.push({ hotmart_id: venda.hotmart_id, status: 'sem_resposta_da_api' })
         return
       }
