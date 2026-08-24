@@ -215,8 +215,18 @@ export async function POST(req: NextRequest) {
       status,
       pais: dados.buyer?.address?.country ?? null,
       forma_pagamento,
-      origem,
-      afiliado_nome,
+      // Descoberto na prática (2026-08-24): a Hotmart às vezes reenvia o
+      // MESMO evento várias vezes (confirmado: 4 entregas em ~4 minutos pra
+      // uma única venda) com purchase.origin/affiliates presente em algumas
+      // entregas e ausente em outras — provavelmente a atribuição deles
+      // ainda não tinha terminado de processar nas primeiras tentativas.
+      // Um upsert incondicional sobrescrevia uma origem/afiliado já
+      // detectado corretamente com null sempre que uma entrega mais tardia
+      // vinha sem esse dado. Só inclui a chave no upsert quando tem valor —
+      // PostgREST não toca a coluna em conflito quando a chave está ausente
+      // do payload, então um valor bom nunca é regredido por um null depois.
+      ...(origem ? { origem } : {}),
+      ...(afiliado_nome ? { afiliado_nome } : {}),
       valor_recebido: comissaoProdutor,
       valor_bruto: valorBruto,
       taxa_hotmart: taxaHotmart,
