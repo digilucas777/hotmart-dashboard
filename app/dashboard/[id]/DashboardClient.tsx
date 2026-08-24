@@ -1407,6 +1407,22 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const saveProducts = async () => {
     if (offerTrapProducts.length > 0) return
     setSavingProducts(true)
+
+    // Checkpoint antes de apagar: esse save reescreve a lista inteira de
+    // produtos/ofertas do projeto de uma vez (delete + insert), não só o que
+    // mudou. Descoberto na prática (2026-08-24) que isso pode perder
+    // configuração de produtos que nem foram tocados na tela. Guarda o
+    // estado real do banco (não o estado da tela, que já pode estar
+    // desatualizado) pra dar pra restaurar se o save sair errado.
+    const [{ data: produtosAntes }, { data: ofertasAntes }] = await Promise.all([
+      supabase.from('projeto_produtos').select('*').eq('projeto_id', projectId),
+      supabase.from('projeto_produto_ofertas').select('*').eq('projeto_id', projectId),
+    ])
+    await supabase.from('config_snapshots').insert([
+      { table_name: 'projeto_produtos', scope_id: projectId, payload: produtosAntes ?? [], reason: 'pre_save_products' },
+      { table_name: 'projeto_produto_ofertas', scope_id: projectId, payload: ofertasAntes ?? [], reason: 'pre_save_products' },
+    ])
+
     await supabase.from('projeto_produto_ofertas').delete().eq('projeto_id', projectId)
     await supabase.from('projeto_produtos').delete().eq('projeto_id', projectId)
     if (linkedIds.length > 0) {
