@@ -1395,7 +1395,17 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     }
   }
 
+  // Descoberto na prática (2026-08-24): produto com modo "ofertas específicas" mas
+  // zero ofertas marcadas fica com todas_ofertas=false E nenhuma linha em
+  // projeto_produto_ofertas — a combinação exata que zera o faturamento dele em
+  // silêncio (aconteceu na RECUPERAÇÃO GERAL depois de adicionar produtos novos).
+  // Bloqueia o save nesse caso em vez de deixar salvar uma armadilha invisível.
+  const offerTrapProducts = linkedIds.filter(pid =>
+    offerModeByProduct[pid] === 'custom' && (selectedOfferCodes[pid]?.length ?? 0) === 0,
+  )
+
   const saveProducts = async () => {
+    if (offerTrapProducts.length > 0) return
     setSavingProducts(true)
     await supabase.from('projeto_produto_ofertas').delete().eq('projeto_id', projectId)
     await supabase.from('projeto_produtos').delete().eq('projeto_id', projectId)
@@ -2753,11 +2763,25 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             </div>
           )}
 
+          {offerTrapProducts.length > 0 && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+              <p className="font-bold">
+                {offerTrapProducts.length} produto{offerTrapProducts.length !== 1 ? 's' : ''} sem nenhuma oferta marcada:
+              </p>
+              <p className="mt-1 text-amber-200/80">
+                {offerTrapProducts.map(pid => allProducts.find(p => p.id === pid)?.nome ?? pid).join(', ')}
+              </p>
+              <p className="mt-1">
+                Assim, o faturamento dele fica zerado no dashboard sem aviso. Marque pelo menos uma oferta ou mude pra &quot;Todas as ofertas&quot; antes de salvar.
+              </p>
+            </div>
+          )}
+
           <div className="flex gap-2 pt-1">
             <Button variant="ghost" className="flex-1" onClick={() => setShowProducts(false)}>
               Cancelar
             </Button>
-            <Button className="flex-1" onClick={saveProducts} disabled={savingProducts}>
+            <Button className="flex-1" onClick={saveProducts} disabled={savingProducts || offerTrapProducts.length > 0}>
               {savingProducts && <Spinner size={14} />}
               Salvar
             </Button>
