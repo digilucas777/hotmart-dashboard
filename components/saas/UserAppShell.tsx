@@ -484,7 +484,51 @@ export function UserAppShell() {
             </div>
           )}
 
-          <section className="mt-4 rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 sm:mt-8">
+          {isAdmin && (
+            <section className="mt-4 rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 sm:mt-8">
+              <div>
+                <h2 className="text-lg font-black">Combinados</h2>
+                <p className="mt-1 text-sm text-slate-400">Faturamento e métricas de vários projetos somados numa tela só.</p>
+              </div>
+
+              {combos.length === 0 ? (
+                <p className="mt-4 text-sm text-slate-500">
+                  Nenhuma combinação criada ainda — use o botão &quot;Combinar dashboards&quot; abaixo.
+                </p>
+              ) : (
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {combos.map(combo => (
+                  <div key={combo.id} className="rounded-2xl border border-white/10 bg-[#0b0d14] p-4">
+                    <p className="font-bold">{combo.nome}</p>
+                    <p className="mt-1 text-xs text-slate-500">{combo.projeto_ids.length} projeto(s)</p>
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      <Link
+                        href={`/dashboard/combinado/${combo.id}`}
+                        className="col-span-1 flex h-9 items-center justify-center rounded-xl bg-gradient-to-r from-cyan-400 to-violet-500 text-xs font-black text-white"
+                      >
+                        Abrir
+                      </Link>
+                      <button
+                        onClick={() => { setEditingCombo(combo); setComboModalOpen(true) }}
+                        className="flex h-9 items-center justify-center rounded-xl border border-white/10 text-xs font-bold text-slate-300 hover:text-white"
+                      >
+                        <Edit3 size={13} />
+                      </button>
+                      <button
+                        onClick={() => setDeleteComboTarget(combo)}
+                        className="flex h-9 items-center justify-center rounded-xl border border-white/10 text-xs font-bold text-slate-400 hover:border-red-300/35 hover:text-red-200"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              )}
+            </section>
+          )}
+
+          <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.04] p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-lg font-black">Todos os dashboards</h2>
@@ -634,50 +678,6 @@ export function UserAppShell() {
               </div>
             )}
           </section>
-
-          {isAdmin && (
-            <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.04] p-6">
-              <div>
-                <h2 className="text-lg font-black">Combinados</h2>
-                <p className="mt-1 text-sm text-slate-400">Faturamento e métricas de vários projetos somados numa tela só.</p>
-              </div>
-
-              {combos.length === 0 ? (
-                <p className="mt-4 text-sm text-slate-500">
-                  Nenhuma combinação criada ainda — use o botão &quot;Combinar dashboards&quot; acima.
-                </p>
-              ) : (
-                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {combos.map(combo => (
-                    <div key={combo.id} className="rounded-2xl border border-white/10 bg-[#0b0d14] p-4">
-                      <p className="font-bold">{combo.nome}</p>
-                      <p className="mt-1 text-xs text-slate-500">{combo.projeto_ids.length} projeto(s)</p>
-                      <div className="mt-3 grid grid-cols-3 gap-2">
-                        <Link
-                          href={`/dashboard/combinado/${combo.id}`}
-                          className="col-span-1 flex h-9 items-center justify-center rounded-xl bg-gradient-to-r from-cyan-400 to-violet-500 text-xs font-black text-white"
-                        >
-                          Abrir
-                        </Link>
-                        <button
-                          onClick={() => { setEditingCombo(combo); setComboModalOpen(true) }}
-                          className="flex h-9 items-center justify-center rounded-xl border border-white/10 text-xs font-bold text-slate-300 hover:text-white"
-                        >
-                          <Edit3 size={13} />
-                        </button>
-                        <button
-                          onClick={() => setDeleteComboTarget(combo)}
-                          className="flex h-9 items-center justify-center rounded-xl border border-white/10 text-xs font-bold text-slate-400 hover:border-red-300/35 hover:text-red-200"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
 
           <section className="mt-8 grid gap-4 lg:grid-cols-2">
             <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-black/20">
