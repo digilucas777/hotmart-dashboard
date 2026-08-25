@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Loader2, Pencil, Trash2 } from 'lucide-react'
+import { ArrowLeft, Loader2, Pencil, RefreshCw, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getPeriodRange, formatBRL, formatUSD } from '@/lib/utils'
 import { fetchVendasSummary, fetchHotmartIdsForProjetos, computeWidgetDataFromSummary, type SummaryRow } from '@/lib/vendas-aggregation'
@@ -25,6 +25,7 @@ export function ComboClient({ comboId }: { comboId: string }) {
   const [showEdit, setShowEdit] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   const [period, setPeriod] = useState<Period>('thisMonth')
   const [customFrom, setCustomFrom] = useState<string>(() => {
@@ -205,6 +206,15 @@ export function ComboClient({ comboId }: { comboId: string }) {
   const comboCustoTotal = useMemo(() => perProjeto.reduce((sum, p) => sum + p.custoTotal, 0), [perProjeto])
   const comboCustoUSD = useMemo(() => perProjeto.reduce((sum, p) => sum + p.custoUSD, 0), [perProjeto])
 
+  async function handleRefresh() {
+    setIsRefreshing(true)
+    try {
+      await fetchAll()
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
   async function deleteCombo() {
     if (!combo) return
     setDeleting(true)
@@ -245,6 +255,15 @@ export function ComboClient({ comboId }: { comboId: string }) {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={() => void handleRefresh()}
+              disabled={isRefreshing}
+              title="Atualizar"
+              className="flex shrink-0 items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-violet-500 px-3 py-1.5 text-sm font-semibold text-white shadow-md shadow-cyan-500/15 transition-colors disabled:opacity-60"
+            >
+              <RefreshCw size={15} className={isRefreshing ? 'animate-spin' : ''} />
+              {isRefreshing ? 'Atualizando...' : 'Atualizar'}
+            </button>
             <button onClick={() => setShowEdit(true)} className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 text-slate-300 hover:text-white" title="Editar">
               <Pencil size={16} />
             </button>
