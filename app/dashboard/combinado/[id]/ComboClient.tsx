@@ -316,6 +316,7 @@ export function ComboClient({ comboId }: { comboId: string }) {
                 const faturamentoBRL = computeWidgetDataFromSummary(p.summary, 'total_brl', exchangeRate)
                 const faturamentoUSD = computeWidgetDataFromSummary(p.summary, 'total_usd', exchangeRate)
                 const lucro = computeWidgetDataFromSummary(p.summary, 'lucro', exchangeRate, p.custoTotal, p.custoUSD)
+                const roas = computeWidgetDataFromSummary(p.summary, 'roas', exchangeRate, p.custoTotal, p.custoUSD)
                 return (
                   <div key={p.projetoId} className="rounded-2xl border border-white/10 bg-[#0b0d14] p-5">
                     <p className="truncate text-sm font-black text-white">{p.nome}</p>
@@ -346,6 +347,12 @@ export function ComboClient({ comboId }: { comboId: string }) {
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Lucro</p>
                       <p className="mt-1 text-lg font-black text-white">{lucro?.kind === 'metric' ? lucro.value : '—'}</p>
                       <p className="mt-0.5 text-xs text-slate-500">{lucro?.kind === 'metric' ? lucro.subValue : ''}</p>
+                    </div>
+
+                    <div className="mt-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">ROAS</p>
+                      <p className="mt-1 text-lg font-black text-white">{roas?.kind === 'metric' ? roas.value : '—'}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">{roas?.kind === 'metric' ? roas.subValue : ''}</p>
                     </div>
                   </div>
                 )
