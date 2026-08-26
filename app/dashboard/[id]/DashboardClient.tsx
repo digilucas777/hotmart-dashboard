@@ -1801,8 +1801,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                   <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowDashboardSwitcher(false)} />
                   <div className="absolute left-0 top-full z-50 mt-3 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-[var(--dash-border)] bg-[var(--dash-panel)] p-2 shadow-2xl shadow-black/35 backdrop-blur-2xl">
-                    <div className="px-3 py-2">
-                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--dash-faint)]">Trocar dashboard</p>
+                    <div className="flex items-center gap-2 px-3 py-2.5">
+                      <LayoutDashboard size={14} className="shrink-0 text-cyan-300" />
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--dash-text)]">Dashboards</p>
                     </div>
                     <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={isAdmin ? handleDashboardDragEnd : () => {}} modifiers={[restrictToVerticalAxis]}>
                     <SortableContext items={dashboardOptions.map(p => p.id)} strategy={verticalListSortingStrategy}>
@@ -1831,15 +1832,23 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
                     {comboOptions.length > 0 && (
                       <>
-                        <button
-                          onClick={() => setShowComboSection(prev => !prev)}
-                          className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/5"
-                        >
-                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--dash-faint)]">
-                            Combinados · {comboOptions.length}
-                          </p>
-                          <ChevronDown size={14} className={`shrink-0 text-[var(--dash-faint)] transition-transform ${showComboSection ? 'rotate-180' : ''}`} />
-                        </button>
+                        <div className="mt-1 border-t border-[var(--dash-border)] pt-1">
+                          <button
+                            onClick={() => setShowComboSection(prev => !prev)}
+                            className="flex w-full items-center justify-between gap-2 rounded-xl bg-gradient-to-r from-cyan-400/10 to-violet-500/10 px-3 py-2.5 text-left transition-colors hover:from-cyan-400/15 hover:to-violet-500/15"
+                          >
+                            <span className="flex items-center gap-2">
+                              <Layers size={14} className="shrink-0 text-violet-300" />
+                              <span className="text-xs font-black uppercase tracking-[0.14em] text-[var(--dash-text)]">
+                                Combinados
+                              </span>
+                              <span className="rounded-full bg-violet-400/20 px-1.5 py-0.5 text-[10px] font-black text-violet-200">
+                                {comboOptions.length}
+                              </span>
+                            </span>
+                            <ChevronDown size={15} className={`shrink-0 text-violet-300 transition-transform ${showComboSection ? 'rotate-180' : ''}`} />
+                          </button>
+                        </div>
                         {showComboSection && (
                           <div className="max-h-80 space-y-1 overflow-y-auto overflow-x-hidden pr-1">
                             {comboOptions.map(combo => (
@@ -1849,14 +1858,16 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                                   setShowDashboardSwitcher(false)
                                   router.push(`/dashboard/combinado/${combo.id}`)
                                 }}
-                                className="flex w-full min-w-0 items-center gap-3 rounded-2xl py-3 pl-2 pr-3 text-left text-[var(--dash-muted)] transition-all hover:bg-white/5 hover:text-[var(--dash-text)]"
+                                className="flex w-full min-w-0 items-center gap-3 rounded-2xl border border-transparent py-3 pl-2 pr-3 text-left text-[var(--dash-muted)] transition-all hover:border-violet-300/20 hover:bg-violet-400/5 hover:text-[var(--dash-text)]"
                               >
-                                <div className="flex h-11 w-14 shrink-0 items-center justify-center rounded-2xl border border-[var(--dash-border)] bg-gradient-to-br from-cyan-400/15 to-violet-500/15">
-                                  <Layers size={17} />
+                                <div className="flex h-11 w-14 shrink-0 items-center justify-center rounded-2xl border border-violet-300/30 bg-gradient-to-br from-cyan-400/25 to-violet-500/30">
+                                  <Layers size={18} className="text-violet-100" />
                                 </div>
                                 <div className="min-w-0 flex-1">
                                   <p className="truncate text-sm font-black">{combo.nome}</p>
-                                  <p className="text-xs text-[var(--dash-faint)]">Combinado · {combo.projeto_ids.length} projeto(s)</p>
+                                  <p className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-violet-400/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-violet-200">
+                                    Combinado · {combo.projeto_ids.length} projeto(s)
+                                  </p>
                                 </div>
                               </button>
                             ))}

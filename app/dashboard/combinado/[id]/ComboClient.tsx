@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Loader2, Pencil, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, LayoutGrid, Layers, Loader2, Pencil, RefreshCw, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getPeriodRange, formatBRL, formatUSD } from '@/lib/utils'
 import { fetchVendasSummary, fetchHotmartIdsForProjetos, computeWidgetDataFromSummary, type SummaryRow } from '@/lib/vendas-aggregation'
@@ -26,6 +26,9 @@ export function ComboClient({ comboId }: { comboId: string }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [outrosCombos, setOutrosCombos] = useState<DashboardCombo[]>([])
+  const [showSwitcher, setShowSwitcher] = useState(false)
+  const [showComboSection, setShowComboSection] = useState(false)
 
   const [period, setPeriod] = useState<Period>('thisMonth')
   const [customFrom, setCustomFrom] = useState<string>(() => {
@@ -74,6 +77,9 @@ export function ComboClient({ comboId }: { comboId: string }) {
 
       const { data: allProjetosData } = await supabase.from('projetos').select('*').order('nome')
       setAllProjetos((allProjetosData ?? []) as Projeto[])
+
+      const { data: combosData } = await supabase.from('dashboard_combos').select('*').order('nome')
+      setOutrosCombos((combosData ?? []) as DashboardCombo[])
 
       if (comboData.projeto_ids.length > 0) {
         const { data: projetosData } = await supabase
@@ -255,6 +261,95 @@ export function ComboClient({ comboId }: { comboId: string }) {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            <div className="relative">
+              <button
+                onClick={() => setShowSwitcher(prev => !prev)}
+                title="Trocar dashboard"
+                className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 text-slate-300 hover:text-white"
+              >
+                <LayoutGrid size={16} />
+              </button>
+
+              {showSwitcher && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowSwitcher(false)} />
+                  <div className="absolute left-0 top-full z-50 mt-3 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-white/10 bg-[#0b0d14] p-2 shadow-2xl shadow-black/40 backdrop-blur-2xl">
+                    <div className="flex items-center gap-2 px-3 py-2.5">
+                      <LayoutGrid size={14} className="shrink-0 text-cyan-300" />
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-white">Dashboards</p>
+                    </div>
+                    <div className="max-h-72 space-y-1 overflow-y-auto overflow-x-hidden pr-1">
+                      {allProjetos.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => { setShowSwitcher(false); router.push(`/dashboard/${p.id}`) }}
+                          className="flex w-full min-w-0 items-center gap-3 rounded-2xl py-3 pl-2 pr-3 text-left text-slate-300 transition-all hover:bg-white/5 hover:text-white"
+                        >
+                          <div className="grid h-11 w-14 shrink-0 grid-cols-3 items-end gap-1 rounded-2xl border border-white/10 bg-gradient-to-br from-cyan-400/15 to-violet-500/15 p-2">
+                            <span className="h-4 rounded-full bg-cyan-300/75" />
+                            <span className="h-7 rounded-full bg-violet-300/75" />
+                            <span className="h-5 rounded-full bg-sky-200/75" />
+                          </div>
+                          <p className="truncate text-sm font-black">{p.nome}</p>
+                        </button>
+                      ))}
+                    </div>
+
+                    {outrosCombos.length > 0 && (
+                      <>
+                        <div className="mt-1 border-t border-white/10 pt-1">
+                          <button
+                            onClick={() => setShowComboSection(prev => !prev)}
+                            className="flex w-full items-center justify-between gap-2 rounded-xl bg-gradient-to-r from-cyan-400/10 to-violet-500/10 px-3 py-2.5 text-left transition-colors hover:from-cyan-400/15 hover:to-violet-500/15"
+                          >
+                            <span className="flex items-center gap-2">
+                              <Layers size={14} className="shrink-0 text-violet-300" />
+                              <span className="text-xs font-black uppercase tracking-[0.14em] text-white">Combinados</span>
+                              <span className="rounded-full bg-violet-400/20 px-1.5 py-0.5 text-[10px] font-black text-violet-200">
+                                {outrosCombos.length}
+                              </span>
+                            </span>
+                            <ChevronDown size={15} className={`shrink-0 text-violet-300 transition-transform ${showComboSection ? 'rotate-180' : ''}`} />
+                          </button>
+                        </div>
+                        {showComboSection && (
+                          <div className="max-h-72 space-y-1 overflow-y-auto overflow-x-hidden pr-1">
+                            {outrosCombos.map(c => {
+                              const active = c.id === comboId
+                              return (
+                                <button
+                                  key={c.id}
+                                  onClick={() => {
+                                    setShowSwitcher(false)
+                                    if (!active) router.push(`/dashboard/combinado/${c.id}`)
+                                  }}
+                                  className={`flex w-full min-w-0 items-center gap-3 rounded-2xl border py-3 pl-2 pr-3 text-left transition-all ${
+                                    active
+                                      ? 'border-violet-300/30 bg-violet-400/10 text-white'
+                                      : 'border-transparent text-slate-300 hover:border-violet-300/20 hover:bg-violet-400/5 hover:text-white'
+                                  }`}
+                                >
+                                  <div className="flex h-11 w-14 shrink-0 items-center justify-center rounded-2xl border border-violet-300/30 bg-gradient-to-br from-cyan-400/25 to-violet-500/30">
+                                    <Layers size={18} className="text-violet-100" />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm font-black">{c.nome}</p>
+                                    <p className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-violet-400/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-violet-200">
+                                      Combinado · {c.projeto_ids.length} projeto(s)
+                                    </p>
+                                  </div>
+                                  {active && <Check size={16} className="shrink-0 text-violet-300" />}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
             <button
               onClick={() => void handleRefresh()}
               disabled={isRefreshing}
