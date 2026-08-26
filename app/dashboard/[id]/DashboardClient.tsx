@@ -400,6 +400,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [projeto, setProjeto] = useState<Projeto | null>(null)
   const [dashboardOptions, setDashboardOptions] = useState<Projeto[]>([])
   const [comboOptions, setComboOptions] = useState<DashboardCombo[]>([])
+  const [showComboSection, setShowComboSection] = useState(false)
   const [showDashboardSwitcher, setShowDashboardSwitcher] = useState(false)
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
   const [vendas, setVendas] = useState<Venda[]>([])
@@ -1830,29 +1831,37 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
                     {comboOptions.length > 0 && (
                       <>
-                        <div className="px-3 pb-1 pt-3">
-                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--dash-faint)]">Combinados</p>
-                        </div>
-                        <div className="max-h-80 space-y-1 overflow-y-auto overflow-x-hidden pr-1">
-                          {comboOptions.map(combo => (
-                            <button
-                              key={combo.id}
-                              onClick={() => {
-                                setShowDashboardSwitcher(false)
-                                router.push(`/dashboard/combinado/${combo.id}`)
-                              }}
-                              className="flex w-full min-w-0 items-center gap-3 rounded-2xl py-3 pl-2 pr-3 text-left text-[var(--dash-muted)] transition-all hover:bg-white/5 hover:text-[var(--dash-text)]"
-                            >
-                              <div className="flex h-11 w-14 shrink-0 items-center justify-center rounded-2xl border border-[var(--dash-border)] bg-gradient-to-br from-cyan-400/15 to-violet-500/15">
-                                <Layers size={17} />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-black">{combo.nome}</p>
-                                <p className="text-xs text-[var(--dash-faint)]">Combinado · {combo.projeto_ids.length} projeto(s)</p>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
+                        <button
+                          onClick={() => setShowComboSection(prev => !prev)}
+                          className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/5"
+                        >
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--dash-faint)]">
+                            Combinados · {comboOptions.length}
+                          </p>
+                          <ChevronDown size={14} className={`shrink-0 text-[var(--dash-faint)] transition-transform ${showComboSection ? 'rotate-180' : ''}`} />
+                        </button>
+                        {showComboSection && (
+                          <div className="max-h-80 space-y-1 overflow-y-auto overflow-x-hidden pr-1">
+                            {comboOptions.map(combo => (
+                              <button
+                                key={combo.id}
+                                onClick={() => {
+                                  setShowDashboardSwitcher(false)
+                                  router.push(`/dashboard/combinado/${combo.id}`)
+                                }}
+                                className="flex w-full min-w-0 items-center gap-3 rounded-2xl py-3 pl-2 pr-3 text-left text-[var(--dash-muted)] transition-all hover:bg-white/5 hover:text-[var(--dash-text)]"
+                              >
+                                <div className="flex h-11 w-14 shrink-0 items-center justify-center rounded-2xl border border-[var(--dash-border)] bg-gradient-to-br from-cyan-400/15 to-violet-500/15">
+                                  <Layers size={17} />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-black">{combo.nome}</p>
+                                  <p className="text-xs text-[var(--dash-faint)]">Combinado · {combo.projeto_ids.length} projeto(s)</p>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
