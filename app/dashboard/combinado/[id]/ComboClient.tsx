@@ -270,7 +270,7 @@ export function ComboClient({ comboId }: { comboId: string }) {
                 <div className="flex h-8 w-10 shrink-0 items-center justify-center rounded-lg border border-violet-300/30 bg-gradient-to-br from-cyan-400/20 to-violet-500/25">
                   <Layers size={15} className="text-violet-100" />
                 </div>
-                <div className="min-w-0">
+                <div className="hidden min-w-0 sm:block">
                   <p className="max-w-32 truncate text-xs font-extrabold text-white">{combo.nome}</p>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-300/80">Combinado ativo</p>
                 </div>
@@ -364,7 +364,7 @@ export function ComboClient({ comboId }: { comboId: string }) {
               className="flex shrink-0 items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-violet-500 px-3 py-1.5 text-sm font-semibold text-white shadow-md shadow-cyan-500/15 transition-colors disabled:opacity-60"
             >
               <RefreshCw size={15} className={isRefreshing ? 'animate-spin' : ''} />
-              {isRefreshing ? 'Atualizando...' : 'Atualizar'}
+              <span className="hidden sm:inline">{isRefreshing ? 'Atualizando...' : 'Atualizar'}</span>
             </button>
             <button onClick={() => setShowEdit(true)} className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 text-slate-300 hover:text-white" title="Editar">
               <Pencil size={16} />

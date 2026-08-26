@@ -43,10 +43,10 @@ function HighlightCard({
   subValue: string
 }) {
   return (
-    <div className={`rounded-2xl border ${theme.border} ${theme.bg} p-5`}>
-      <p className={`text-xs font-bold uppercase tracking-wide ${theme.label}`}>{title}</p>
-      <p className={`mt-2 text-3xl font-black ${theme.text}`}>{value}</p>
-      <p className="mt-1 text-xs text-slate-500">{subValue}</p>
+    <div className={`min-w-0 rounded-2xl border ${theme.border} ${theme.bg} p-4 sm:p-5`}>
+      <p className={`truncate text-xs font-bold uppercase tracking-wide ${theme.label}`}>{title}</p>
+      <p className={`mt-2 break-words text-xl font-black sm:text-2xl lg:text-3xl ${theme.text}`}>{value}</p>
+      <p className="mt-1 truncate text-xs text-slate-500">{subValue}</p>
     </div>
   )
 }
@@ -94,9 +94,9 @@ export function ComboMetricCards({
         )}
         <HighlightCard
           theme={HIGHLIGHT_THEME.comissao}
-          title="Comissão (33% do lucro)"
+          title="Comissão"
           value={comissaoBRL > 0 ? formatBRL(comissaoBRL) : '—'}
-          subValue={comissaoBRL > 0 ? `${formatUSD(comissaoUSD)} USD` : lucroValor < 0 ? 'Sem comissão — lucro negativo' : 'Sem custo cadastrado'}
+          subValue={comissaoBRL > 0 ? `33% · ${formatUSD(comissaoUSD)} USD` : lucroValor < 0 ? 'Sem comissão — lucro negativo' : 'Sem custo cadastrado'}
         />
       </div>
 
@@ -106,10 +106,10 @@ export function ComboMetricCards({
           const data = computeWidgetDataFromSummary(summary, source, exchangeRate)
           if (!data || data.kind !== 'metric') return null
           return (
-            <div key={source} className="rounded-2xl border border-white/10 bg-[#0b0d14] p-5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
-              <p className="mt-2 text-2xl font-black text-white">{data.value}</p>
-              <p className="mt-1 text-xs text-slate-500">{data.subValue}</p>
+            <div key={source} className="min-w-0 rounded-2xl border border-white/10 bg-[#0b0d14] p-4 sm:p-5">
+              <p className="truncate text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+              <p className="mt-2 break-words text-lg font-black text-white sm:text-2xl">{data.value}</p>
+              <p className="mt-1 truncate text-xs text-slate-500">{data.subValue}</p>
             </div>
           )
         })}
