@@ -9,6 +9,7 @@ import {
   Check,
   ChevronDown,
   GripVertical,
+  Layers,
   Receipt,
   Settings,
   RefreshCw,
@@ -43,7 +44,7 @@ import { DashboardGrid } from '@/components/dashboard/DashboardGrid'
 import { supabase } from '@/lib/supabase'
 import { formatRelativeTime, getPeriodRange, getPreviousPeriodRange, getOfficialSaleAmount, parseOrigem } from '@/lib/utils'
 import { fetchVendasSummary, fetchDistinctOrigens, fetchDistinctAfiliados, type SummaryRow } from '@/lib/vendas-aggregation'
-import type { Venda, Projeto, Produto, Period, WidgetConfig, WidgetType, WidgetDataSource } from '@/lib/types'
+import type { Venda, Projeto, Produto, Period, WidgetConfig, WidgetType, WidgetDataSource, DashboardCombo } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
 import { AddWidgetModal } from '@/components/dashboard/AddWidgetModal'
 import { EditWidgetModal } from '@/components/dashboard/EditWidgetModal'
@@ -398,6 +399,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const router = useRouter()
   const [projeto, setProjeto] = useState<Projeto | null>(null)
   const [dashboardOptions, setDashboardOptions] = useState<Projeto[]>([])
+  const [comboOptions, setComboOptions] = useState<DashboardCombo[]>([])
   const [showDashboardSwitcher, setShowDashboardSwitcher] = useState(false)
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
   const [vendas, setVendas] = useState<Venda[]>([])
@@ -580,6 +582,17 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       .order('data_criacao', { ascending: true })
       .then(({ data }) => setDashboardOptions((data ?? []) as Projeto[]))
   }, [])
+
+  // Combinados também entram no seletor "Trocar dashboard" — só pra admin,
+  // mesma regra de acesso do resto da feature de combinados.
+  useEffect(() => {
+    if (userRole !== 'admin') { setComboOptions([]); return }
+    supabase
+      .from('dashboard_combos')
+      .select('*')
+      .order('ordem', { ascending: true })
+      .then(({ data }) => setComboOptions((data ?? []) as DashboardCombo[]))
+  }, [userRole])
 
   useEffect(() => {
     supabase
@@ -1764,7 +1777,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 </h1>
               </div>
             )}
-            {dashboardOptions.length > 0 && (
+            {(dashboardOptions.length > 0 || comboOptions.length > 0) && (
               <div ref={dashboardSwitcherRef} className="relative min-w-0 flex-1 sm:flex-none">
                 <button
                   onClick={() => setShowDashboardSwitcher(prev => !prev)}
@@ -1814,6 +1827,34 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                     </div>
                     </SortableContext>
                     </DndContext>
+
+                    {comboOptions.length > 0 && (
+                      <>
+                        <div className="px-3 pb-1 pt-3">
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--dash-faint)]">Combinados</p>
+                        </div>
+                        <div className="max-h-80 space-y-1 overflow-y-auto overflow-x-hidden pr-1">
+                          {comboOptions.map(combo => (
+                            <button
+                              key={combo.id}
+                              onClick={() => {
+                                setShowDashboardSwitcher(false)
+                                router.push(`/dashboard/combinado/${combo.id}`)
+                              }}
+                              className="flex w-full min-w-0 items-center gap-3 rounded-2xl py-3 pl-2 pr-3 text-left text-[var(--dash-muted)] transition-all hover:bg-white/5 hover:text-[var(--dash-text)]"
+                            >
+                              <div className="flex h-11 w-14 shrink-0 items-center justify-center rounded-2xl border border-[var(--dash-border)] bg-gradient-to-br from-cyan-400/15 to-violet-500/15">
+                                <Layers size={17} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-black">{combo.nome}</p>
+                                <p className="text-xs text-[var(--dash-faint)]">Combinado · {combo.projeto_ids.length} projeto(s)</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
                   </>
                 )}

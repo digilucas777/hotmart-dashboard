@@ -742,11 +742,11 @@ export function UserAppShell() {
         </main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-white/10 bg-[#0b0d14]/95 p-2 backdrop-blur-2xl lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-white/10 bg-[#0b0d14]/95 p-2 backdrop-blur-2xl lg:hidden">
         {navItems.map(({ label, icon: Icon, href }, index) => (
-          <Link key={label} href={href} className={`flex flex-1 flex-col items-center justify-center rounded-2xl px-2 py-2 text-[10px] font-bold ${index === 0 ? 'bg-cyan-400/10 text-cyan-100' : 'text-slate-500'}`}>
-            <Icon size={17} />
-            <span className="mt-1">{label.split(' ')[0]}</span>
+          <Link key={label} href={href} className={`flex min-w-0 flex-1 flex-col items-center justify-center rounded-2xl px-1 py-2 text-[10px] font-bold ${index === 0 ? 'bg-cyan-400/10 text-cyan-100' : 'text-slate-500'}`}>
+            <Icon size={17} className="shrink-0" />
+            <span className="mt-1 truncate">{label.split(' ')[0]}</span>
           </Link>
         ))}
       </nav>

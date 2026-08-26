@@ -288,6 +288,7 @@ body {
     border-right: 0 !important;
     background: rgba(9, 10, 16, 0.92) !important;
     backdrop-filter: blur(22px);
+    overflow-x: auto;
   }
 
   .app-sidebar-logo,
@@ -301,18 +302,28 @@ body {
     justify-content: space-around;
     gap: 0.25rem;
     padding: 0.55rem !important;
+    overflow-x: auto;
   }
 
+  /* Ícone em cima, nome embaixo — antes só mostrava o ícone (o nome tinha
+     display:none) e não dava pra saber qual botão era qual sem tocar nele. */
   .app-sidebar-nav a {
     min-width: 3.25rem;
     flex: 1;
+    flex-direction: column !important;
+    gap: 0.2rem !important;
     justify-content: center;
     border-radius: 1rem;
-    padding: 0.75rem 0.5rem !important;
+    padding: 0.5rem 0.25rem !important;
   }
 
   .app-sidebar-nav span {
-    display: none;
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 0.6rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
