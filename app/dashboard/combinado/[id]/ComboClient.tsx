@@ -265,9 +265,16 @@ export function ComboClient({ comboId }: { comboId: string }) {
               <button
                 onClick={() => setShowSwitcher(prev => !prev)}
                 title="Trocar dashboard"
-                className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 text-slate-300 hover:text-white"
+                className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left shadow-md shadow-black/10 transition-colors hover:border-white/20"
               >
-                <LayoutGrid size={16} />
+                <div className="flex h-8 w-10 shrink-0 items-center justify-center rounded-lg border border-violet-300/30 bg-gradient-to-br from-cyan-400/20 to-violet-500/25">
+                  <Layers size={15} className="text-violet-100" />
+                </div>
+                <div className="min-w-0">
+                  <p className="max-w-32 truncate text-xs font-extrabold text-white">{combo.nome}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-300/80">Combinado ativo</p>
+                </div>
+                <ChevronDown size={16} className={`shrink-0 text-slate-400 transition-transform ${showSwitcher ? 'rotate-180' : ''}`} />
               </button>
 
               {showSwitcher && (
