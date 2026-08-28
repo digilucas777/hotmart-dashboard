@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/app/api/meta/_utils'
 
-const VALID_EVENT_NAMES = ['PageView', 'InitiateCheckout', 'Purchase']
+const VALID_EVENT_NAMES = ['PageView', 'ViewContent', 'AddToCart', 'InitiateCheckout', 'Purchase']
 
 // Usada pelo painel de eventos pra buscar TODOS os eventos de um tipo num dia
 // específico (sem limite artificial) — o cliente já manda start/end em ISO

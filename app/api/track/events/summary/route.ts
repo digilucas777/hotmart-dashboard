@@ -53,10 +53,12 @@ export async function GET(request: Request) {
   }
 
   const [
-    pageView, initiateCheckout, purchase,
+    pageView, viewContent, addToCart, initiateCheckout, purchase,
     capiTotal, withFbp, withFbc, purchaseTotal, purchaseMatched,
   ] = await Promise.all([
     baseQuery().eq('event_name', 'PageView'),
+    baseQuery().eq('event_name', 'ViewContent'),
+    baseQuery().eq('event_name', 'AddToCart'),
     baseQuery().eq('event_name', 'InitiateCheckout'),
     baseQuery().eq('event_name', 'Purchase'),
     baseQuery().eq('source', 'capi'),
@@ -66,7 +68,7 @@ export async function GET(request: Request) {
     baseQuery().eq('source', 'capi').eq('event_name', 'Purchase').eq('session_hit', true),
   ])
 
-  const firstError = [pageView, initiateCheckout, purchase, capiTotal, withFbp, withFbc, purchaseTotal, purchaseMatched]
+  const firstError = [pageView, viewContent, addToCart, initiateCheckout, purchase, capiTotal, withFbp, withFbc, purchaseTotal, purchaseMatched]
     .find(r => r.error)?.error
   if (firstError) return NextResponse.json({ error: firstError.message }, { status: 500 })
 
@@ -76,6 +78,8 @@ export async function GET(request: Request) {
   return NextResponse.json({
     counts_today: {
       PageView: pageView.count ?? 0,
+      ViewContent: viewContent.count ?? 0,
+      AddToCart: addToCart.count ?? 0,
       InitiateCheckout: initiateCheckout.count ?? 0,
       Purchase: purchase.count ?? 0,
     },

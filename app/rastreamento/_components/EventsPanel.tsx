@@ -36,7 +36,7 @@ type Summary = {
   }
 }
 
-type EventName = 'PageView' | 'InitiateCheckout' | 'Purchase'
+type EventName = 'PageView' | 'ViewContent' | 'AddToCart' | 'InitiateCheckout' | 'Purchase'
 
 type SectionState = {
   open: boolean
@@ -48,11 +48,13 @@ type SectionState = {
   hasMore: boolean
 }
 
-const EVENT_TYPES: EventName[] = ['PageView', 'InitiateCheckout', 'Purchase']
+const EVENT_TYPES: EventName[] = ['PageView', 'ViewContent', 'AddToCart', 'InitiateCheckout', 'Purchase']
 const PAGE_SIZE = 50
 
 const EVENT_ICON: Record<string, string> = {
   PageView: '👁️',
+  ViewContent: '📄',
+  AddToCart: '🛍️',
   InitiateCheckout: '🛒',
   Purchase: '💰',
 }
@@ -274,7 +276,13 @@ function EventTypeSection({
 
 function makeInitialSections(): Record<EventName, SectionState> {
   const empty: SectionState = { open: false, loading: false, loadingMore: false, error: null, events: null, offset: 0, hasMore: false }
-  return { PageView: { ...empty }, InitiateCheckout: { ...empty }, Purchase: { ...empty } }
+  return {
+    PageView: { ...empty },
+    ViewContent: { ...empty },
+    AddToCart: { ...empty },
+    InitiateCheckout: { ...empty },
+    Purchase: { ...empty },
+  }
 }
 
 export function EventsPanel({ installationId }: { installationId: string }) {
