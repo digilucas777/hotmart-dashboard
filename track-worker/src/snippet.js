@@ -212,11 +212,19 @@ function buildCheckoutDecoratorCode(checkoutDomains) {
   })();`
 }
 
-export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, workerOrigin, pixelIds }) {
+export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, workerOrigin, pixelIds, defaultContentId }) {
   const sessionTtlSeconds = Math.max(1, Number(sessionTtlDays) || 7) * 86400
   const triggerCode = (triggers || []).map(buildTriggerCode).join('\n')
   const checkoutDecoratorCode = buildCheckoutDecoratorCode(checkoutDomains)
   const pixelLoaderCode = buildPixelLoaderCode(pixelIds)
+  // Sem content_ids, a Meta não consegue casar ViewContent/AddToCart com o
+  // catálogo (avisa "pixel não recebe content_id") — isso trava anúncio
+  // dinâmico/retargeting. Site de produto único: um content_id fixo (o
+  // mesmo produto configurado no filtro de Purchase) resolve pra todo
+  // evento do navegador de uma vez, sem precisar marcar produto por produto.
+  const defaultContentIdCode = defaultContentId
+    ? `{ content_ids: [${jsString(String(defaultContentId))}], content_type: 'product' }`
+    : 'null'
 
   return `(function(){
   // Precisa ser uma URL absoluta pro domínio do Worker: esse script roda no
@@ -312,11 +320,18 @@ ${pixelLoaderCode}
   var fbc = getOrCreateFbc();
   var utm = getOrCreateUtm();
   var src = getOrCreateSrc();
+  var DEFAULT_CONTENT_PARAMS = ${defaultContentIdCode};
   function send(eventName, extra){
     // Só gera event_id pro PageView, que é o único evento que também pode
     // vir do pixel nativo do navegador — é esse ID compartilhado que deixa a
     // Meta fundir os dois em 1 só, em vez de contar em dobro.
     var eventId = (eventName === 'PageView' && crypto.randomUUID) ? crypto.randomUUID() : null;
+    // DEFAULT_CONTENT_PARAMS entra primeiro (content_ids/content_type do
+    // produto único do site) e "extra" por cima — assim um gatilho que um
+    // dia precise mandar o próprio content_id sempre pode sobrescrever.
+    var mergedParams = {};
+    if (DEFAULT_CONTENT_PARAMS) { for (var k1 in DEFAULT_CONTENT_PARAMS) mergedParams[k1] = DEFAULT_CONTENT_PARAMS[k1]; }
+    if (extra) { for (var k2 in extra) mergedParams[k2] = extra[k2]; }
     var payload = {
       event_name: eventName,
       session_id: sid,
@@ -326,7 +341,7 @@ ${pixelLoaderCode}
       utm: utm,
       src: src,
       new_session: isNewSession(),
-      params: extra || {},
+      params: mergedParams,
       event_id: eventId
     };
     var body = JSON.stringify(payload);

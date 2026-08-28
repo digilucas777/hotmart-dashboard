@@ -71,6 +71,17 @@ test('buildSnippet marca new_session via sessionStorage (1x por sessão, não po
   assert.match(code, /new_session: isNewSession\(\)/)
 })
 
+test('buildSnippet com defaultContentId inclui content_ids/content_type em todo evento (Meta precisa disso pra casar ViewContent/AddToCart com o catálogo)', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [], defaultContentId: '7101989' })
+  assert.match(code, /DEFAULT_CONTENT_PARAMS = \{ content_ids: \["7101989"\], content_type: 'product' \}/)
+})
+
+test('buildSnippet sem defaultContentId não inclui content_ids (site sem produto único configurado)', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [] })
+  assert.match(code, /DEFAULT_CONTENT_PARAMS = null/)
+  assert.doesNotMatch(code, /content_ids:\s*\[/)
+})
+
 test('buildSnippet sem domínios de checkout não inclui o decorador de links', () => {
   const code = buildSnippet({ sessionTtlDays: 7, triggers: [] })
   assert.doesNotMatch(code, /isCheckoutLink/)

@@ -34,7 +34,8 @@ function handleSnippet(request, env) {
   const sessionTtlDays = Number(env.SESSION_TTL_DAYS) || 7
   const workerOrigin = new URL(request.url).origin
   const pixelIds = parseEnvJson(env.PIXEL_IDS_JSON, [])
-  const body = buildSnippet({ sessionTtlDays, triggers, checkoutDomains, workerOrigin, pixelIds })
+  const purchaseProductIds = parseEnvJson(env.PURCHASE_PRODUCT_IDS_JSON, [])
+  const body = buildSnippet({ sessionTtlDays, triggers, checkoutDomains, workerOrigin, pixelIds, defaultContentId: purchaseProductIds[0] || null })
   return new Response(body, {
     headers: { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=300' },
   })
