@@ -141,6 +141,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
   const [sessionTtlDays, setSessionTtlDays] = useState(7)
   const [diagnostico, setDiagnostico] = useState(false)
   const [requireTrackerSrc, setRequireTrackerSrc] = useState(false)
+  const [metaPurchaseProductIds, setMetaPurchaseProductIds] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deploying, setDeploying] = useState(false)
@@ -185,6 +186,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
       setSessionTtlDays(installation.session_ttl_days)
       setDiagnostico(installation.diagnostico_ativo)
       setRequireTrackerSrc(installation.require_tracker_src)
+      setMetaPurchaseProductIds((installation.meta_purchase_product_ids ?? []).join(', '))
     } else {
       setNome('')
       setWorkerSubdomain('')
@@ -199,6 +201,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
       setSessionTtlDays(7)
       setDiagnostico(false)
       setRequireTrackerSrc(false)
+      setMetaPurchaseProductIds('')
     }
     setError(null)
   }, [open, installation])
@@ -231,6 +234,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
         session_ttl_days: sessionTtlDays,
         diagnostico_ativo: diagnostico,
         require_tracker_src: requireTrackerSrc,
+        meta_purchase_product_ids: metaPurchaseProductIds.split(',').map(id => id.trim()).filter(Boolean),
         pixels: validPixels.map(p => ({
           id: p.id,
           pixel_id: p.pixel_id.trim(),
@@ -454,6 +458,25 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
             Ative se o mesmo produto da Hotmart também for vendido por outro pixel/campanha fora
             desse funil — sem isso, toda venda aprovada do produto (de qualquer origem) seria
             atribuída a essa instalação.
+          </p>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm text-slate-300">
+            IDs de produto da Hotmart que mandam Purchase pra Meta (opcional)
+          </label>
+          <input
+            type="text"
+            value={metaPurchaseProductIds}
+            onChange={e => setMetaPurchaseProductIds(e.target.value)}
+            placeholder="Ex: 7101989, 1234567"
+            className={inputClass}
+            style={inputStyle}
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Separe por vírgula. Deixe vazio pra mandar Purchase de qualquer produto (comportamento padrão).
+            Use quando o funil tem order bump/upsell — assim só o produto principal conta como Purchase pra
+            Meta, e o cliente comprando o funil inteiro não vira vários Purchase separados.
           </p>
         </div>
 

@@ -43,6 +43,7 @@ export type TrackInstallation = {
   session_ttl_days: number
   diagnostico_ativo: boolean
   require_tracker_src: boolean
+  meta_purchase_product_ids: string[]
   status: 'draft' | 'deployed'
   created_at: string
   updated_at: string
@@ -82,6 +83,7 @@ export type TrackInstallationSaveInput = {
   session_ttl_days?: number
   diagnostico_ativo?: boolean
   require_tracker_src?: boolean
+  meta_purchase_product_ids?: string[]
   pixels?: TrackPixelInput[]
   domains?: TrackDomainInput[]
   triggers?: TrackTriggerInput[]

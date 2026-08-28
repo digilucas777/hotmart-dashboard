@@ -324,7 +324,18 @@ async function handleHotmartWebhook(request, env, ctx) {
   // registrado), só não vai pra Meta, pra não atribuir errado.
   const requireTrackerSrc = env.REQUIRE_TRACKER_SRC === 'true'
   const rawSrc = purchase?.origin?.src || null
-  const isTrackedSale = !requireTrackerSrc || (typeof rawSrc === 'string' && rawSrc.toLowerCase().includes('tracker'))
+  const srcTracked = !requireTrackerSrc || (typeof rawSrc === 'string' && rawSrc.toLowerCase().includes('tracker'))
+
+  // Um funil costuma ter produto principal + order bumps/upsells na Hotmart —
+  // cada um com o seu próprio product.id, mas todos usando o MESMO checkout/
+  // webhook. Sem esse filtro, comprar o funil inteiro virava vários Purchase
+  // separados na Meta (um por produto), inflando/distorcendo a otimização.
+  // Configurável por instalação: lista vazia = manda tudo (comportamento
+  // antigo, continua valendo pra quem não configurou nada ainda).
+  const purchaseProductIds = parseEnvJson(env.PURCHASE_PRODUCT_IDS_JSON, [])
+  const productAllowedForMeta = purchaseProductIds.length === 0 || (product.id != null && purchaseProductIds.includes(String(product.id)))
+
+  const isTrackedSale = srcTracked && productAllowedForMeta
 
   const userData = {}
   if (buyer.email) userData.em = await sha256Hex(buyer.email)
@@ -439,7 +450,8 @@ async function handleHotmartWebhook(request, env, ctx) {
     if (isTrackedSale) {
       console.log('[Rastreamento] /webhook/hotmart', { transaction: purchase.transaction, resultados: results })
     } else {
-      console.log('[Rastreamento] /webhook/hotmart ignorado (src sem "-tracker", não é desse funil):', { transaction: purchase.transaction, src: rawSrc })
+      const motivo = !srcTracked ? 'src sem "-tracker", não é desse funil' : 'produto fora da lista de produtos enviados pro Meta (order bump/upsell)'
+      console.log(`[Rastreamento] /webhook/hotmart ignorado (${motivo}):`, { transaction: purchase.transaction, src: rawSrc, product_id: product.id })
     }
   }
 

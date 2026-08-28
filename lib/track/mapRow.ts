@@ -34,6 +34,7 @@ export type InstallationRow = {
   session_ttl_days: number
   diagnostico_ativo: boolean
   require_tracker_src: boolean
+  meta_purchase_product_ids: string[]
   status: 'draft' | 'deployed'
   created_at: string
   updated_at: string
@@ -81,6 +82,7 @@ export function mapInstallationRow(row: InstallationRow): TrackInstallation {
     session_ttl_days: row.session_ttl_days,
     diagnostico_ativo: row.diagnostico_ativo,
     require_tracker_src: row.require_tracker_src,
+    meta_purchase_product_ids: row.meta_purchase_product_ids ?? [],
     status: row.status,
     created_at: row.created_at,
     updated_at: row.updated_at,

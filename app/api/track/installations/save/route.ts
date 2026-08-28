@@ -50,6 +50,7 @@ export async function POST(request: Request) {
     session_ttl_days: body.session_ttl_days ?? 7,
     diagnostico_ativo: !!body.diagnostico_ativo,
     require_tracker_src: !!body.require_tracker_src,
+    meta_purchase_product_ids: (body.meta_purchase_product_ids ?? []).map(id => id.trim()).filter(Boolean),
     updated_at: new Date().toISOString(),
   }
   if (body.cloudflare_api_token) {

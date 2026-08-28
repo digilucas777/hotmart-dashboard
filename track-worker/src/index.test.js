@@ -925,6 +925,105 @@ test('webhook da Hotmart manda pra Meta normalmente quando REQUIRE_TRACKER_SRC n
   }
 })
 
+test('webhook da Hotmart NÃO manda pra Meta quando PURCHASE_PRODUCT_IDS_JSON tem produtos e o product.id da venda não está na lista (order bump/upsell)', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest({ PURCHASE_PRODUCT_IDS_JSON: JSON.stringify(['7101989']) })
+    const ctx = makeCtx()
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'Comprou Upsell', email: 'upsell@exemplo.com' },
+          purchase: { transaction: 'HP-UPSELL', price: { value: 47, currency_value: 'BRL' } },
+          product: { id: 7104911, name: 'Oral inoubliable' },
+        },
+      }),
+    })
+    const res = await worker.fetch(req, env, ctx)
+    assert.equal(res.status, 200)
+    await Promise.all(ctx._tasks)
+
+    assert.equal(calls.filter(c => c.url.includes('graph.facebook.com')).length, 0, 'não devia mandar pra Meta — produto fora da lista')
+    const ingestCall = calls.find(c => c.url === env.INGEST_URL)
+    assert.ok(ingestCall, 'ainda devia aparecer no nosso painel')
+    const ingestBody = JSON.parse(ingestCall.init.body)
+    assert.equal(ingestBody.source, 'pixel')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart MANDA pra Meta quando PURCHASE_PRODUCT_IDS_JSON tem produtos e o product.id da venda está na lista (produto principal)', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest({ PURCHASE_PRODUCT_IDS_JSON: JSON.stringify(['7101989']) })
+    const ctx = makeCtx()
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'Comprou Principal', email: 'principal@exemplo.com' },
+          purchase: { transaction: 'HP-PRINCIPAL', price: { value: 97, currency_value: 'BRL' } },
+          product: { id: 7101989, name: 'Cours de massage tantrique' },
+        },
+      }),
+    })
+    const res = await worker.fetch(req, env, ctx)
+    assert.equal(res.status, 200)
+    await Promise.all(ctx._tasks)
+
+    assert.equal(calls.filter(c => c.url.includes('graph.facebook.com')).length, 1, 'devia mandar pra Meta — produto principal')
+    const ingestCall = calls.find(c => c.url === env.INGEST_URL)
+    const ingestBody = JSON.parse(ingestCall.init.body)
+    assert.equal(ingestBody.source, 'capi')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart manda pra Meta qualquer produto quando PURCHASE_PRODUCT_IDS_JSON está vazio/ausente (comportamento padrão, compatível)', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest()
+    const ctx = makeCtx()
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'Sem Filtro de Produto', email: 'semfiltroproduto@exemplo.com' },
+          purchase: { transaction: 'HP-SEM-FILTRO-PRODUTO', price: { value: 47, currency_value: 'BRL' } },
+          product: { id: 999999, name: 'Qualquer Produto' },
+        },
+      }),
+    })
+    const res = await worker.fetch(req, env, ctx)
+    assert.equal(res.status, 200)
+    await Promise.all(ctx._tasks)
+    assert.equal(calls.filter(c => c.url.includes('graph.facebook.com')).length, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('sendToMeta tenta de novo quando a Meta responde erro 5xx (instabilidade passageira) e não desiste na 1ª falha', async () => {
   const originalFetch = globalThis.fetch
   let attempts = 0
