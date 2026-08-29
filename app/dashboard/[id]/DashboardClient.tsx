@@ -1448,19 +1448,31 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           todas_ofertas: offerModeByProduct[pid] !== 'custom',
         })))
 
+      // Descoberto na prática (2026-08-29): a API da Hotmart que busca as
+      // ofertas de um produto (/products/api/v1/product/{id}/offers) está
+      // devolvendo 404 pra QUALQUER produto — provavelmente o endpoint mudou
+      // do lado da Hotmart. Antes disso quebrar, o save filtrava os códigos
+      // selecionados contra essa lista ao vivo (productOffers) — com a lista
+      // sempre vazia, a interseção também ficava vazia e o save apagava
+      // silenciosamente ofertas específicas já configuradas, mesmo sem
+      // ninguém mexer nelas. Agora salva os códigos selecionados diretamente
+      // (a fonte de verdade é o que a pessoa marcou, não a lista ao vivo da
+      // Hotmart) — a lista ao vivo continua útil só pra mostrar nome/preço
+      // quando disponível, nunca pra decidir o que salvar.
       const offerRows = linkedIds.flatMap(pid => {
         if (offerModeByProduct[pid] !== 'custom') return []
-        const selected = new Set(selectedOfferCodes[pid] ?? [])
-        return (productOffers[pid] ?? [])
-          .filter(offer => selected.has(offer.codigo))
-          .map(offer => ({
+        const offersByCode = new Map((productOffers[pid] ?? []).map(offer => [offer.codigo, offer]))
+        return (selectedOfferCodes[pid] ?? []).map(codigo => {
+          const offer = offersByCode.get(codigo)
+          return {
             projeto_id: projectId,
             produto_id: pid,
-            oferta_codigo: offer.codigo,
-            oferta_nome: offer.nome,
-            oferta_preco: offer.preco,
-            oferta_moeda: offer.moeda,
-          }))
+            oferta_codigo: codigo,
+            oferta_nome: offer?.nome || codigo,
+            oferta_preco: offer?.preco ?? null,
+            oferta_moeda: offer?.moeda ?? null,
+          }
+        })
       })
       if (offerRows.length > 0) {
         await supabase.from('projeto_produto_ofertas').insert(offerRows)
