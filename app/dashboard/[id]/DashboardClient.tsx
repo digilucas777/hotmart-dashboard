@@ -1349,41 +1349,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         moeda: row.oferta_moeda,
       })
     })
-    await Promise.all(
-      products.map(async (product) => {
-        if (!product.hotmart_id) return
-        try {
-          const res = await fetch(`/api/hotmart/offers?product_id=${product.hotmart_id}`, {
-            signal: AbortSignal.timeout(3000),
-          })
-          if (!res.ok) return
-          const { offers } = await res.json() as { offers: { code: string; name: string; price: number | null; currency: string }[] }
-          if (!offers?.length) return
-          const produtoId = product.id
-          if (!offersByProduct[produtoId]) offersByProduct[produtoId] = []
-          for (const offer of offers) {
-            if (!offer.code) continue
-            const existing = offersByProduct[produtoId]!.find(o => o.codigo === offer.code)
-            if (existing) {
-              if (!existing.nome || existing.nome === '(sem nome)') existing.nome = offer.name || '(sem nome)'
-              if (existing.preco == null && offer.price != null) existing.preco = offer.price
-              if (!existing.moeda && offer.currency) existing.moeda = offer.currency
-            } else {
-              offersByProduct[produtoId]!.push({
-                produto_id: produtoId,
-                codigo: offer.code,
-                nome: offer.name || '(sem nome)',
-                preco: offer.price,
-                moeda: offer.currency,
-              })
-            }
-          }
-        } catch {
-          // falha silenciosa — ofertas da API são complementares
-        }
-      })
-    )
-
     Object.values(offersByProduct).forEach(offers => {
       offers.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
     })
