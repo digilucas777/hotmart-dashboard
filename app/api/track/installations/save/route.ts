@@ -85,7 +85,12 @@ export async function POST(request: Request) {
   } else {
     const { data: inserted, error } = await supabase
       .from('track_installations')
-      .insert({ ...installationFields, user_id: user.id, webhook_secret: crypto.randomBytes(24).toString('hex') })
+      .insert({
+        ...installationFields,
+        user_id: user.id,
+        webhook_secret: crypto.randomBytes(24).toString('hex'),
+        ingest_secret: crypto.randomBytes(24).toString('hex'),
+      })
       .select('id')
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
