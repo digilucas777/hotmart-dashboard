@@ -97,6 +97,7 @@ const METRIC_SOURCES: { value: WidgetDataSource; label: string }[] = [
   { value: 'total_usd',       label: 'Faturamento USD' },
   { value: 'sales_count',     label: 'Vendas Aprovadas' },
   { value: 'approval_rate',   label: 'Taxa de Aprovação' },
+  { value: 'refund_rate',     label: 'Taxa de Reembolso (Reembolso+Chargeback+Reclamado)' },
   { value: 'avg_ticket',      label: 'Ticket Médio' },
   { value: 'refunds_count',   label: 'Reembolsos' },
   { value: 'chargebacks_count', label: 'Chargebacks' },

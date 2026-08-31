@@ -107,6 +107,7 @@ export type WidgetDataSource =
   | 'total_usd'
   | 'sales_count'
   | 'approval_rate'
+  | 'refund_rate'
   | 'avg_ticket'
   | 'refunds_count'
   | 'chargebacks_count'

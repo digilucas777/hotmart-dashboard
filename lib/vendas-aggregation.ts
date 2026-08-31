@@ -64,6 +64,10 @@ export function computeComparableFromSummary(
       return approved.cnt
     case 'approval_rate':
       return totalCount > 0 ? (approved.cnt / totalCount) * 100 : 0
+    case 'refund_rate': {
+      const descontosCnt = sumWhere(summary, r => r.status === 'refunded' || r.status === 'chargeback' || r.status === 'disputed').cnt
+      return approved.cnt > 0 ? (descontosCnt / approved.cnt) * 100 : 0
+    }
     case 'avg_ticket':
       return approved.cnt > 0 ? totalConverted / approved.cnt : 0
     case 'refunds_count':
@@ -142,6 +146,11 @@ export function computeWidgetDataFromSummary(
       return { kind: 'metric', value: String(approved.cnt), subValue: `${approvalRate.toFixed(1)}% de aprovação` }
     case 'approval_rate':
       return { kind: 'metric', value: `${approvalRate.toFixed(1)}%`, subValue: `${approved.cnt} de ${totalCount} vendas` }
+    case 'refund_rate': {
+      const descontosCnt = sumWhere(summary, r => r.status === 'refunded' || r.status === 'chargeback' || r.status === 'disputed').cnt
+      const percent = approved.cnt > 0 ? (descontosCnt / approved.cnt) * 100 : 0
+      return { kind: 'metric', value: `${percent.toFixed(1)}%`, subValue: `${descontosCnt} de ${approved.cnt} vendas aprovadas` }
+    }
     case 'avg_ticket':
       return { kind: 'metric', value: formatBRL(avgTicket), subValue: approved.cnt > 0 ? `${approved.cnt} aprovadas` : 'Sem vendas' }
     case 'refunds_count': {

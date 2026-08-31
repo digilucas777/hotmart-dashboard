@@ -227,7 +227,6 @@ export type CombinedPoint = {
   approved: number
   descontos: number
   descontosValor: number
-  descontoPercent: number
 }
 
 export type WidgetComputedData =
@@ -288,6 +287,11 @@ export function computeWidgetData(
       return { kind: 'metric', value: String(approved.length), subValue: `${approvalRate.toFixed(1)}% de aprovação` }
     case 'approval_rate':
       return { kind: 'metric', value: `${approvalRate.toFixed(1)}%`, subValue: `${approved.length} de ${vendas.length} vendas` }
+    case 'refund_rate': {
+      const descontos = refunded.length + chargebacks.length + disputed.length
+      const percent = approved.length > 0 ? (descontos / approved.length) * 100 : 0
+      return { kind: 'metric', value: `${percent.toFixed(1)}%`, subValue: `${descontos} de ${approved.length} vendas aprovadas` }
+    }
     case 'avg_ticket':
       return { kind: 'metric', value: formatBRL(avgTicket), subValue: approved.length > 0 ? `${approved.length} aprovadas` : 'Sem vendas' }
     case 'refunds_count':
@@ -521,13 +525,13 @@ export function computeWidgetData(
       if (isHourly) {
         for (let h = 0; h < 24; h++) {
           const label = `${h.toString().padStart(2, '0')}h`
-          buckets[label] = { label, valueBRL: 0, valueUSD: 0, approved: 0, descontos: 0, descontosValor: 0, descontoPercent: 0 }
+          buckets[label] = { label, valueBRL: 0, valueUSD: 0, approved: 0, descontos: 0, descontosValor: 0 }
         }
       } else {
         let cursor = new Date(from)
         while (cursor < to) {
           const label = `${cursor.getDate().toString().padStart(2, '0')}/${(cursor.getMonth() + 1).toString().padStart(2, '0')}`
-          buckets[label] = { label, valueBRL: 0, valueUSD: 0, approved: 0, descontos: 0, descontosValor: 0, descontoPercent: 0 }
+          buckets[label] = { label, valueBRL: 0, valueUSD: 0, approved: 0, descontos: 0, descontosValor: 0 }
           cursor = new Date(cursor.getTime() + 86_400_000)
         }
       }
@@ -553,11 +557,6 @@ export function computeWidgetData(
           const amount = getOfficialSaleAmount(v)
           buckets[label].descontosValor += v.moeda === 'USD' ? amount * exchangeRate : amount
         }
-      })
-
-      Object.values(buckets).forEach(p => {
-        const approvedConverted = p.valueBRL + p.valueUSD * exchangeRate
-        p.descontoPercent = approvedConverted > 0 ? (p.descontosValor / approvedConverted) * 100 : 0
       })
 
       return { kind: 'combined', points: Object.values(buckets) }
@@ -591,6 +590,10 @@ export function computeComparableMetric(
       return approved.length
     case 'approval_rate':
       return vendas.length > 0 ? (approved.length / vendas.length) * 100 : 0
+    case 'refund_rate': {
+      const descontos = vendas.filter(v => v.status === 'refunded' || v.status === 'chargeback' || v.status === 'disputed').length
+      return approved.length > 0 ? (descontos / approved.length) * 100 : 0
+    }
     case 'avg_ticket':
       return approved.length > 0 ? totalConverted / approved.length : 0
     case 'refunds_count':
