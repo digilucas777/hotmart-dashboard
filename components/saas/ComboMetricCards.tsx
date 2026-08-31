@@ -17,6 +17,7 @@ const SALES_CARDS: { source: WidgetDataSource; title: string }[] = [
   { source: 'disputed_count', title: 'Reclamadas' },
   { source: 'cancelled_count', title: 'Canceladas' },
   { source: 'approval_rate', title: 'Taxa de Aprovação' },
+  { source: 'refund_rate', title: 'Taxa de Reembolso' },
 ]
 
 // As 4 métricas que realmente importam num combinado de tráfego (faturamento,
@@ -45,7 +46,12 @@ function HighlightCard({
   return (
     <div className={`min-w-0 rounded-2xl border ${theme.border} ${theme.bg} p-4 sm:p-5`}>
       <p className={`truncate text-xs font-bold uppercase tracking-wide ${theme.label}`}>{title}</p>
-      <p className={`mt-2 break-words text-xl font-black sm:text-2xl lg:text-3xl ${theme.text}`}>{value}</p>
+      {/* Sem break-words de propósito: "R$ 120.796,80" não tem espaço a não ser
+          depois do "R$", então um wrap forçado cortava no meio do número
+          ("120.796,8" / "0"). Sem break-words, o navegador só quebra em
+          espaço — na pior das hipóteses "R$" cai numa linha e o valor na
+          outra, nunca corta um dígito ao meio. */}
+      <p className={`mt-2 text-lg font-black sm:text-xl lg:text-2xl xl:text-3xl ${theme.text}`}>{value}</p>
       <p className="mt-1 truncate text-xs text-slate-500">{subValue}</p>
     </div>
   )
@@ -75,8 +81,11 @@ export function ComboMetricCards({
 
   return (
     <div className="space-y-5">
-      {/* Métricas-chave: faturamento, gasto, lucro, ROAS, comissão — com destaque de cor */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      {/* Métricas-chave: faturamento, gasto, lucro, ROAS, comissão — com destaque de cor.
+          5 colunas só a partir de xl: com lg:grid-cols-5 o card ficava mais estreito
+          bem na hora em que a fonte também crescia (lg:text-3xl), as duas mudanças
+          batendo de frente e estourando números grandes tipo "R$ 120.796,80". */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
         {faturamento && faturamento.kind === 'metric' && (
           <HighlightCard theme={HIGHLIGHT_THEME.faturamento} title="Faturamento" value={faturamento.value} subValue={faturamento.subValue} />
         )}
