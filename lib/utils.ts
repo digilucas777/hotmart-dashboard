@@ -225,7 +225,9 @@ export type CombinedPoint = {
   valueBRL: number
   valueUSD: number
   approved: number
-  reembolsos: number
+  descontos: number
+  descontosValor: number
+  descontoPercent: number
 }
 
 export type WidgetComputedData =
@@ -519,16 +521,21 @@ export function computeWidgetData(
       if (isHourly) {
         for (let h = 0; h < 24; h++) {
           const label = `${h.toString().padStart(2, '0')}h`
-          buckets[label] = { label, valueBRL: 0, valueUSD: 0, approved: 0, reembolsos: 0 }
+          buckets[label] = { label, valueBRL: 0, valueUSD: 0, approved: 0, descontos: 0, descontosValor: 0, descontoPercent: 0 }
         }
       } else {
         let cursor = new Date(from)
         while (cursor < to) {
           const label = `${cursor.getDate().toString().padStart(2, '0')}/${(cursor.getMonth() + 1).toString().padStart(2, '0')}`
-          buckets[label] = { label, valueBRL: 0, valueUSD: 0, approved: 0, reembolsos: 0 }
+          buckets[label] = { label, valueBRL: 0, valueUSD: 0, approved: 0, descontos: 0, descontosValor: 0, descontoPercent: 0 }
           cursor = new Date(cursor.getTime() + 86_400_000)
         }
       }
+
+      // "Descontos" = reembolso + chargeback + reclamado (qualquer coisa que tira dinheiro de
+      // uma venda já aprovada). Cancelado fica de fora de propósito: nunca chegou a contar como
+      // faturamento aprovado, então não é um desconto sobre o que já foi ganho.
+      const isDesconto = (status: string) => status === 'refunded' || status === 'chargeback' || status === 'disputed'
 
       vendas.forEach(v => {
         const d = new Date(v.data_venda)
@@ -541,9 +548,16 @@ export function computeWidgetData(
           buckets[label].approved += 1
           if (v.moeda === 'BRL') buckets[label].valueBRL += getOfficialSaleAmount(v)
           else buckets[label].valueUSD += getOfficialSaleAmount(v)
-        } else if (v.status === 'refunded') {
-          buckets[label].reembolsos += 1
+        } else if (isDesconto(v.status)) {
+          buckets[label].descontos += 1
+          const amount = getOfficialSaleAmount(v)
+          buckets[label].descontosValor += v.moeda === 'USD' ? amount * exchangeRate : amount
         }
+      })
+
+      Object.values(buckets).forEach(p => {
+        const approvedConverted = p.valueBRL + p.valueUSD * exchangeRate
+        p.descontoPercent = approvedConverted > 0 ? (p.descontosValor / approvedConverted) * 100 : 0
       })
 
       return { kind: 'combined', points: Object.values(buckets) }

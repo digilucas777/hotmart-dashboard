@@ -19,14 +19,16 @@ const LEGEND_LABELS: Record<string, string> = {
   valueBRL: 'Faturamento BRL',
   valueUSD: 'Faturamento USD',
   approved: 'Aprovadas',
-  reembolsos: 'Reembolsos',
+  descontos: 'Reembolso + Chargeback',
+  descontoPercent: '% Descontos',
 }
 
 const SERIES_COLORS: Record<string, string> = {
   valueBRL: '#22c55e',
   valueUSD: '#a855f7',
   approved: '#0ea5e9',
-  reembolsos: '#ef4444',
+  descontos: '#ef4444',
+  descontoPercent: '#f59e0b',
 }
 
 function CustomTooltip({
@@ -50,8 +52,8 @@ function CustomTooltip({
             ? formatBRL(p.value)
             : p.dataKey === 'valueUSD'
               ? formatUSD(p.value)
-              : p.dataKey === 'approved'
-                ? p.value
+              : p.dataKey === 'descontoPercent'
+                ? `${p.value.toFixed(1)}%`
                 : p.value}
           </span>
         </p>
@@ -75,6 +77,16 @@ export function CombinedChartWidget({
     return data.kind === 'combined' ? data.points : []
   }, [vendas, internalPeriod])
 
+  // Resumo do período inteiro (não só do dia): soma os buckets em vez de recalcular a partir de
+  // `vendas` de novo, pra usar exatamente os mesmos números que já aparecem no gráfico/tooltip.
+  const totals = useMemo(() => {
+    const approvedConverted = points.reduce((s, p) => s + p.valueBRL + p.valueUSD, 0)
+    const descontosCount = points.reduce((s, p) => s + p.descontos, 0)
+    const descontosValor = points.reduce((s, p) => s + p.descontosValor, 0)
+    const percent = approvedConverted > 0 ? (descontosValor / approvedConverted) * 100 : 0
+    return { descontosCount, descontosValor, percent }
+  }, [points])
+
   const periods: { value: Period; label: string }[] = [
     { value: 'today', label: 'Hoje' },
     { value: 'thisWeek', label: 'Esta semana' },
@@ -92,7 +104,14 @@ export function CombinedChartWidget({
           </div>
           <div>
             <h3 className="text-base font-bold text-[var(--dash-text)]">{title}</h3>
-            <p className="text-xs text-[var(--dash-faint)]">Desempenho diário de vendas</p>
+            <p className="text-xs text-[var(--dash-faint)]">
+              Desempenho diário de vendas
+              {totals.descontosCount > 0 && (
+                <span className="text-red-400">
+                  {' · '}Descontos no período: {totals.descontosCount} ({formatBRL(totals.descontosValor)}) — {totals.percent.toFixed(1)}% do faturamento
+                </span>
+              )}
+            </p>
           </div>
         </div>
         <div className="flex rounded-lg bg-white/5 p-1">
@@ -140,6 +159,7 @@ export function CombinedChartWidget({
             tickLine={false}
             width={30}
           />
+          <YAxis yAxisId="percent" hide domain={[0, 100]} />
           <Tooltip content={<CustomTooltip />} />
           <Legend
             verticalAlign="top"
@@ -185,12 +205,23 @@ export function CombinedChartWidget({
           <Line
             yAxisId="count"
             type="monotone"
-            dataKey="reembolsos"
-            name="reembolsos"
-            stroke={SERIES_COLORS.reembolsos}
+            dataKey="descontos"
+            name="descontos"
+            stroke={SERIES_COLORS.descontos}
             strokeWidth={2}
-            dot={{ r: 3, fill: SERIES_COLORS.reembolsos, strokeWidth: 0 }}
-            activeDot={{ r: 5, fill: SERIES_COLORS.reembolsos, stroke: '#fee2e2', strokeWidth: 2 }}
+            dot={{ r: 3, fill: SERIES_COLORS.descontos, strokeWidth: 0 }}
+            activeDot={{ r: 5, fill: SERIES_COLORS.descontos, stroke: '#fee2e2', strokeWidth: 2 }}
+          />
+          <Line
+            yAxisId="percent"
+            type="monotone"
+            dataKey="descontoPercent"
+            name="descontoPercent"
+            stroke={SERIES_COLORS.descontoPercent}
+            strokeWidth={2}
+            strokeDasharray="4 3"
+            dot={{ r: 3, fill: SERIES_COLORS.descontoPercent, strokeWidth: 0 }}
+            activeDot={{ r: 5, fill: SERIES_COLORS.descontoPercent, stroke: '#fef3c7', strokeWidth: 2 }}
           />
         </ComposedChart>
       </ResponsiveContainer>
