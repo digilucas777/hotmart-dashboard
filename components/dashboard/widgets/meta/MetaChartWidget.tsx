@@ -92,13 +92,18 @@ export function MetaChartWidget({
           )}
           {isDemo && (
             <span className="rounded-full bg-slate-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-400/50">
-              Demo
+              (sem dados)
             </span>
           )}
         </div>
       </div>
 
       {/* Chart */}
+      {data.points.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center text-xs font-semibold text-[var(--dash-faint)]" style={{ height: chartHeight }}>
+          (sem dados)
+        </div>
+      ) : (
       <div className="flex-1 px-2 pb-3 pt-1" style={{ height: chartHeight }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data.points} margin={{ top: 4, right: 8, bottom: 0, left: -12 }}>
@@ -157,6 +162,7 @@ export function MetaChartWidget({
           </LineChart>
         </ResponsiveContainer>
       </div>
+      )}
     </div>
   )
 }

@@ -22,8 +22,8 @@ export function MetaFunnelWidget({ title, data, isDemo = true }: { title: string
           <p className="text-sm font-bold text-[var(--dash-text)]">{title}</p>
         </div>
         {isDemo && (
-          <span className="rounded-full bg-cyan-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-cyan-300/70">
-            Demo
+          <span className="rounded-full bg-white/5 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-[var(--dash-faint)]">
+            (sem dados)
           </span>
         )}
       </div>

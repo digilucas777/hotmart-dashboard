@@ -17,13 +17,18 @@ export function MetaCreativeWidget({ title, data, isDemo = true }: { title: stri
           <p className="text-sm font-bold text-[var(--dash-text)]">{title}</p>
         </div>
         {isDemo && (
-          <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-400/60">
-            Demo
+          <span className="rounded-full bg-white/5 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-[var(--dash-faint)]">
+            (sem dados)
           </span>
         )}
       </div>
 
       {/* Creative rows */}
+      {data.creatives.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center text-xs font-semibold text-[var(--dash-faint)]">
+          (sem dados)
+        </div>
+      ) : (
       <div className="flex-1 overflow-auto">
         {data.creatives.slice(0, 6).map((cr, i) => (
           <div
@@ -85,6 +90,7 @@ export function MetaCreativeWidget({ title, data, isDemo = true }: { title: stri
           </div>
         ))}
       </div>
+      )}
     </div>
   )
 }

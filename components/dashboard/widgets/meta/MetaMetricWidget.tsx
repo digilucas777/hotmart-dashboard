@@ -54,7 +54,7 @@ export function MetaMetricWidget({ title, data, isDemo = true, isPersonalizado =
           <div>
             <p
               className="text-2xl font-black leading-none tracking-tight sm:text-3xl"
-              style={{ color: data.accentColor }}
+              style={{ color: isDemo ? 'var(--dash-faint)' : data.accentColor }}
             >
               {fmtUSD(data.valueUsd!)}
             </p>
@@ -65,18 +65,15 @@ export function MetaMetricWidget({ title, data, isDemo = true, isPersonalizado =
         ) : (
           <p
             className="text-2xl font-black leading-none tracking-tight sm:text-3xl"
-            style={{ color: data.accentColor }}
+            style={{ color: isDemo ? 'var(--dash-faint)' : data.accentColor }}
           >
             {formatValue(data.value, data.format)}
           </p>
         )}
+        {isDemo && (
+          <p className="mt-1 text-[11px] font-semibold text-[var(--dash-faint)]">(sem dados)</p>
+        )}
       </div>
-
-      {isDemo && (
-        <span className="absolute bottom-3 right-4 rounded-full bg-amber-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-400/60">
-          Demo
-        </span>
-      )}
     </div>
   )
 }
