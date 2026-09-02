@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Target, Plus, Pencil, Trash2, HelpCircle, AlertTriangle, Copy, Check, BarChart3, ChevronDown, ChevronRight, ScanSearch } from 'lucide-react'
+import { Target, Plus, Pencil, Trash2, HelpCircle, AlertTriangle, Copy, Check, BarChart3, ChevronDown, ChevronRight, ScanSearch, Code2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -30,9 +30,13 @@ export default function RastreamentoPage() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [checkingAccess, setCheckingAccess] = useState(true)
   const [expandedEvents, setExpandedEvents] = useState<string | null>(null)
+  const [expandedScript, setExpandedScript] = useState<string | null>(null)
 
   function toggleEvents(id: string) {
     setExpandedEvents(prev => (prev === id ? null : id))
+  }
+  function toggleScript(id: string) {
+    setExpandedScript(prev => (prev === id ? null : id))
   }
 
   const fetchInstallations = useCallback(async () => {
@@ -226,7 +230,30 @@ export default function RastreamentoPage() {
                   </div>
                 </div>
 
-                {inst.status === 'deployed' && inst.worker_subdomain && (
+                {inst.status === 'deployed' && (
+                  <div className="mt-3 flex items-center gap-4 border-t pt-2.5" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                    {inst.worker_subdomain && (
+                      <button
+                        onClick={() => toggleScript(inst.id)}
+                        className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-300"
+                      >
+                        {expandedScript === inst.id ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                        <Code2 size={12} />
+                        Script &amp; verificação
+                      </button>
+                    )}
+                    <button
+                      onClick={() => toggleEvents(inst.id)}
+                      className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-300"
+                    >
+                      {expandedEvents === inst.id ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                      <BarChart3 size={12} />
+                      Eventos
+                    </button>
+                  </div>
+                )}
+
+                {inst.status === 'deployed' && inst.worker_subdomain && expandedScript === inst.id && (
                   <div className="mt-3 space-y-2 rounded-lg p-2.5 ring-1 ring-white/10" style={{ background: '#111120' }}>
                     <p className="text-[10px] font-medium text-slate-500">Script pra colar na &lt;head&gt; da página</p>
                     <div className="flex items-center gap-2">
@@ -280,22 +307,10 @@ export default function RastreamentoPage() {
                   </div>
                 )}
 
-                {inst.status === 'deployed' && (
-                  <>
-                    <button
-                      onClick={() => toggleEvents(inst.id)}
-                      className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-300"
-                    >
-                      {expandedEvents === inst.id ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                      <BarChart3 size={12} />
-                      Eventos
-                    </button>
-                    {expandedEvents === inst.id && (
-                      <div className="mt-3">
-                        <EventsPanel installationId={inst.id} />
-                      </div>
-                    )}
-                  </>
+                {inst.status === 'deployed' && expandedEvents === inst.id && (
+                  <div className="mt-3">
+                    <EventsPanel installationId={inst.id} />
+                  </div>
                 )}
               </div>
             ))}
