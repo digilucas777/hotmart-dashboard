@@ -34,6 +34,8 @@ type Summary = {
     with_fbc_pct: number | null
     purchase_session_matched_pct: number | null
   }
+  vendas_trackeadas: number
+  vendas_nao_trackeadas: number
 }
 
 type EventName = 'PageView' | 'ViewContent' | 'AddToCart' | 'InitiateCheckout' | 'Purchase'
@@ -113,15 +115,6 @@ function dayRangeToISO(dateKey: string): { start: string; end: string } {
   const start = new Date(y, m - 1, d, 0, 0, 0, 0)
   const end = new Date(y, m - 1, d + 1, 0, 0, 0, 0)
   return { start: start.toISOString(), end: end.toISOString() }
-}
-
-// Meia-noite local até agora — pro bloco "Ao vivo" do topo. Diferente de
-// dayRangeToISO (dia inteiro, usado no filtro por data): aqui o fim é sempre
-// "agora", pra não incluir amanhã nem sobrar hora de ontem.
-function todayRangeToISO(): { start: string; end: string } {
-  const now = new Date()
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
-  return { start: start.toISOString(), end: now.toISOString() }
 }
 
 function geoLabel(e: RecentEvent): string | null {
@@ -298,14 +291,17 @@ export function EventsPanel({ installationId }: { installationId: string }) {
 
   useEffect(() => { sectionsRef.current = sections }, [sections])
 
-  async function load(showSpinner: boolean) {
+  async function load(showSpinner: boolean, dateKey: string = selectedDateRef.current) {
     if (showSpinner) setLoading(true)
     setError(null)
-    const { start, end } = todayRangeToISO()
+    const { start, end } = dayRangeToISO(dateKey)
     const params = new URLSearchParams({ installation_id: installationId, start, end })
     const res = await fetch(`/api/track/events/summary?${params.toString()}`)
     const json = await res.json().catch(() => ({}))
     if (!isMountedRef.current) return
+    // Mesma proteção do fetchSection: se a data já mudou de novo enquanto
+    // essa resposta estava a caminho, descarta.
+    if (dateKey !== selectedDateRef.current) return
     if (!res.ok) {
       setError(json?.error || 'Não foi possível carregar os eventos.')
       setLoading(false)
@@ -368,6 +364,7 @@ export function EventsPanel({ installationId }: { installationId: string }) {
   function handleDateChange(newDate: string) {
     setSelectedDate(newDate)
     selectedDateRef.current = newDate
+    void load(true, newDate)
     EVENT_TYPES.forEach(ev => {
       if (sections[ev].open) void fetchSection(ev, newDate, 0, false)
     })
@@ -395,19 +392,17 @@ export function EventsPanel({ installationId }: { installationId: string }) {
     isMountedRef.current = true
     void load(true)
     // Painel "ao vivo": atualiza sozinho enquanto estiver aberto, sem precisar
-    // clicar em Atualizar toda hora. Seções abertas só atualizam sozinhas
-    // quando a data selecionada é hoje — um dia passado é histórico, fica
-    // parado até o usuário trocar a data. O refresh mantém o tamanho da
-    // página que já tava carregada (não desfaz o "carregar mais").
+    // clicar em Atualizar toda hora — só quando a data selecionada é hoje,
+    // já que um dia passado é histórico e não muda mais. O refresh mantém o
+    // tamanho da página que já tava carregada (não desfaz o "carregar mais").
     const interval = setInterval(() => {
-      void load(false)
       const today = toLocalDateKey(new Date())
-      if (selectedDateRef.current === today) {
-        EVENT_TYPES.forEach(ev => {
-          const sec = sectionsRef.current[ev]
-          if (sec.open) void fetchSection(ev, selectedDateRef.current, 0, false, sec.events?.length || PAGE_SIZE)
-        })
-      }
+      if (selectedDateRef.current !== today) return
+      void load(false)
+      EVENT_TYPES.forEach(ev => {
+        const sec = sectionsRef.current[ev]
+        if (sec.open) void fetchSection(ev, selectedDateRef.current, 0, false, sec.events?.length || PAGE_SIZE)
+      })
     }, REFRESH_INTERVAL_MS)
     return () => {
       isMountedRef.current = false
@@ -420,25 +415,49 @@ export function EventsPanel({ installationId }: { installationId: string }) {
   if (error) return <p className="py-3 text-xs text-red-300">{error}</p>
   if (!summary) return null
 
+  const isToday = selectedDate === toLocalDateKey(new Date())
+  const selectedDateLabel = dateOptions().find(o => o.value === selectedDate)?.label ?? selectedDate
+
   return (
     <div className="space-y-4 border-t border-white/10 pt-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          <span className="relative flex h-1.5 w-1.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
-          </span>
-          Ao vivo — hoje
+          {isToday ? (
+            <>
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
+              </span>
+              Ao vivo — hoje
+            </>
+          ) : (
+            <>
+              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-slate-600" />
+              Resumo — {selectedDateLabel}
+            </>
+          )}
         </p>
-        <button
-          onClick={() => void handleManualRefresh()}
-          disabled={manualRefreshing}
-          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-indigo-300 ring-1 ring-indigo-500/30 transition-colors hover:bg-indigo-500/15 hover:text-indigo-100 disabled:opacity-60"
-          style={{ background: 'rgba(99,102,241,0.1)' }}
-        >
-          {manualRefreshing ? <Spinner size={13} /> : <RefreshCw size={13} />}
-          {manualRefreshing ? 'Atualizando...' : 'Atualizar'}
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            value={selectedDate}
+            onChange={e => handleDateChange(e.target.value)}
+            className="rounded-md border border-white/10 px-2 py-1 text-xs text-slate-300"
+            style={{ background: '#111120' }}
+          >
+            {dateOptions().map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => void handleManualRefresh()}
+            disabled={manualRefreshing}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-indigo-300 ring-1 ring-indigo-500/30 transition-colors hover:bg-indigo-500/15 hover:text-indigo-100 disabled:opacity-60"
+            style={{ background: 'rgba(99,102,241,0.1)' }}
+          >
+            {manualRefreshing ? <Spinner size={13} /> : <RefreshCw size={13} />}
+            {manualRefreshing ? 'Atualizando...' : 'Atualizar'}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-2">
@@ -451,6 +470,21 @@ export function EventsPanel({ installationId }: { installationId: string }) {
         ))}
       </div>
 
+      {(summary.vendas_trackeadas > 0 || summary.vendas_nao_trackeadas > 0) && (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-xl p-3 text-center ring-1 ring-green-500/20" style={{ background: 'rgba(34,197,94,0.08)' }}>
+            <div className="text-lg font-bold text-green-400">{summary.vendas_trackeadas}</div>
+            <div className="text-[10px] text-green-300/70">Vendas trackeadas</div>
+          </div>
+          <div className="rounded-xl p-3 text-center ring-1 ring-amber-500/20" style={{ background: 'rgba(245,158,11,0.08)' }}>
+            <div className="text-lg font-bold text-amber-400">{summary.vendas_nao_trackeadas}</div>
+            <div className="text-[10px] text-amber-300/70" title="Venda registrada mas não enviada à Meta — filtrada pelo 'exigir -tracker no src' ou pela lista de produtos">
+              Vendas não trackeadas
+            </div>
+          </div>
+        </div>
+      )}
+
       {summary.coverage_today.total > 0 && (
         <div className="space-y-2.5 rounded-xl p-3 ring-1 ring-white/10" style={{ background: '#111120' }}>
           <CoverageBar label="Eventos com fbp" pct={summary.coverage_today.with_fbp_pct} />
@@ -460,19 +494,7 @@ export function EventsPanel({ installationId }: { installationId: string }) {
       )}
 
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Eventos por dia</p>
-          <select
-            value={selectedDate}
-            onChange={e => handleDateChange(e.target.value)}
-            className="rounded-md border border-white/10 px-2 py-1 text-xs text-slate-300"
-            style={{ background: '#111120' }}
-          >
-            {dateOptions().map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        </div>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Eventos</p>
         <div className="space-y-2">
           {EVENT_TYPES.map(eventName => (
             <EventTypeSection

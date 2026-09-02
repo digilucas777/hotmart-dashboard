@@ -54,7 +54,7 @@ export async function GET(request: Request) {
 
   const [
     pageView, viewContent, addToCart, initiateCheckout, purchase,
-    capiTotal, withFbp, withFbc, purchaseTotal, purchaseMatched,
+    capiTotal, withFbp, withFbc, purchaseTotal, purchaseMatched, purchaseNaoTrackeada,
   ] = await Promise.all([
     baseQuery().eq('event_name', 'PageView'),
     baseQuery().eq('event_name', 'ViewContent'),
@@ -66,9 +66,14 @@ export async function GET(request: Request) {
     baseQuery().eq('source', 'capi').not('fbc', 'is', null),
     baseQuery().eq('source', 'capi').eq('event_name', 'Purchase'),
     baseQuery().eq('source', 'capi').eq('event_name', 'Purchase').eq('session_hit', true),
+    // "pixel" = a venda foi registrada mas NÃO foi enviada à Meta (filtrada
+    // pelo REQUIRE_TRACKER_SRC ou pela lista de produtos) — não é falha, é o
+    // filtro funcionando, mas o usuário precisa ver que existe pra não achar
+    // que a venda "sumiu".
+    baseQuery().eq('source', 'pixel').eq('event_name', 'Purchase'),
   ])
 
-  const firstError = [pageView, viewContent, addToCart, initiateCheckout, purchase, capiTotal, withFbp, withFbc, purchaseTotal, purchaseMatched]
+  const firstError = [pageView, viewContent, addToCart, initiateCheckout, purchase, capiTotal, withFbp, withFbc, purchaseTotal, purchaseMatched, purchaseNaoTrackeada]
     .find(r => r.error)?.error
   if (firstError) return NextResponse.json({ error: firstError.message }, { status: 500 })
 
@@ -89,5 +94,7 @@ export async function GET(request: Request) {
       with_fbc_pct: capiTotalCount > 0 ? Math.round(((withFbc.count ?? 0) / capiTotalCount) * 100) : null,
       purchase_session_matched_pct: purchaseTotalCount > 0 ? Math.round(((purchaseMatched.count ?? 0) / purchaseTotalCount) * 100) : null,
     },
+    vendas_trackeadas: purchaseTotalCount,
+    vendas_nao_trackeadas: purchaseNaoTrackeada.count ?? 0,
   })
 }
