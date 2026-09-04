@@ -227,6 +227,7 @@ export default function SitesPage() {
 
   const [editPage, setEditPage] = useState<MonitoredPage | null>(null)
   const [editPageNome, setEditPageNome] = useState('')
+  const [editPageUrl, setEditPageUrl] = useState('')
   const [editPageFolderId, setEditPageFolderId] = useState<string | null>(null)
   const [savingEditPage, setSavingEditPage] = useState(false)
 
@@ -487,15 +488,25 @@ export default function SitesPage() {
   function openEditPage(page: MonitoredPage) {
     setEditPage(page)
     setEditPageNome(page.nome ?? '')
+    setEditPageUrl(page.url)
     setEditPageFolderId(page.pasta_id)
   }
 
   async function handleSavePageEdit() {
-    if (!editPage || !userId) return
+    if (!editPage || !userId || !editPageUrl.trim()) return
     setSavingEditPage(true)
+    // Muda a URL de verdade zera o histórico de checagem (status antigo não
+    // significa nada pra um endereço novo) — senão a página aparece com um
+    // status "No ar"/"Fora do ar" de uma URL que não é mais a que ela aponta.
+    const urlChanged = editPageUrl.trim() !== editPage.url
     await supabase
       .from('monitored_pages')
-      .update({ nome: editPageNome.trim() || null, pasta_id: editPageFolderId })
+      .update({
+        nome: editPageNome.trim() || null,
+        url: editPageUrl.trim(),
+        pasta_id: editPageFolderId,
+        ...(urlChanged ? { ultimo_status: null, ultimo_status_code: null, ultimo_tempo_ms: null, ultima_checagem_em: null, ultimo_status_cloaker: null } : {}),
+      })
       .eq('id', editPage.id)
     setSavingEditPage(false)
     setEditPage(null)
@@ -1210,9 +1221,25 @@ export default function SitesPage() {
       <Modal open={!!editPage} onClose={() => setEditPage(null)} title="Editar página">
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-500">Nome (opcional)</label>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">URL *</label>
             <input
               autoFocus
+              type="text"
+              value={editPageUrl}
+              onChange={e => setEditPageUrl(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSavePageEdit()}
+              className="w-full rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 outline-none ring-1 ring-white/10 focus:ring-indigo-500/60"
+              style={{ background: '#111120' }}
+            />
+            {editPage && editPageUrl.trim() !== editPage.url && (
+              <p className="mt-1 text-[11px] text-amber-500">
+                Trocar a URL zera o histórico de checagem dessa página (status antigo era de outro endereço).
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">Nome (opcional)</label>
+            <input
               type="text"
               placeholder={editPage ? pagePath(editPage.url) : ''}
               value={editPageNome}
@@ -1245,7 +1272,7 @@ export default function SitesPage() {
           </div>
           <div className="flex gap-2 pt-1">
             <Button variant="ghost" className="flex-1" onClick={() => setEditPage(null)}>Cancelar</Button>
-            <Button className="flex-1" onClick={handleSavePageEdit} disabled={savingEditPage}>
+            <Button className="flex-1" onClick={handleSavePageEdit} disabled={!editPageUrl.trim() || savingEditPage}>
               {savingEditPage && <Spinner size={14} />}
               Salvar
             </Button>
