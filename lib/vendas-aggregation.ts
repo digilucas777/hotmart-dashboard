@@ -20,7 +20,7 @@ export type SummaryRow = { status: string; moeda: string; cnt: number; total: nu
 export async function fetchVendasSummary(projetoId: string, from: Date, to: Date, signal?: AbortSignal): Promise<SummaryRow[]> {
   const maxAttempts = 2
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    let query = supabase.rpc('get_vendas_summary', {
+    let query = supabase.rpc('get_vendas_summary_v2', {
       p_projeto_id: projetoId,
       p_from: from.toISOString(),
       p_to: to.toISOString(),

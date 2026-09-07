@@ -74,6 +74,9 @@ export async function GET(request: Request) {
         return
       }
 
+      const { error: refreshError } = await admin.rpc('refresh_vendas_resumo_diario_by_hotmart_id', { p_hotmart_id: venda.hotmart_id })
+      if (refreshError) console.error('[cron reconcile-disputed-sales] erro ao atualizar vendas_resumo_diario:', refreshError)
+
       corrigidas += 1
       resultados.push({ hotmart_id: venda.hotmart_id, de: venda.status, para: statusReal, status: 'corrigida' })
     } catch (err) {

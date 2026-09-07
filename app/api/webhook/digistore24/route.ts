@@ -101,6 +101,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    // Mantém vendas_resumo_diario em dia — mesma lógica do webhook da
+    // Hotmart, chave própria (digistore_id) já que essas vendas não têm
+    // hotmart_id.
+    after(async () => {
+      const { error: refreshError } = await supabase.rpc('refresh_vendas_resumo_diario_by_digistore_id', { p_digistore_id: transactionId })
+      if (refreshError) console.error('[webhook digistore24] erro ao atualizar vendas_resumo_diario:', refreshError)
+    })
+
     // Notificação push de venda — mesmo fluxo já usado pela Hotmart
     // (lib/push.ts). resolveNotifCategory espera o evento literal
     // 'PURCHASE_APPROVED' pra categorizar como "venda_realizada" (é assim

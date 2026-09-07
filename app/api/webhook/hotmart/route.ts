@@ -269,6 +269,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    // Mantém o resumo diário (vendas_resumo_diario) em dia — recalcula só o
+    // balde produto+oferta+dia dessa venda a partir de `vendas`, nunca some/
+    // subtrai delta em JS. Nunca pode atrasar nem quebrar a resposta do
+    // webhook, por isso roda em segundo plano com try/catch próprio.
+    if (transaction) {
+      after(async () => {
+        const { error: refreshError } = await supabase.rpc('refresh_vendas_resumo_diario_by_hotmart_id', { p_hotmart_id: transaction })
+        if (refreshError) console.error('[WEBHOOK] erro ao atualizar vendas_resumo_diario:', refreshError)
+      })
+    }
+
     // Hotmart às vezes não inclui tracking no payload do webhook mesmo quando existe na API.
     // Se origem ficou null, buscamos da API em background sem atrasar a resposta.
     // Tenta as duas contas porque a venda pode ter sido criada em qualquer uma delas.
@@ -379,6 +390,8 @@ export async function POST(req: NextRequest) {
             valor_recebido: roundMoney(produtorCorrigido),
           }).eq('hotmart_id', hotmartId)
           console.log(`[WEBHOOK EXOTIC FEE] ${hotmartId}: bruto=${brutoCorrigido} taxa=${taxaHotmart} valor=${valorCorrigido}`)
+          const { error: refreshError } = await supabase.rpc('refresh_vendas_resumo_diario_by_hotmart_id', { p_hotmart_id: hotmartId })
+          if (refreshError) console.error('[WEBHOOK EXOTIC FEE] erro ao atualizar vendas_resumo_diario:', refreshError)
           sendNotification(valorCorrigido)
         } catch (err) {
           console.error('[WEBHOOK EXOTIC FEE] erro:', err)

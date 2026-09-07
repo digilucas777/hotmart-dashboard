@@ -112,6 +112,9 @@ export async function GET(request: Request) {
         return
       }
 
+      const { error: refreshError } = await admin.rpc('refresh_vendas_resumo_diario_by_hotmart_id', { p_hotmart_id: venda.hotmart_id })
+      if (refreshError) console.error('[cron backfill-exotic-commissions] erro ao atualizar vendas_resumo_diario:', refreshError)
+
       corrigidas += 1
       resultados.push({ hotmart_id: venda.hotmart_id, status: 'corrigida', valor_corrigido: valorCorrigido })
     } catch (err) {
