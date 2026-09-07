@@ -788,18 +788,34 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                 .lte('data_venda', cursor.data)
                 .or(`data_venda.lt.${cursor.data},and(data_venda.eq.${cursor.data},id.lt.${cursor.id})`)
             }
-            const { data, error } = await query
-              .order('data_venda', { ascending: false })
-              .order('id', { ascending: false })
-              .limit(PAGE_SIZE)
-              .abortSignal(controller.signal)
+            const runPage = () =>
+              query
+                .order('data_venda', { ascending: false })
+                .order('id', { ascending: false })
+                .limit(PAGE_SIZE)
+                .abortSignal(controller.signal)
+
+            // Uma página isolada pode esbarrar num pico passageiro de carga no banco
+            // (ex: rajada de webhooks concorrentes) e estourar o statement_timeout —
+            // sem retry, isso derrubava a tabela inteira em vez de só demorar um
+            // pouco mais nessa página. 2 tentativas extras com espera curta.
+            let data: Venda[] | null = null
+            let error: { message: string } | null = null
+            for (let attempt = 0; attempt < 3; attempt++) {
+              const res = await runPage()
+              data = res.data as unknown as Venda[] | null
+              error = res.error
+              if (!error) break
+              if (isAbortError(error)) throw error
+              if (attempt < 2) await new Promise(r => setTimeout(r, 400 * (attempt + 1)))
+            }
             // Sem isso, uma página que estoura o statement_timeout (data: null, error setado)
             // era tratada igual a "acabaram as páginas" — devolvia dados parciais em silêncio.
             if (error) throw error
             if (!data || data.length === 0) break
-            all.push(...(data as unknown as Venda[]))
+            all.push(...data)
             if (data.length < PAGE_SIZE) break
-            const last = data[data.length - 1] as unknown as Venda
+            const last = data[data.length - 1]
             cursor = { data: last.data_venda, id: last.id }
           }
           return all
