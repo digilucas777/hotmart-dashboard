@@ -30,7 +30,7 @@ export function ComboClient({ comboId }: { comboId: string }) {
   const [showSwitcher, setShowSwitcher] = useState(false)
   const [showComboSection, setShowComboSection] = useState(false)
 
-  const [period, setPeriod] = useState<Period>('thisMonth')
+  const [period, setPeriod] = useState<Period>('today')
   const [customFrom, setCustomFrom] = useState<string>(() => {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
@@ -139,12 +139,27 @@ export function ComboClient({ comboId }: { comboId: string }) {
     setLoadingSummary(true)
     setSummaryError(false)
     try {
-      const results = await Promise.all(
+      // allSettled em vez de Promise.all: um projeto sozinho esbarrando num pico
+      // passageiro de carga (ex: rajada de webhooks) não pode derrubar a combinação
+      // inteira — mostra os que carregaram e loga o(s) que falharam, só marca erro
+      // de verdade se TODOS falharem.
+      const settled = await Promise.allSettled(
         combo.projeto_ids.map(id => fetchVendasSummary(id, from, to, controller.signal)),
       )
       if (controller.signal.aborted) return
-      setSummary(results.flat())
-      setSummaryByProjeto(combo.projeto_ids.map((id, i) => ({ projetoId: id, summary: results[i] ?? [] })))
+      const failedIds: string[] = []
+      const results = settled.map((r, i) => {
+        if (r.status === 'fulfilled') return r.value
+        failedIds.push(combo.projeto_ids[i]!)
+        return [] as SummaryRow[]
+      })
+      if (failedIds.length > 0) console.error('[combo] falha ao carregar resumo de:', failedIds)
+      if (failedIds.length === combo.projeto_ids.length) {
+        setSummaryError(true)
+      } else {
+        setSummary(results.flat())
+        setSummaryByProjeto(combo.projeto_ids.map((id, i) => ({ projetoId: id, summary: results[i] ?? [] })))
+      }
     } catch {
       if (!controller.signal.aborted) setSummaryError(true)
     } finally {
@@ -175,18 +190,29 @@ export function ComboClient({ comboId }: { comboId: string }) {
       if (hotmartIds.length === 0) {
         setVendas([])
       } else {
-        const { data } = await supabase
-          .from('vendas')
-          .select('*')
-          .in('hotmart_produto_id', hotmartIds)
-          .gte('data_venda', from.toISOString())
-          .lt('data_venda', to.toISOString())
-          .order('data_venda', { ascending: false })
-        setVendas((data ?? []) as Venda[])
+        // 2 tentativas extras: mesmo pico passageiro de carga que já derrubava as
+        // métricas acima também podia derrubar a tabela de Transações sem aviso.
+        let data: Venda[] | null = null
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const res = await supabase
+            .from('vendas')
+            .select('*')
+            .in('hotmart_produto_id', hotmartIds)
+            .gte('data_venda', from.toISOString())
+            .lt('data_venda', to.toISOString())
+            .order('data_venda', { ascending: false })
+            .abortSignal(controller.signal)
+          if (!res.error) { data = res.data as Venda[]; break }
+          if (controller.signal.aborted) throw res.error
+          if (attempt < 2) await new Promise(r => setTimeout(r, 400 * (attempt + 1)))
+        }
+        setVendas(data ?? [])
       }
+    } catch (err) {
+      if (!controller.signal.aborted) console.error('[combo] falha ao carregar transações:', err)
     } finally {
-      setLoadingVendas(false)
-      setLastUpdatedAt(new Date())
+      if (!controller.signal.aborted) setLoadingVendas(false)
+      if (!controller.signal.aborted) setLastUpdatedAt(new Date())
     }
   }, [combo, period, customDateRange])
 
@@ -470,7 +496,7 @@ export function ComboClient({ comboId }: { comboId: string }) {
               <Spinner size={24} />
             </div>
           ) : (
-            <SalesTable vendas={vendas} exchangeRate={exchangeRate} initialStatusFilter="all" />
+            <SalesTable key={comboId} vendas={vendas} exchangeRate={exchangeRate} initialStatusFilter="approved" />
           )}
         </div>
       </main>
