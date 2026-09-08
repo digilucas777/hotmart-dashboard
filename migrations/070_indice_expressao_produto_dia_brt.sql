@@ -1,0 +1,22 @@
+-- Item 1 da auditoria de performance (2026-09-08): refresh_vendas_resumo_diario_by_hotmart_id
+-- reconstrói o balde do dia filtrando por uma EXPRESSÃO
+-- ((data_venda at time zone 'America/Sao_Paulo')::date = $1), que não batia com nenhum
+-- índice existente — Postgres escaneava todo o histórico do produto e filtrava linha a
+-- linha. Medido com EXPLAIN ANALYZE real (produto com 11.333 vendas, 1 dia = 111 delas):
+-- 2.623ms, "Rows Removed by Filter: 11222".
+--
+-- timezone(text, timestamptz) é IMMUTABLE nesse Postgres (confirmado via pg_proc antes de
+-- criar o índice) — a expressão é indexável com segurança.
+--
+-- CONCURRENTLY porque `vendas` recebe escrita o tempo todo via webhook; um CREATE INDEX
+-- normal tomaria lock de escrita na tabela enquanto constrói. Por isso essa migration não
+-- roda dentro da transação padrão do runner de migrations — foi aplicada manualmente via
+-- execute_sql e só fica registrada aqui pro histórico.
+--
+-- Resultado após criar o índice (mesmo EXPLAIN ANALYZE, mesmos parâmetros): 97,7ms,
+-- "Rows Removed by Filter: 14" — 26,8x mais rápido, usando "Index Scan using
+-- idx_vendas_produto_dia_brt" em vez de "Bitmap Heap Scan".
+--
+-- ROLLBACK: drop index concurrently if exists idx_vendas_produto_dia_brt;
+create index concurrently if not exists idx_vendas_produto_dia_brt
+on vendas (hotmart_produto_id, ((data_venda at time zone 'America/Sao_Paulo')::date));

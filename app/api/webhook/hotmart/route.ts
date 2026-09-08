@@ -162,6 +162,13 @@ export async function POST(req: NextRequest) {
 
     const hotmartId: string | null = dados.purchase?.transaction ?? null
     const hasCoprod: boolean = dados.product?.has_co_production === true
+    // Moeda exótica + coprodução: o bloco de correção mais abaixo já recalcula o valor
+    // real e chama refresh_vendas_resumo_diario_by_hotmart_id sozinho, depois de corrigir
+    // — computado aqui (antes de qualquer valor mudar, mesma condição usada mais abaixo
+    // pra entrar nesse bloco) pra decidir se pula o refresh "normal" logo em seguida,
+    // evitando rodar a mesma função 2x pra essa venda (cada chamada segura o advisory
+    // lock do balde por ~100ms a 2,6s).
+    const vaiCorrigirMoedaExotica: boolean = !!hotmartId && hasCoprod && priceCurrency !== 'BRL' && priceCurrency !== 'USD' && taxaHotmart > 0
 
     const origem: string | null = extractOrigem(dados.purchase, dados.commissions ?? [])
 
@@ -273,7 +280,13 @@ export async function POST(req: NextRequest) {
     // balde produto+oferta+dia dessa venda a partir de `vendas`, nunca some/
     // subtrai delta em JS. Nunca pode atrasar nem quebrar a resposta do
     // webhook, por isso roda em segundo plano com try/catch próprio.
-    if (transaction) {
+    //
+    // Pulado quando vaiCorrigirMoedaExotica: o bloco de correção mais abaixo vai chamar
+    // essa mesma função de novo, já com o valor corrigido — rodar aqui também só gastaria
+    // o advisory lock do balde 2x pra essa venda sem nenhum ganho (achado na auditoria de
+    // performance de 2026-09-08, confirmado que os dois after() não têm ordem garantida
+    // entre si e podem até disputar o mesmo lock).
+    if (transaction && !vaiCorrigirMoedaExotica) {
       after(async () => {
         const { error: refreshError } = await supabase.rpc('refresh_vendas_resumo_diario_by_hotmart_id', { p_hotmart_id: transaction })
         if (refreshError) console.error('[WEBHOOK] erro ao atualizar vendas_resumo_diario:', refreshError)
@@ -334,7 +347,7 @@ export async function POST(req: NextRequest) {
     // síncrono (incompleto) mostraria uma quantia errada — por isso, quando esse
     // ajuste se aplica, a notificação só dispara aqui dentro, com o valor já corrigido,
     // em vez de junto com a resposta do webhook.
-    if (hotmartId && hasCoprod && priceCurrency !== 'BRL' && priceCurrency !== 'USD' && taxaHotmart > 0) {
+    if (vaiCorrigirMoedaExotica && hotmartId) {
       after(async () => {
         try {
           // Bug real encontrado (2026-08-23, HP3471604048): a Hotmart ainda não
