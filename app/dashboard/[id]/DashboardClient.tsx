@@ -1375,7 +1375,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     const hotmartIds = products.map(p => p.hotmart_id).filter(Boolean)
     const { data: offerRows } = hotmartIds.length > 0
       ? await supabase
-          .rpc('get_distinct_ofertas', { hotmart_ids: hotmartIds })
+          .rpc('get_distinct_ofertas_v2', { hotmart_ids: hotmartIds })
           .select()
       : { data: [] }
     const productIdByHotmartId = new Map(products.map(p => [p.hotmart_id, p.id]))

@@ -232,14 +232,14 @@ export function computeWidgetDataFromSummary(
 
 export async function fetchDistinctOrigens(hotmartIds: string[]): Promise<string[]> {
   if (hotmartIds.length === 0) return []
-  const { data, error } = await supabase.rpc('get_distinct_origens', { hotmart_ids: hotmartIds })
+  const { data, error } = await supabase.rpc('get_distinct_origens_v2', { hotmart_ids: hotmartIds })
   if (error) throw error
   return ((data ?? []) as { origem: string }[]).map(r => r.origem)
 }
 
 export async function fetchDistinctAfiliados(hotmartIds: string[]): Promise<string[]> {
   if (hotmartIds.length === 0) return []
-  const { data, error } = await supabase.rpc('get_distinct_afiliados', { hotmart_ids: hotmartIds })
+  const { data, error } = await supabase.rpc('get_distinct_afiliados_v2', { hotmart_ids: hotmartIds })
   if (error) throw error
   return ((data ?? []) as { afiliado_nome: string }[]).map(r => r.afiliado_nome)
 }

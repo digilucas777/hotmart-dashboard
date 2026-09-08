@@ -293,6 +293,18 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    // Mantém os recortes de origem/afiliado/oferta em dia (item 3 da auditoria de
+    // performance de 2026-09-08: get_distinct_origens/afiliados/ofertas escaneavam
+    // `vendas` inteira a cada filtro aberto no dashboard). Sem advisory lock — cada
+    // upsert é atômico por linha — e independente de vaiCorrigirMoedaExotica, já que a
+    // correção de moeda exótica não altera origem/afiliado/oferta, só valores de comissão.
+    if (transaction) {
+      after(async () => {
+        const { error: refreshDistinctError } = await supabase.rpc('refresh_vendas_distinct_by_hotmart_id', { p_hotmart_id: transaction })
+        if (refreshDistinctError) console.error('[WEBHOOK] erro ao atualizar vendas_distinct:', refreshDistinctError)
+      })
+    }
+
     // Hotmart às vezes não inclui tracking no payload do webhook mesmo quando existe na API.
     // Se origem ficou null, buscamos da API em background sem atrasar a resposta.
     // Tenta as duas contas porque a venda pode ter sido criada em qualquer uma delas.
