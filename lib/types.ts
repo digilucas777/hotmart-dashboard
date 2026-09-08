@@ -31,6 +31,10 @@ export type Venda = {
   afiliado_nome?: string | null
 }
 
+// Linha do resumo diário (vendas_resumo_diario), uma por dia+status+moeda —
+// usada pelo gráfico combinado pra períodos de granularidade diária.
+export type DiaRow = { dia: string; status: string; moeda: string; cnt: number; total: number }
+
 export type Projeto = {
   id: string
   nome: string

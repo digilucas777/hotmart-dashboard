@@ -43,8 +43,8 @@ import { CSS } from '@dnd-kit/utilities'
 import { DashboardGrid } from '@/components/dashboard/DashboardGrid'
 import { supabase } from '@/lib/supabase'
 import { formatRelativeTime, getPeriodRange, getPreviousPeriodRange, getOfficialSaleAmount, parseOrigem } from '@/lib/utils'
-import { fetchVendasSummary, fetchDistinctOrigens, fetchDistinctAfiliados, type SummaryRow } from '@/lib/vendas-aggregation'
-import type { Venda, Projeto, Produto, Period, WidgetConfig, WidgetType, WidgetDataSource, DashboardCombo } from '@/lib/types'
+import { fetchVendasSummary, fetchDistinctOrigens, fetchDistinctAfiliados, fetchVendasPorDia, type SummaryRow } from '@/lib/vendas-aggregation'
+import type { Venda, Projeto, Produto, Period, WidgetConfig, WidgetType, WidgetDataSource, DashboardCombo, DiaRow } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
 import { AddWidgetModal } from '@/components/dashboard/AddWidgetModal'
 import { EditWidgetModal } from '@/components/dashboard/EditWidgetModal'
@@ -410,7 +410,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [summaryCurrent, setSummaryCurrent] = useState<SummaryRow[]>([])
   const [summaryPrevious, setSummaryPrevious] = useState<SummaryRow[]>([])
   const [recentVendas, setRecentVendas] = useState<Venda[]>([])
+  // combinedVendas agora só cobre hoje+ontem (granularidade por hora, precisa de venda
+  // crua) — o resto do gráfico combinado (semana/mês) vem do resumo diário em dailyRows.
   const [combinedVendas, setCombinedVendas] = useState<Venda[]>([])
+  const [dailyRows, setDailyRows] = useState<DiaRow[]>([])
   const [period, setPeriod] = useState<Period>('today')
   const [customFrom, setCustomFrom] = useState<string>(() => {
     const now = new Date()
@@ -669,6 +672,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           setSummaryPrevious([])
           setRecentVendas([])
           setCombinedVendas([])
+          setDailyRows([])
           setVendasLoading(false)
           return
         }
@@ -695,6 +699,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           setSummaryPrevious([])
           setRecentVendas([])
           setCombinedVendas([])
+          setDailyRows([])
           setVendasLoading(false)
           return
         }
@@ -753,85 +758,104 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     // terminar). Por isso é disparada com `void` em vez de `await`ada aqui.
     if (!config) return
     const cfg = config
+
+    // Busca paginada: PostgREST limita a 1000 rows/req independente do .limit() do cliente.
+    //
+    // Paginação por cursor (keyset), não por OFFSET: com OFFSET o Postgres reconta do
+    // início do intervalo a cada página (custo cresce com offset+limit, o dobro de lento
+    // na última página de um mês do que na primeira). Cursor por (data_venda, id) deixa o
+    // índice já existente (data_venda DESC) pular direto pro ponto certo — mesma página 1
+    // caiu de ~1.4s pra ~60ms num projeto de 27k linhas, e o ganho cresce com o histórico
+    // em vez de piorar. Precisa de "id" como desempate porque data_venda pode repetir
+    // (mais de uma venda no mesmo segundo é comum) — só pelo timestamp perderia vendas
+    // bem na borda entre duas páginas. Compartilhada pelas duas buscas abaixo (Transações
+    // e o intervalo curto hoje+ontem do gráfico combinado).
+    const fetchAllForPeriod = async (fromISO: string, toISO: string, columns: string): Promise<Venda[]> => {
+      const PAGE_SIZE = 1000
+      const all: Venda[] = []
+      let cursor: { data: string; id: string } | null = null
+      while (true) {
+        let query = supabase
+          .from('vendas')
+          .select(columns)
+          .in('hotmart_produto_id', cfg.hotmartIds)
+          .gte('data_venda', fromISO)
+          .lt('data_venda', toISO)
+        if (cursor) {
+          query = query
+            .lte('data_venda', cursor.data)
+            .or(`data_venda.lt.${cursor.data},and(data_venda.eq.${cursor.data},id.lt.${cursor.id})`)
+        }
+        const runPage = () =>
+          query
+            .order('data_venda', { ascending: false })
+            .order('id', { ascending: false })
+            .limit(PAGE_SIZE)
+            .abortSignal(controller.signal)
+
+        // Uma página isolada pode esbarrar num pico passageiro de carga no banco
+        // (ex: rajada de webhooks concorrentes) e estourar o statement_timeout —
+        // sem retry, isso derrubava a tabela inteira em vez de só demorar um
+        // pouco mais nessa página. 2 tentativas extras com espera curta.
+        let data: Venda[] | null = null
+        let error: { message: string } | null = null
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const res = await runPage()
+          data = res.data as unknown as Venda[] | null
+          error = res.error
+          if (!error) break
+          if (isAbortError(error)) throw error
+          if (attempt < 2) await new Promise(r => setTimeout(r, 400 * (attempt + 1)))
+        }
+        // Sem isso, uma página que estoura o statement_timeout (data: null, error setado)
+        // era tratada igual a "acabaram as páginas" — devolvia dados parciais em silêncio.
+        if (error) throw error
+        if (!data || data.length === 0) break
+        all.push(...data)
+        if (data.length < PAGE_SIZE) break
+        const last = data[data.length - 1]
+        cursor = { data: last.data_venda, id: last.id }
+      }
+      return all
+    }
+
     void (async () => {
       setVendasLoading(true)
       try {
-        const now = new Date()
-        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-        const thirtyDays = new Date(todayStart.getTime() - 29 * 86_400_000)
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-        const combinedFrom = thirtyDays < monthStart ? thirtyDays : monthStart
-
-        // Busca paginada: PostgREST limita a 1000 rows/req independente do .limit() do cliente.
-        //
-        // Paginação por cursor (keyset), não por OFFSET: com OFFSET o Postgres reconta do
-        // início do intervalo a cada página (custo cresce com offset+limit, o dobro de lento
-        // na última página de um mês do que na primeira). Cursor por (data_venda, id) deixa o
-        // índice já existente (data_venda DESC) pular direto pro ponto certo — mesma página 1
-        // caiu de ~1.4s pra ~60ms num projeto de 27k linhas, e o ganho cresce com o histórico
-        // em vez de piorar. Precisa de "id" como desempate porque data_venda pode repetir
-        // (mais de uma venda no mesmo segundo é comum) — só pelo timestamp perderia vendas
-        // bem na borda entre duas páginas.
-        const fetchAllForPeriod = async (fromISO: string, toISO: string, columns: string): Promise<Venda[]> => {
-          const PAGE_SIZE = 1000
-          const all: Venda[] = []
-          let cursor: { data: string; id: string } | null = null
-          while (true) {
-            let query = supabase
-              .from('vendas')
-              .select(columns)
-              .in('hotmart_produto_id', cfg.hotmartIds)
-              .gte('data_venda', fromISO)
-              .lt('data_venda', toISO)
-            if (cursor) {
-              query = query
-                .lte('data_venda', cursor.data)
-                .or(`data_venda.lt.${cursor.data},and(data_venda.eq.${cursor.data},id.lt.${cursor.id})`)
-            }
-            const runPage = () =>
-              query
-                .order('data_venda', { ascending: false })
-                .order('id', { ascending: false })
-                .limit(PAGE_SIZE)
-                .abortSignal(controller.signal)
-
-            // Uma página isolada pode esbarrar num pico passageiro de carga no banco
-            // (ex: rajada de webhooks concorrentes) e estourar o statement_timeout —
-            // sem retry, isso derrubava a tabela inteira em vez de só demorar um
-            // pouco mais nessa página. 2 tentativas extras com espera curta.
-            let data: Venda[] | null = null
-            let error: { message: string } | null = null
-            for (let attempt = 0; attempt < 3; attempt++) {
-              const res = await runPage()
-              data = res.data as unknown as Venda[] | null
-              error = res.error
-              if (!error) break
-              if (isAbortError(error)) throw error
-              if (attempt < 2) await new Promise(r => setTimeout(r, 400 * (attempt + 1)))
-            }
-            // Sem isso, uma página que estoura o statement_timeout (data: null, error setado)
-            // era tratada igual a "acabaram as páginas" — devolvia dados parciais em silêncio.
-            if (error) throw error
-            if (!data || data.length === 0) break
-            all.push(...data)
-            if (data.length < PAGE_SIZE) break
-            const last = data[data.length - 1]
-            cursor = { data: last.data_venda, id: last.id }
-          }
-          return all
-        }
-
-        const [currentData, combinedData] = await Promise.all([
-          fetchAllForPeriod(from.toISOString(), to.toISOString(), VENDA_COLUMNS),
-          fetchAllForPeriod(combinedFrom.toISOString(), new Date(todayStart.getTime() + 86_400_000).toISOString(), COMBINED_COLUMNS),
-        ])
+        const currentData = await fetchAllForPeriod(from.toISOString(), to.toISOString(), VENDA_COLUMNS)
         setVendas(filterRowsByOfferSelection(currentData, cfg.products, cfg.productLinks, cfg.offerLinks))
-        setCombinedVendas(filterRowsByOfferSelection(combinedData, cfg.products, cfg.productLinks, cfg.offerLinks))
       } catch (err) {
         if (isAbortError(err)) return
         console.error('[fetchVendas] falha ao carregar vendas cruas (tabela/gráficos):', err)
       } finally {
         if (fetchAbortRef.current === controller) setVendasLoading(false)
+      }
+    })()
+
+    // Gráfico combinado: busca independente da tabela de Transações acima — uma falha ou
+    // demora aqui não pode mais travar a outra (e vice-versa). "Hoje"/"Ontem" (o widget
+    // mostra por hora) continuam vindo de vendas cruas, mas só de um intervalo de 2 dias —
+    // sempre pequeno, nunca precisa de paginação. O resto (semana/mês) vem do resumo diário
+    // já pronto (vendas_resumo_diario via get_vendas_por_dia), não da vendas crua inteira do
+    // mês — é isso que fazia esse widget demorar muito e às vezes estourar timeout.
+    void (async () => {
+      try {
+        const now = new Date()
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        const yesterdayStart = new Date(todayStart.getTime() - 86_400_000)
+        const tomorrowStart = new Date(todayStart.getTime() + 86_400_000)
+        const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+
+        const [hourlyRaw, dailyRowsResult] = await Promise.all([
+          fetchAllForPeriod(yesterdayStart.toISOString(), tomorrowStart.toISOString(), COMBINED_COLUMNS),
+          fetchVendasPorDia(projectId, lastMonthStart, tomorrowStart, controller.signal),
+        ])
+        if (fetchAbortRef.current !== controller) return
+        setCombinedVendas(filterRowsByOfferSelection(hourlyRaw, cfg.products, cfg.productLinks, cfg.offerLinks))
+        setDailyRows(dailyRowsResult)
+      } catch (err) {
+        if (isAbortError(err)) return
+        console.error('[fetchVendas] falha ao carregar dados do gráfico combinado:', err)
       }
     })()
   }, [projectId, period, customDateRange, filterRowsByOfferSelection])
@@ -2173,6 +2197,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         ) : (
           <div ref={exportGridRef} className="relative">
           <DashboardGrid
+            key={projectId}
             widgets={widgets}
             isEditing={editMode}
             onLayoutChange={(updated) => setWidgets(updated)}
@@ -2181,6 +2206,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             summaryCurrent={summaryCurrent}
             summaryPrevious={summaryPrevious}
             combinedVendas={displayCombinedVendas}
+            dailyRows={dailyRows}
             period={period}
             exchangeRate={exchangeRate}
             exchangeRateIsFallback={exchangeRateIsFallback}

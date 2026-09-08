@@ -5,7 +5,7 @@ import type { CSSProperties } from 'react'
 import { Copy, Pencil, Trash2 } from 'lucide-react'
 import { computeWidgetData, formatPeriodComparisonLabel, getValueFormat } from '@/lib/utils'
 import { computeComparableFromSummary, computeWidgetDataFromSummary, type SummaryRow } from '@/lib/vendas-aggregation'
-import type { Period, Venda, WidgetConfig } from '@/lib/types'
+import type { Period, Venda, WidgetConfig, DiaRow } from '@/lib/types'
 import { SalesTable } from '@/components/dashboard/SalesTable'
 import { computeMetaWidgetData } from '@/lib/meta-ads-mock'
 import type { MetaCreativeResult, MetaCampaignResult } from '@/lib/meta-ads-mock'
@@ -59,6 +59,7 @@ function WidgetRendererBase({
   summaryCurrent,
   summaryPrevious,
   combinedVendas,
+  dailyRows,
   period,
   exchangeRate,
   exchangeRateIsFallback = false,
@@ -84,6 +85,7 @@ function WidgetRendererBase({
   summaryCurrent?: SummaryRow[]
   summaryPrevious?: SummaryRow[]
   combinedVendas?: Venda[]
+  dailyRows?: DiaRow[]
   period: Period
   exchangeRate: number
   exchangeRateIsFallback?: boolean
@@ -319,6 +321,8 @@ function WidgetRendererBase({
         <CombinedChartWidget
           title={config.title}
           vendas={combinedVendas ?? vendas}
+          dailyRows={dailyRows ?? []}
+          exchangeRate={exchangeRate}
           chartHeight={chartHeight}
         />
       )}

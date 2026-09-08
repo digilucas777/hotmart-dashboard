@@ -5,7 +5,7 @@ import { ResponsiveGridLayout, verticalCompactor } from 'react-grid-layout'
 import type { Layout, LayoutItem } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
-import type { Period, Venda, WidgetConfig } from '@/lib/types'
+import type { Period, Venda, WidgetConfig, DiaRow } from '@/lib/types'
 import type { SummaryRow } from '@/lib/vendas-aggregation'
 import { WidgetRenderer } from '@/components/dashboard/widgets/WidgetRenderer'
 import type { MetaCreativeResult, MetaCampaignResult } from '@/lib/meta-ads-mock'
@@ -57,6 +57,7 @@ type Props = {
   summaryCurrent: SummaryRow[]
   summaryPrevious: SummaryRow[]
   combinedVendas: Venda[]
+  dailyRows: DiaRow[]
   period: Period
   exchangeRate: number
   exchangeRateIsFallback?: boolean
@@ -86,6 +87,7 @@ export function DashboardGrid({
   summaryCurrent,
   summaryPrevious,
   combinedVendas,
+  dailyRows,
   period,
   exchangeRate,
   exchangeRateIsFallback = false,
@@ -176,6 +178,7 @@ export function DashboardGrid({
               summaryCurrent={summaryCurrent}
               summaryPrevious={summaryPrevious}
               combinedVendas={combinedVendas}
+              dailyRows={dailyRows}
               period={period}
               exchangeRate={exchangeRate}
               exchangeRateIsFallback={exchangeRateIsFallback}

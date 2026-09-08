@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { WidgetDataSource } from './types'
+import type { WidgetDataSource, DiaRow } from './types'
 import { formatBRL, formatUSD, type WidgetComputedData } from './utils'
 
 // Contrapartida em SQL de computeComparableMetric (lib/utils.ts) — usada só
@@ -32,6 +32,23 @@ export async function fetchVendasSummary(projetoId: string, from: Date, to: Date
     await new Promise(resolve => setTimeout(resolve, 400))
   }
   throw new Error('fetchVendasSummary: esgotou tentativas')
+}
+
+export async function fetchVendasPorDia(projetoId: string, from: Date, to: Date, signal?: AbortSignal): Promise<DiaRow[]> {
+  const maxAttempts = 2
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let query = supabase.rpc('get_vendas_por_dia', {
+      p_projeto_id: projetoId,
+      p_from: from.toISOString(),
+      p_to: to.toISOString(),
+    })
+    if (signal) query = query.abortSignal(signal)
+    const { data, error } = await query
+    if (!error) return (data ?? []) as DiaRow[]
+    if (signal?.aborted || attempt === maxAttempts) throw error
+    await new Promise(resolve => setTimeout(resolve, 400))
+  }
+  throw new Error('fetchVendasPorDia: esgotou tentativas')
 }
 
 function sumWhere(rows: SummaryRow[], pred: (r: SummaryRow) => boolean): { cnt: number; total: number } {

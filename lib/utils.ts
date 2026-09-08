@@ -1,4 +1,4 @@
-import type { Period, Venda, WidgetDataSource, Status } from './types'
+import type { Period, Venda, WidgetDataSource, Status, DiaRow } from './types'
 
 export function getPeriodRange(period: Period, customRange?: { from: Date; to: Date }): { from: Date; to: Date } {
   if (period === 'custom') {
@@ -234,6 +234,47 @@ export type WidgetComputedData =
   | { kind: 'series'; points: SeriesPoint[]; dualCurrency?: boolean }
   | { kind: 'table'; vendas: Venda[] }
   | { kind: 'combined'; points: CombinedPoint[] }
+
+// Contrapartida de computeWidgetData's 'combined_by_day' pra períodos de granularidade
+// diária (tudo exceto Hoje/Ontem) — soma linhas já agregadas por dia (vendas_resumo_diario)
+// em vez de escanear cada venda crua, o que deixa o gráfico combinado rápido mesmo pra
+// "Este mês"/"Último mês" (antes precisava paginar milhares de vendas cruas pra isso).
+export function computeCombinedFromDailyRollup(
+  rows: DiaRow[],
+  period: Period,
+  exchangeRate: number,
+  customRange?: { from: Date; to: Date },
+): CombinedPoint[] {
+  const { from, to } = getPeriodRange(period, customRange)
+  const buckets: Record<string, CombinedPoint> = {}
+  let cursor = new Date(from)
+  while (cursor < to) {
+    const label = `${cursor.getDate().toString().padStart(2, '0')}/${(cursor.getMonth() + 1).toString().padStart(2, '0')}`
+    buckets[label] = { label, valueBRL: 0, valueUSD: 0, approved: 0, descontos: 0, descontosValor: 0 }
+    cursor = new Date(cursor.getTime() + 86_400_000)
+  }
+
+  const isDesconto = (status: string) => status === 'refunded' || status === 'chargeback' || status === 'disputed'
+
+  rows.forEach(r => {
+    const [y, m, d] = r.dia.split('-').map(Number)
+    const dateObj = new Date(y!, m! - 1, d!)
+    if (dateObj < from || dateObj >= to) return
+    const label = `${d!.toString().padStart(2, '0')}/${m!.toString().padStart(2, '0')}`
+    const bucket = buckets[label]
+    if (!bucket) return
+    if (r.status === 'approved') {
+      bucket.approved += r.cnt
+      if (r.moeda === 'BRL') bucket.valueBRL += r.total
+      else bucket.valueUSD += r.total
+    } else if (isDesconto(r.status)) {
+      bucket.descontos += r.cnt
+      bucket.descontosValor += r.moeda === 'USD' ? r.total * exchangeRate : r.total
+    }
+  })
+
+  return Object.values(buckets)
+}
 
 export function getValueFormat(source: WidgetDataSource): 'brl' | 'count' {
   const brlSources: WidgetDataSource[] = ['revenue_by_day']

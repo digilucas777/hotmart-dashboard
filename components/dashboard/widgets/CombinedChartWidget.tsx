@@ -12,8 +12,8 @@ import {
   Legend,
 } from 'recharts'
 import { TrendingUp } from 'lucide-react'
-import { computeWidgetData, formatBRL, formatUSD } from '@/lib/utils'
-import type { Period, Venda } from '@/lib/types'
+import { computeWidgetData, computeCombinedFromDailyRollup, formatBRL, formatUSD } from '@/lib/utils'
+import type { Period, Venda, DiaRow } from '@/lib/types'
 
 const LEGEND_LABELS: Record<string, string> = {
   valueBRL: 'Faturamento BRL',
@@ -61,17 +61,28 @@ function CustomTooltip({
 export function CombinedChartWidget({
   title,
   vendas,
+  dailyRows,
+  exchangeRate,
   chartHeight = 220,
 }: {
   title: string
   vendas: Venda[]
+  dailyRows: DiaRow[]
+  exchangeRate: number
   chartHeight?: number
 }) {
-  const [internalPeriod, setInternalPeriod] = useState<Period>('thisMonth')
+  const [internalPeriod, setInternalPeriod] = useState<Period>('today')
+  // "Hoje"/"Ontem" precisam de hora em hora — só dá pra montar a partir de venda crua
+  // (vendas, um intervalo pequeno de 2 dias). O resto (semana/mês) vem do resumo diário
+  // já pronto (dailyRows) — muito mais rápido que paginar vendas cruas do período inteiro.
+  const isHourly = internalPeriod === 'today' || internalPeriod === 'yesterday'
   const points = useMemo(() => {
-    const data = computeWidgetData(vendas, 'combined_by_day', internalPeriod, 1)
-    return data.kind === 'combined' ? data.points : []
-  }, [vendas, internalPeriod])
+    if (isHourly) {
+      const data = computeWidgetData(vendas, 'combined_by_day', internalPeriod, exchangeRate)
+      return data.kind === 'combined' ? data.points : []
+    }
+    return computeCombinedFromDailyRollup(dailyRows, internalPeriod, exchangeRate)
+  }, [vendas, dailyRows, internalPeriod, exchangeRate, isHourly])
 
   const periods: { value: Period; label: string }[] = [
     { value: 'today', label: 'Hoje' },
@@ -93,7 +104,7 @@ export function CombinedChartWidget({
             <p className="text-xs text-[var(--dash-faint)]">Desempenho diário de vendas</p>
           </div>
         </div>
-        <div className="flex rounded-lg bg-white/5 p-1">
+        <div className="flex flex-wrap gap-y-1 rounded-lg bg-white/5 p-1">
           {periods.map(option => (
             <button
               key={option.value}

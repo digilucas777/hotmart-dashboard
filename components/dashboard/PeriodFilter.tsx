@@ -127,7 +127,7 @@ export function PeriodFilter({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="dashboard-panel flex max-w-full gap-1 overflow-x-auto rounded-lg p-1 sm:flex-wrap">
+      <div className="dashboard-panel flex max-w-full flex-wrap gap-1 rounded-lg p-1">
         {PERIODS.map(p => {
           const active = value === p.value
           return (
