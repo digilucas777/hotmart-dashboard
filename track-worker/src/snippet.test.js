@@ -5,7 +5,18 @@ import { buildSnippet } from './snippet.js'
 test('buildSnippet sempre inclui disparo automático de PageView', () => {
   const code = buildSnippet({ sessionTtlDays: 7, triggers: [] })
   assert.match(code, /send\('PageView'\)/)
-  assert.match(code, /window\.HotTrack = \{ track: send \}/)
+  assert.match(code, /window\.HotTrack = \{ track: send, checkoutUrl: decorateCheckoutUrl \}/)
+})
+
+test('buildSnippet expõe window.HotTrack.checkoutUrl pra decorar link de checkout manualmente (players/iframes que o decorador automático não alcança)', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [] })
+  assert.match(code, /function decorateCheckoutUrl\(rawUrl\)/)
+  assert.match(code, /u\.searchParams\.set\('sck', sid\)/)
+})
+
+test('buildSnippet cola o sck na própria URL da página via history.replaceState (players que repassam parâmetros da URL atual herdam de graça)', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [] })
+  assert.match(code, /history\.replaceState\(null, '', pageUrl\.toString\(\)\)/)
 })
 
 test('buildSnippet usa URL absoluta do Worker pro /collect (script roda no domínio da página, não no dele)', () => {
@@ -94,6 +105,19 @@ test('buildSnippet com domínios de checkout inclui o decorador com os hosts cer
   assert.match(code, /"go\.hotmart\.com"/)
   assert.match(code, /searchParams\.set\('sck', sid\)/)
   assert.match(code, /new MutationObserver\(decorateAll\)/)
+})
+
+test('buildSnippet cola fbp/fbc direto no link de checkout decorado automaticamente, além do sck (não depende só do cruzamento por sessão)', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [], checkoutDomains: ['pay.hotmart.com'] })
+  assert.match(code, /if \(fbp && !u\.searchParams\.has\('fbp'\)\) u\.searchParams\.set\('fbp', fbp\);/)
+  assert.match(code, /if \(fbc && !u\.searchParams\.has\('fbc'\)\) u\.searchParams\.set\('fbc', fbc\);/)
+})
+
+test('buildSnippet.checkoutUrl (gancho manual/VTurb) também cola fbp/fbc, não só o sck', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [] })
+  const fnBody = code.slice(code.indexOf('function decorateCheckoutUrl'), code.indexOf('window.HotTrack ='))
+  assert.match(fnBody, /searchParams\.set\('fbp', fbp\)/)
+  assert.match(fnBody, /searchParams\.set\('fbc', fbc\)/)
 })
 
 test('buildSnippet acrescenta "-tracker" no src que a página já tem no link de checkout (nunca inventa um valor novo)', () => {

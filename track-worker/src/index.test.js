@@ -224,6 +224,49 @@ test('POST /collect NÃO grava a sessão de novo se new_session não vier true (
   }
 })
 
+test('POST /collect regrava a sessão se ela já existe sem fbc e o evento atual trouxe um (fbclid chegou numa página depois da 1ª)', async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response('{}', { status: 200 })
+  try {
+    const env = makeEnv()
+    await env.SESSIONS.put('sid:sess-late-fbc', JSON.stringify({ fbp: 'fb.1.1', fbc: null, ip: '1.1.1.1', userAgent: 'ua-antiga', geo: { city: 'Paris' }, url: 'https://minhalp.com.br/', utm: { utm_source: 'facebook' }, src: 'organico' }))
+    const req = new Request('https://sinal.teste.com/collect', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: 'ViewContent', session_id: 'sess-late-fbc', url: 'https://minhalp.com.br/pr2', fbc: 'fb.1.999.abc123' }),
+    })
+    await worker.fetch(req, env)
+    const stored = JSON.parse(env.SESSIONS._store.get('sid:sess-late-fbc'))
+    assert.equal(stored.fbc, 'fb.1.999.abc123')
+    // o resto do que já estava salvo (geo/utm/src da 1ª página) não pode se perder na regravação
+    assert.equal(stored.utm.utm_source, 'facebook')
+    assert.equal(stored.geo.city, 'Paris')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('POST /collect NÃO regrava a sessão que já existe e já tem fbc (evita gasto de KV sem necessidade)', async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response('{}', { status: 200 })
+  try {
+    const env = makeEnv()
+    await env.SESSIONS.put('sid:sess-has-fbc', JSON.stringify({ fbp: 'fb.1.1', fbc: 'fb.1.111.jah-tinha', ip: '1.1.1.1', userAgent: 'ua' }))
+    const req = new Request('https://sinal.teste.com/collect', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: 'ViewContent', session_id: 'sess-has-fbc', url: 'https://minhalp.com.br/pr3' }),
+    })
+    const putSpy = []
+    const originalPut = env.SESSIONS.put.bind(env.SESSIONS)
+    env.SESSIONS.put = async (...args) => { putSpy.push(args[0]); return originalPut(...args) }
+    await worker.fetch(req, env)
+    assert.equal(putSpy.includes('sid:sess-has-fbc'), false)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('POST /collect inclui geo (hasheado) no evento, a partir de request.cf', async () => {
   const originalFetch = globalThis.fetch
   const calls = []
@@ -387,6 +430,75 @@ test('webhook da Hotmart prioriza o cruzamento pelo sck (link de checkout) sobre
     const userData = sentBody.data[0].user_data
     assert.equal(userData.fbp, 'fb.1.333')
     assert.equal(userData.ct.length, 64)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart usa fbp/fbc que vieram direto no link de checkout quando não achou sessão pelo sck (bloqueador de anúncio impediu só a gravação da sessão, não o link)', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnv()
+    // propositalmente NÃO grava nada em env.SESSIONS pro sck "sess-orfao" —
+    // simula o bloqueador de rede que impediu a chamada /collect de salvar.
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'João Silva', email: 'joao@exemplo.com' },
+          purchase: {
+            transaction: 'HP126',
+            price: { value: 97, currency_value: 'BRL' },
+            origin: { sck: 'sess-orfao', fbp: 'fb.1.777.link-fallback', fbc: 'fb.1.888.link-fallback' },
+          },
+        },
+      }),
+    })
+    await worker.fetch(req, env)
+    const sentBody = JSON.parse(calls[0].init.body)
+    const userData = sentBody.data[0].user_data
+    assert.equal(userData.fbp, 'fb.1.777.link-fallback')
+    assert.equal(userData.fbc, 'fb.1.888.link-fallback')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('webhook da Hotmart prefere fbp/fbc da sessão cruzada por sck em vez do link, quando os dois existem (sessão é mais completa/recente)', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnv()
+    await env.SESSIONS.put('sid:sess-com-dados', JSON.stringify({ fbp: 'fb.1.333.sessao', fbc: 'fb.1.444.sessao', ip: '9.9.9.9', userAgent: 'ua' }))
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'João Silva' },
+          purchase: {
+            transaction: 'HP127',
+            price: { value: 97, currency_value: 'BRL' },
+            origin: { sck: 'sess-com-dados', fbp: 'fb.1.777.link', fbc: 'fb.1.888.link' },
+          },
+        },
+      }),
+    })
+    await worker.fetch(req, env)
+    const sentBody = JSON.parse(calls[0].init.body)
+    const userData = sentBody.data[0].user_data
+    assert.equal(userData.fbp, 'fb.1.333.sessao')
+    assert.equal(userData.fbc, 'fb.1.444.sessao')
   } finally {
     globalThis.fetch = originalFetch
   }

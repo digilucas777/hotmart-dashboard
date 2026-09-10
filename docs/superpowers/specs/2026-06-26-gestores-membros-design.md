@@ -161,7 +161,7 @@ Embed via iframe em `VideoPlayer.tsx`:
 />
 ```
 
-O `panda_video_id` salvo no banco é o identificador do vídeo que o admin cola ao cadastrar a aula.
+O campo `panda_video_id` aceita o ID do vídeo ou a URL completa de embed do Panda Video. O componente detecta automaticamente o formato e constrói o src do iframe corretamente. No admin, o campo exibe um placeholder com exemplo de cada formato aceito.
 
 ---
 

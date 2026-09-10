@@ -12,7 +12,32 @@
       "Bash(npx next *)",
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\User\\\\hotmart-dashboard\" -Recurse -Exclude \"node_modules\")",
       "Bash(Select-Object -ExpandProperty FullName)",
-      "Bash(Sort-Object)"
+      "Bash(Sort-Object)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\User\\\\hotmart-dashboard\\\\app\" -Recurse | Select-Object Name, FullName | Where-Object {$_.Name -notmatch \"node_modules\"})",
+      "PowerShell(dir \"$env:USERPROFILE\\\\.claude\\\\plugins\")",
+      "Bash(git -C \"C:/Users/User/hotmart-dashboard\" rev-parse --show-toplevel)",
+      "Bash(cat \"$\\(git -C \"C:/Users/User/hotmart-dashboard\" rev-parse --show-toplevel\\)/.superpowers/sdd/progress.md\")",
+      "Skill(run)",
+      "mcp__claude_ai_Meta_ads__ads_get_ad_accounts",
+      "mcp__claude_ai_Meta_ads__ads_get_ad_entities",
+      "Skill(artifact-design)",
+      "Artifact",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__get_logs",
+      "mcp__claude_ai_Supabase__get_advisors",
+      "mcp__claude_ai_Google_Drive__search_files",
+      "mcp__claude_ai_Google_Drive__create_file",
+      "mcp__claude_ai_Google_Drive__read_file_content",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "WebFetch(domain:olinda.bcb.gov.br)",
+      "mcp__claude_ai_Vercel__list_teams",
+      "mcp__claude_ai_Vercel__list_projects",
+      "mcp__claude_ai_Vercel__list_deployments",
+      "mcp__claude_ai_Supabase__apply_migration",
+      "mcp__claude_ai_Vercel__get_runtime_logs",
+      "WebSearch",
+      "mcp__claude_ai_Supabase__get_project",
+      "mcp__claude_ai_Supabase__get_organization"
     ]
   }
 }

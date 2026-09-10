@@ -171,13 +171,35 @@ async function handleCollect(request, env, ctx) {
     // próprio, só logada quando o diagnóstico está ativo.
     try {
       const ttlSeconds = (Number(env.SESSION_TTL_DAYS) || 7) * 86400
-      const sessionData = { fbp: body.fbp || null, fbc: body.fbc || null, ip, userAgent, geo, url: body.url || null, utm: body.utm || null, src: body.src || null }
+      const sessionKey = `sid:${body.session_id}`
 
-      // Grava a sessão (chave sid:) só na 1ª chamada da sessão inteira (marcada
-      // pelo cliente via sessionStorage) — gravar em toda chamada estourava
-      // rápido a cota gratuita de 1000 gravações/dia do KV.
-      if (body.new_session) {
-        await env.SESSIONS.put(`sid:${body.session_id}`, JSON.stringify(sessionData), { expirationTtl: ttlSeconds })
+      // fbclid só existe na URL da página em que o clique do anúncio aterrissou
+      // — se essa não for a 1ª página da sessão (ex: interstitial/redirect antes
+      // da LP de verdade), a sessão gravada na 1ª chamada nunca tem fbc, pra
+      // sempre. Por isso, quando NÃO é a 1ª chamada, lê o que já tá salvo e
+      // só regrava se achou um fbc novo que a sessão salva ainda não tinha —
+      // mantém o gasto de gravação do KV baixo (no máximo +1 gravação por
+      // sessão, só quando faz diferença de verdade), em vez de gravar sempre.
+      let existing = null
+      if (!body.new_session) {
+        const stored = await env.SESSIONS.get(sessionKey)
+        if (stored) existing = JSON.parse(stored)
+      }
+
+      const sessionData = {
+        fbp: body.fbp || existing?.fbp || null,
+        fbc: body.fbc || existing?.fbc || null,
+        ip: existing?.ip || ip,
+        userAgent: existing?.userAgent || userAgent,
+        geo: existing?.geo || geo,
+        url: existing?.url || body.url || null,
+        utm: existing?.utm || body.utm || null,
+        src: existing?.src || body.src || null,
+      }
+
+      const shouldWrite = body.new_session || (existing && !existing.fbc && body.fbc)
+      if (shouldWrite) {
+        await env.SESSIONS.put(sessionKey, JSON.stringify(sessionData), { expirationTtl: ttlSeconds })
       }
 
       const email = body.params && body.params.email
@@ -402,6 +424,18 @@ async function handleHotmartWebhook(request, env, ctx) {
         console.error('[Rastreamento] falha ao ler sessão do KV (Purchase seguiu sem o cruzamento):', err)
       }
     }
+  }
+
+  // Reforço: fbp/fbc que o próprio script já colou direto no link de checkout
+  // (não dependem do cruzamento por "sck" ter funcionado). Cobre o caso de
+  // bloqueador de anúncio/privacidade que deixa o link ser decorado (é só DOM,
+  // sem rede) mas impede a chamada que salva a sessão no KV — nesse caso o sck
+  // não acha nada, mas fbp/fbc ainda chegam por aqui. Só preenche o que a
+  // sessão não trouxe, nunca sobrescreve um valor já cruzado.
+  const originFallback = purchase?.origin
+  if (originFallback && typeof originFallback === 'object') {
+    if (!userData.fbp && originFallback.fbp) userData.fbp = originFallback.fbp
+    if (!userData.fbc && originFallback.fbc) userData.fbc = originFallback.fbc
   }
 
   // Endereço de cobrança da própria Hotmart, quando vem preenchido, é mais

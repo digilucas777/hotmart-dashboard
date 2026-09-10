@@ -152,10 +152,17 @@ function buildCheckoutDecoratorCode(checkoutDomains) {
       if (link.getAttribute('data-ht-decorated') || !link.href || !isCheckoutLink(link.href)) return;
       try {
         var u = new URL(link.href);
-        if (!u.searchParams.has('sck')) {
-          u.searchParams.set('sck', sid);
-          link.href = u.toString();
-        }
+        if (!u.searchParams.has('sck')) u.searchParams.set('sck', sid);
+        // fbp/fbc também direto no link, não só o "sck" (que é só um ponteiro
+        // pra sessão salva no KV via /collect). Bloqueador de anúncio/
+        // privacidade (comum sobretudo no público francês) deixa esse script
+        // decorar o link normalmente (é só DOM, sem rede) mas pode bloquear
+        // especificamente a chamada de rede que salva a sessão — nesse caso o
+        // sck vira um ponteiro pra nada. Levando fbp/fbc no próprio link, o
+        // dado mais importante pra correspondência chega de qualquer jeito,
+        // sem depender desse cruzamento ter funcionado.
+        if (fbp && !u.searchParams.has('fbp')) u.searchParams.set('fbp', fbp);
+        if (fbc && !u.searchParams.has('fbc')) u.searchParams.set('fbc', fbc);
         // O "src" já é usado manualmente (pra identificar a página/variante
         // de origem) — a gente só ACRESCENTA "-tracker" no valor que já tá
         // lá, nunca inventa um valor novo nem sobrescreve o que já existe.
@@ -165,8 +172,8 @@ function buildCheckoutDecoratorCode(checkoutDomains) {
         var existingSrc = u.searchParams.get('src');
         if (existingSrc && existingSrc.toLowerCase().indexOf('tracker') === -1) {
           u.searchParams.set('src', existingSrc + '-tracker');
-          link.href = u.toString();
         }
+        link.href = u.toString();
         link.setAttribute('data-ht-decorated', '1');
       } catch (e) {}
     }
@@ -355,7 +362,34 @@ ${pixelLoaderCode}
       window.fbq('track', 'PageView', {}, eventId ? { eventID: eventId } : undefined);
     }
   }
-  window.HotTrack = { track: send };
+  // Deixa o sck já disponível na própria URL da página (sem recarregar) —
+  // players de vídeo embutido (ex: VTURB) costumam ter uma opção de "repassar
+  // parâmetros da URL atual" pro link do botão de comprar. Ligando essa opção
+  // no player, o sck é herdado de graça, sem precisar decorar o link (que a
+  // gente não alcança quando o botão vive dentro de um player de outra
+  // origem/iframe). checkoutUrl() é a via manual, pra quem consegue configurar
+  // uma URL de destino dinâmica/JS no player em vez de um link fixo.
+  try {
+    var pageUrl = new URL(location.href);
+    if (!pageUrl.searchParams.has('sck')) {
+      pageUrl.searchParams.set('sck', sid);
+      history.replaceState(null, '', pageUrl.toString());
+    }
+  } catch (e) {}
+  function decorateCheckoutUrl(rawUrl){
+    try {
+      var u = new URL(rawUrl, location.href);
+      if (!u.searchParams.has('sck')) u.searchParams.set('sck', sid);
+      if (fbp && !u.searchParams.has('fbp')) u.searchParams.set('fbp', fbp);
+      if (fbc && !u.searchParams.has('fbc')) u.searchParams.set('fbc', fbc);
+      var existingSrc = u.searchParams.get('src');
+      if (existingSrc && existingSrc.toLowerCase().indexOf('tracker') === -1) {
+        u.searchParams.set('src', existingSrc + '-tracker');
+      }
+      return u.toString();
+    } catch (e) { return rawUrl; }
+  }
+  window.HotTrack = { track: send, checkoutUrl: decorateCheckoutUrl };
   send('PageView');
 ${checkoutDecoratorCode}
 ${triggerCode}
