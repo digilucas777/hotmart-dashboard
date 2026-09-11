@@ -1,5 +1,12 @@
 export const dynamic = 'force-dynamic'
 
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+)
+
 // Só usado se TODAS as tentativas contra o Frankfurter falharem — um valor
 // fixo antigo aqui pode ficar bem longe da cotação real (foi exatamente o
 // que causou faturamento/comissão divergentes num mesmo período: uma busca
@@ -34,10 +41,30 @@ export async function GET(request: Request) {
       // de vendas antigas em USD com uma taxa de cambio que pode ja ter mudado bastante.
       const today = new Date().toISOString().slice(0, 10)
       const clampedTo = to > today ? today : to
+      const isClosedPeriod = to < today // período que já terminou (não inclui hoje, que ainda está em andamento)
+
+      if (isClosedPeriod) {
+        const { data: cached } = await supabase
+          .from('exchange_rate_cache')
+          .select('rate')
+          .eq('from_date', from)
+          .eq('to_date', clampedTo)
+          .maybeSingle()
+        if (cached) return Response.json({ rate: cached.rate })
+      }
+
       const data = await fetchFrankfurter(`https://api.frankfurter.app/${from}..${clampedTo}?from=USD&to=BRL`) as { rates: Record<string, { BRL: number }> }
       const values = Object.values(data.rates ?? {}).map(r => r.BRL).filter(v => typeof v === 'number')
       if (values.length === 0) throw new Error('sem cotacoes no periodo')
       const media = values.reduce((s, v) => s + v, 0) / values.length
+
+      if (isClosedPeriod) {
+        // Guarda pra nunca mais precisar buscar de novo -- e nunca mais correr o risco
+        // de, numa busca futura, a API estar fora do ar e cair no fallback pra esse
+        // mesmo período que já tinha um valor real guardado.
+        await supabase.from('exchange_rate_cache').upsert({ from_date: from, to_date: clampedTo, rate: media })
+      }
+
       return Response.json({ rate: media })
     }
 
