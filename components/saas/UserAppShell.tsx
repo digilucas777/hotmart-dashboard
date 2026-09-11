@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Bell,
-  ChevronRight,
   Copy,
   Edit3,
   ExternalLink,
@@ -529,33 +528,34 @@ export function UserAppShell() {
               <p className="mt-1 text-sm text-slate-400">
                 Organização rápida — o mesmo dashboard pode aparecer em mais de uma pasta.
               </p>
-              <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {folders.map(folder => {
                   const idsNaPasta = folderProjetos[folder.id] ?? []
                   const projetosDaPasta = dashboards.filter(d => idsNaPasta.includes(d.id))
                   if (projetosDaPasta.length === 0) return null
                   return (
                     <div key={folder.id} className="overflow-hidden rounded-2xl border border-white/10 bg-[#0b0d14]">
-                      <div className="flex items-center gap-3 border-b border-white/10 bg-gradient-to-r from-cyan-400/10 to-violet-500/10 px-4 py-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400/25 to-violet-500/30 text-cyan-100">
-                          <Folder size={16} />
+                      <div className="flex items-center gap-2 border-b border-white/10 bg-gradient-to-r from-cyan-400/10 to-violet-500/10 px-3 py-2.5">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400/25 to-violet-500/30 text-cyan-100">
+                          <Folder size={13} />
                         </div>
-                        <p className="min-w-0 flex-1 truncate text-sm font-black text-white">{folder.nome}</p>
+                        <p className="min-w-0 flex-1 truncate text-xs font-black uppercase tracking-wide text-white">{folder.nome}</p>
                         <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-300">
                           {projetosDaPasta.length}
                         </span>
                       </div>
                       <div className="divide-y divide-white/5">
                         {projetosDaPasta.map(projeto => (
-                          <Link
-                            key={projeto.id}
-                            href={`/dashboard/${projeto.id}`}
-                            className="flex items-center gap-2 px-4 py-2.5 text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white"
-                          >
-                            <LayoutDashboard size={13} className="shrink-0 text-cyan-300/70" />
+                          <div key={projeto.id} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300">
+                            <LayoutDashboard size={12} className="shrink-0 text-cyan-300/70" />
                             <span className="min-w-0 flex-1 truncate">{projeto.nome}</span>
-                            <ChevronRight size={14} className="shrink-0 text-slate-600" />
-                          </Link>
+                            <Link
+                              href={`/dashboard/${projeto.id}`}
+                              className="shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[11px] font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white"
+                            >
+                              Abrir
+                            </Link>
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -567,26 +567,27 @@ export function UserAppShell() {
                   if (semPasta.length === 0) return null
                   return (
                     <div className="overflow-hidden rounded-2xl border border-dashed border-white/10 bg-[#0b0d14]">
-                      <div className="flex items-center gap-3 border-b border-white/10 bg-white/[0.02] px-4 py-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/5 text-slate-400">
-                          <Folder size={16} />
+                      <div className="flex items-center gap-2 border-b border-white/10 bg-white/[0.02] px-3 py-2.5">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-400">
+                          <Folder size={13} />
                         </div>
-                        <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-400">Sem pasta</p>
+                        <p className="min-w-0 flex-1 truncate text-xs font-black uppercase tracking-wide text-slate-400">Sem pasta</p>
                         <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-300">
                           {semPasta.length}
                         </span>
                       </div>
                       <div className="divide-y divide-white/5">
                         {semPasta.map(projeto => (
-                          <Link
-                            key={projeto.id}
-                            href={`/dashboard/${projeto.id}`}
-                            className="flex items-center gap-2 px-4 py-2.5 text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white"
-                          >
-                            <LayoutDashboard size={13} className="shrink-0 text-slate-500" />
+                          <div key={projeto.id} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300">
+                            <LayoutDashboard size={12} className="shrink-0 text-slate-500" />
                             <span className="min-w-0 flex-1 truncate">{projeto.nome}</span>
-                            <ChevronRight size={14} className="shrink-0 text-slate-600" />
-                          </Link>
+                            <Link
+                              href={`/dashboard/${projeto.id}`}
+                              className="shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[11px] font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white"
+                            >
+                              Abrir
+                            </Link>
+                          </div>
                         ))}
                       </div>
                     </div>
