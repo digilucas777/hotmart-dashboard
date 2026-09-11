@@ -90,9 +90,14 @@ export function UserAppShell() {
   const [foldersModalOpen, setFoldersModalOpen] = useState(false)
 
   async function reloadFolders() {
-    const [foldersData, projetosMap] = await Promise.all([fetchFolders(), fetchFolderProjetoIds()])
-    setFolders(foldersData)
-    setFolderProjetos(projetosMap)
+    try {
+      const [foldersData, projetosMap] = await Promise.all([fetchFolders(), fetchFolderProjetoIds()])
+      setFolders(foldersData)
+      setFolderProjetos(projetosMap)
+      window.dispatchEvent(new Event('dashboard-folders-changed'))
+    } catch (err) {
+      console.error(err)
+    }
   }
   const [siteStats, setSiteStats] = useState<{ total: number; ok: number; problema: number } | null>(null)
   const [loading, setLoading] = useState(true)
@@ -1099,14 +1104,16 @@ export function UserAppShell() {
         </div>
       )}
 
-      <ManageFoldersModal
-        open={foldersModalOpen}
-        onClose={() => setFoldersModalOpen(false)}
-        folders={folders}
-        folderProjetos={folderProjetos}
-        allProjetos={dashboards}
-        onChanged={reloadFolders}
-      />
+      {foldersModalOpen && (
+        <ManageFoldersModal
+          open={foldersModalOpen}
+          onClose={() => setFoldersModalOpen(false)}
+          folders={folders}
+          folderProjetos={folderProjetos}
+          allProjetos={dashboards}
+          onChanged={reloadFolders}
+        />
+      )}
     </div>
   )
 }

@@ -78,6 +78,17 @@ export function Sidebar() {
     })
   }
 
+  async function refetchFolderData() {
+    const [foldersData, projetosMap, projetosRes] = await Promise.all([
+      fetchFolders(),
+      fetchFolderProjetoIds(),
+      supabase.from('projetos').select('id, nome').is('deleted_at', null).order('nome'),
+    ])
+    setFolders(foldersData)
+    setFolderProjetos(projetosMap)
+    setAllProjetosSidebar((projetosRes.data ?? []) as { id: string; nome: string }[])
+  }
+
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return
@@ -98,14 +109,7 @@ export function Sidebar() {
       if (admin) {
         setIsAdmin(true)
         setCanSeeVendas(true)
-        const [foldersData, projetosMap, projetosRes] = await Promise.all([
-          fetchFolders(),
-          fetchFolderProjetoIds(),
-          supabase.from('projetos').select('id, nome').is('deleted_at', null).order('nome'),
-        ])
-        setFolders(foldersData)
-        setFolderProjetos(projetosMap)
-        setAllProjetosSidebar((projetosRes.data ?? []) as { id: string; nome: string }[])
+        await refetchFolderData()
         return
       }
       // Mesmo critério do /vendas: precisa ter acesso ao dashboard (pode_visualizar) E o
@@ -118,8 +122,17 @@ export function Sidebar() {
         .eq('pode_ver_vendas', true)
         .limit(1)
       setCanSeeVendas((perms ?? []).length > 0)
-    })
+    }).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (!isAdmin) return
+    function handleFoldersChanged() {
+      void refetchFolderData()
+    }
+    window.addEventListener('dashboard-folders-changed', handleFoldersChanged)
+    return () => window.removeEventListener('dashboard-folders-changed', handleFoldersChanged)
+  }, [isAdmin])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -167,6 +180,9 @@ export function Sidebar() {
           const active = isNavActive(item.href, pathname)
           const Icon = item.icon
           if (item.href === '/dashboard' && isAdmin) {
+            const hasVisibleFolders = folders.some(folder =>
+              (folderProjetos[folder.id] ?? []).some(id => allProjetosSidebar.some(p => p.id === id)),
+            )
             return (
               <div key={item.href}>
                 <div
@@ -179,13 +195,13 @@ export function Sidebar() {
                     <Icon size={17} className="flex-shrink-0" />
                     <span className="app-sidebar-label text-sm font-medium">{item.label}</span>
                   </Link>
-                  {folders.length > 0 && (
+                  {hasVisibleFolders && (
                     <button onClick={toggleDashboardsTree} className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg hover:bg-white/10" title="Pastas">
                       {dashboardsTreeOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     </button>
                   )}
                 </div>
-                {dashboardsTreeOpen && folders.length > 0 && (
+                {dashboardsTreeOpen && hasVisibleFolders && (
                   <div className="ml-4 mt-1 space-y-0.5 border-l border-white/10 pl-3">
                     {folders.map(folder => {
                       const idsNaPasta = folderProjetos[folder.id] ?? []

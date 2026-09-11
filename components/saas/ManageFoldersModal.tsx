@@ -28,10 +28,12 @@ export function ManageFoldersModal({
   const [expandedFolderId, setExpandedFolderId] = useState<string | null>(null)
   const [savingAssign, setSavingAssign] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
 
   if (!open) return null
 
   async function handleCreate() {
+    if (savingNew) return
     const nome = newFolderName.trim()
     if (!nome) return
     setError(null)
@@ -39,12 +41,12 @@ export function ManageFoldersModal({
     try {
       await createFolder(nome, folders.length)
       setNewFolderName('')
-      await onChanged()
     } catch (err) {
       console.error(err)
       setError('Não foi possível criar a pasta. Tente de novo.')
     } finally {
       setSavingNew(false)
+      await onChanged()
     }
   }
 
@@ -55,10 +57,11 @@ export function ManageFoldersModal({
     try {
       await renameFolder(id, nome)
       setEditingId(null)
-      await onChanged()
     } catch (err) {
       console.error(err)
       setError('Não foi possível renomear a pasta.')
+    } finally {
+      await onChanged()
     }
   }
 
@@ -66,10 +69,11 @@ export function ManageFoldersModal({
     setError(null)
     try {
       await deleteFolder(id)
-      await onChanged()
     } catch (err) {
       console.error(err)
       setError('Não foi possível excluir a pasta.')
+    } finally {
+      await onChanged()
     }
   }
 
@@ -80,12 +84,12 @@ export function ManageFoldersModal({
       const current = folderProjetos[folderId] ?? []
       const next = checked ? [...current, projetoId] : current.filter(id => id !== projetoId)
       await setFolderProjetos(folderId, next)
-      await onChanged()
     } catch (err) {
       console.error(err)
       setError('Não foi possível atualizar os projetos da pasta.')
     } finally {
       setSavingAssign(false)
+      await onChanged()
     }
   }
 
@@ -166,9 +170,26 @@ export function ManageFoldersModal({
                     <Pencil size={13} />
                   </button>
                 )}
-                <button onClick={() => void handleDelete(folder.id)} className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 hover:bg-red-500/10 hover:text-red-300">
-                  <Trash2 size={13} />
-                </button>
+                {confirmingDeleteId === folder.id ? (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => { void handleDelete(folder.id); setConfirmingDeleteId(null) }}
+                      className="flex h-8 items-center justify-center rounded-xl bg-red-500/20 px-2 text-xs font-bold text-red-300 hover:bg-red-500/30"
+                    >
+                      Confirmar?
+                    </button>
+                    <button
+                      onClick={() => setConfirmingDeleteId(null)}
+                      className="flex h-8 items-center justify-center rounded-xl px-2 text-xs font-bold text-slate-400 hover:bg-white/5 hover:text-white"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => setConfirmingDeleteId(folder.id)} className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-500 hover:bg-red-500/10 hover:text-red-300">
+                    <Trash2 size={13} />
+                  </button>
+                )}
               </div>
               {expandedFolderId === folder.id && (
                 <div className="space-y-1 border-t border-white/5 px-4 py-3">

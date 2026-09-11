@@ -7,6 +7,7 @@ export async function fetchFolders(): Promise<DashboardFolder[]> {
     .from('dashboard_folders')
     .select('id, nome, ordem')
     .order('ordem', { ascending: true })
+    .order('created_at', { ascending: true })
   if (error) throw error
   return (data ?? []) as DashboardFolder[]
 }
