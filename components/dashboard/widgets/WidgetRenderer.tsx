@@ -276,8 +276,9 @@ function WidgetRendererBase({
       )}
 
       {effectiveLoading && (
-        <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-2xl bg-black/30 backdrop-blur-[1px]">
+        <div className="pointer-events-none absolute inset-0 z-40 flex flex-col items-center justify-center gap-2 rounded-2xl bg-black/30 backdrop-blur-[1px]">
           <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/15 border-t-white/50" />
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-white/60">Carregando…</span>
         </div>
       )}
 
