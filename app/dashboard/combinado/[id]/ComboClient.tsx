@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft, Check, ChevronDown, LayoutGrid, Layers, Loader2, Pencil, RefreshCw, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getPeriodRange, formatBRL, formatUSD } from '@/lib/utils'
-import { fetchVendasSummaryMulti, fetchHotmartIdsForProjetos, computeWidgetDataFromSummary, type SummaryRow } from '@/lib/vendas-aggregation'
+import { fetchVendasSummaryMulti, fetchHotmartIdsForProjetos, computeWidgetDataFromSummary, type SummaryRow, type SummaryRowMulti } from '@/lib/vendas-aggregation'
 import type { DashboardCombo, Projeto, Venda, Period } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
 import { SalesTable } from '@/components/dashboard/SalesTable'
@@ -51,6 +51,11 @@ export function ComboClient({ comboId }: { comboId: string }) {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null)
 
   const summaryAbortRef = useRef<AbortController | null>(null)
+  // Mesmo cache curto do dashboard individual: voltar pra um período visto há pouco
+  // (Hoje -> Ontem -> Hoje) reaproveita o resultado em vez de buscar tudo de novo.
+  // "Atualizar" sempre limpa isso.
+  const SUMMARY_CACHE_TTL_MS = 60_000
+  const summaryCacheRef = useRef<Map<string, { rows: SummaryRowMulti[]; ts: number }>>(new Map())
 
   useEffect(() => {
     async function checkAccessAndLoad() {
@@ -145,7 +150,15 @@ export function ComboClient({ comboId }: { comboId: string }) {
       // um projeto sozinho engasgando fazia o total ficar silenciosamente menor que a
       // soma real dos dashboards individuais. Agora ou carrega tudo, ou falha tudo de
       // forma visível (sem número "quase certo" escondendo um projeto que faltou).
-      const rows = await fetchVendasSummaryMulti(combo.projeto_ids, from, to, controller.signal)
+      const summaryCacheKey = `${combo.projeto_ids.join(',')}|${from.toISOString()}|${to.toISOString()}`
+      const cached = summaryCacheRef.current.get(summaryCacheKey)
+      let rows: SummaryRowMulti[]
+      if (cached && Date.now() - cached.ts < SUMMARY_CACHE_TTL_MS) {
+        rows = cached.rows
+      } else {
+        rows = await fetchVendasSummaryMulti(combo.projeto_ids, from, to, controller.signal)
+        summaryCacheRef.current.set(summaryCacheKey, { rows, ts: Date.now() })
+      }
       if (controller.signal.aborted) return
       setSummary(rows)
       setSummaryByProjeto(
@@ -237,6 +250,7 @@ export function ComboClient({ comboId }: { comboId: string }) {
 
   async function handleRefresh() {
     setIsRefreshing(true)
+    summaryCacheRef.current.clear()  // "Atualizar" sempre busca dado novo, nunca usa cache
     try {
       await fetchAll()
     } finally {

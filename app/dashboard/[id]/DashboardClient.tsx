@@ -492,6 +492,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   // manual) — sem isso, trocar rápido de projeto empilhava as buscas antigas (ainda em
   // voo) em cima das novas, multiplicando a carga no Postgres e derrubando tudo em timeout.
   const fetchAbortRef = useRef<AbortController | null>(null)
+  // Voltar pra um período visto há pouco (ex: Hoje -> Ontem -> Hoje) buscava tudo de novo
+  // do zero, mesmo já tendo acabado de carregar — desperdiça 2 consultas e ainda expõe o
+  // usuário à mesma instabilidade de infraestrutura sem necessidade. TTL curto porque
+  // "Hoje" continua recebendo vendas novas o tempo todo; "Atualizar" sempre limpa isso.
+  const SUMMARY_CACHE_TTL_MS = 60_000
+  const summaryCacheRef = useRef<Map<string, { current: SummaryRow[]; previous: SummaryRow[]; ts: number }>>(new Map())
 
   function isAbortError(err: unknown): boolean {
     if (err instanceof DOMException && err.name === 'AbortError') return true
@@ -728,10 +734,20 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       // alimenta os cards de métrica (faturamento, lucro, ROAS etc.) e libera o `loading`
       // geral. As vendas cruas (tabela, gráficos, combinado) ficam pra fase lenta, abaixo,
       // que não bloqueia isso aqui.
-      const [summaryCurrentRows, summaryPreviousRows] = await Promise.all([
-        fetchVendasSummary(projectId, from, to, controller.signal),
-        fetchVendasSummary(projectId, previousRange.from, previousRange.to, controller.signal),
-      ])
+      const summaryCacheKey = `${projectId}|${from.toISOString()}|${to.toISOString()}`
+      const cached = summaryCacheRef.current.get(summaryCacheKey)
+      let summaryCurrentRows: SummaryRow[]
+      let summaryPreviousRows: SummaryRow[]
+      if (cached && Date.now() - cached.ts < SUMMARY_CACHE_TTL_MS) {
+        summaryCurrentRows = cached.current
+        summaryPreviousRows = cached.previous
+      } else {
+        ;[summaryCurrentRows, summaryPreviousRows] = await Promise.all([
+          fetchVendasSummary(projectId, from, to, controller.signal),
+          fetchVendasSummary(projectId, previousRange.from, previousRange.to, controller.signal),
+        ])
+        summaryCacheRef.current.set(summaryCacheKey, { current: summaryCurrentRows, previous: summaryPreviousRows, ts: Date.now() })
+      }
       setSummaryCurrent(summaryCurrentRows)
       setSummaryPrevious(summaryPreviousRows)
       setLastUpdatedAt(new Date())
@@ -975,6 +991,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
     hotmartCacheRef.current = null  // força re-fetch completo no refresh manual
+    summaryCacheRef.current.clear()  // "Atualizar" sempre busca dado novo, nunca usa cache
     try {
       await Promise.all([fetchVendas(), fetchCustosManuals()])
       setSuccessToast('Dados atualizados')
@@ -1503,6 +1520,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     setSavingProducts(false)
     setShowProducts(false)
     hotmartCacheRef.current = null  // produtos mudaram — força re-fetch da config
+    summaryCacheRef.current.clear()  // e invalida os resumos cacheados, que dependiam da config antiga
     await fetchVendas()
   }
 
