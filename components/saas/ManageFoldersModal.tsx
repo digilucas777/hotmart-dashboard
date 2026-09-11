@@ -27,39 +27,66 @@ export function ManageFoldersModal({
   const [editingName, setEditingName] = useState('')
   const [expandedFolderId, setExpandedFolderId] = useState<string | null>(null)
   const [savingAssign, setSavingAssign] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   if (!open) return null
 
   async function handleCreate() {
     const nome = newFolderName.trim()
     if (!nome) return
+    setError(null)
     setSavingNew(true)
-    await createFolder(nome, folders.length)
-    setNewFolderName('')
-    setSavingNew(false)
-    await onChanged()
+    try {
+      await createFolder(nome, folders.length)
+      setNewFolderName('')
+      await onChanged()
+    } catch (err) {
+      console.error(err)
+      setError('Não foi possível criar a pasta. Tente de novo.')
+    } finally {
+      setSavingNew(false)
+    }
   }
 
   async function handleRename(id: string) {
     const nome = editingName.trim()
     if (!nome) { setEditingId(null); return }
-    await renameFolder(id, nome)
-    setEditingId(null)
-    await onChanged()
+    setError(null)
+    try {
+      await renameFolder(id, nome)
+      setEditingId(null)
+      await onChanged()
+    } catch (err) {
+      console.error(err)
+      setError('Não foi possível renomear a pasta.')
+    }
   }
 
   async function handleDelete(id: string) {
-    await deleteFolder(id)
-    await onChanged()
+    setError(null)
+    try {
+      await deleteFolder(id)
+      await onChanged()
+    } catch (err) {
+      console.error(err)
+      setError('Não foi possível excluir a pasta.')
+    }
   }
 
   async function handleToggleProjeto(folderId: string, projetoId: string, checked: boolean) {
+    setError(null)
     setSavingAssign(true)
-    const current = folderProjetos[folderId] ?? []
-    const next = checked ? [...current, projetoId] : current.filter(id => id !== projetoId)
-    await setFolderProjetos(folderId, next)
-    setSavingAssign(false)
-    await onChanged()
+    try {
+      const current = folderProjetos[folderId] ?? []
+      const next = checked ? [...current, projetoId] : current.filter(id => id !== projetoId)
+      await setFolderProjetos(folderId, next)
+      await onChanged()
+    } catch (err) {
+      console.error(err)
+      setError('Não foi possível atualizar os projetos da pasta.')
+    } finally {
+      setSavingAssign(false)
+    }
   }
 
   return (
@@ -79,6 +106,12 @@ export function ManageFoldersModal({
             <X size={17} />
           </button>
         </div>
+
+        {error && (
+          <div className="mb-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-2.5 text-xs text-red-200">
+            {error}
+          </div>
+        )}
 
         <div className="flex gap-2">
           <input
