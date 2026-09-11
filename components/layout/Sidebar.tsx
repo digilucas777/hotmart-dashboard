@@ -128,7 +128,7 @@ export function Sidebar() {
   useEffect(() => {
     if (!isAdmin) return
     function handleFoldersChanged() {
-      void refetchFolderData()
+      void refetchFolderData().catch(() => {})
     }
     window.addEventListener('dashboard-folders-changed', handleFoldersChanged)
     return () => window.removeEventListener('dashboard-folders-changed', handleFoldersChanged)
