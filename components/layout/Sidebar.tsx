@@ -14,8 +14,13 @@ import {
   ShieldCheck,
   Radio,
   Target,
+  ChevronDown,
+  ChevronRight,
+  Folder,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { fetchFolders, fetchFolderProjetoIds } from '@/lib/dashboard-folders'
+import type { DashboardFolder } from '@/lib/dashboard-folders'
 
 const NAV_ITEMS = [
   { icon: LayoutGrid, label: 'Dashboards', href: '/dashboard' },
@@ -36,8 +41,42 @@ export function Sidebar() {
   const [companyName, setCompanyName] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
   const [canSeeVendas, setCanSeeVendas] = useState(false)
+  const [folders, setFolders] = useState<DashboardFolder[]>([])
+  const [folderProjetos, setFolderProjetos] = useState<Record<string, string[]>>({})
+  const [allProjetosSidebar, setAllProjetosSidebar] = useState<{ id: string; nome: string }[]>([])
+  const [dashboardsTreeOpen, setDashboardsTreeOpen] = useState(false)
+  const [openFolderIds, setOpenFolderIds] = useState<Set<string>>(new Set())
   const pathname = usePathname()
   const router = useRouter()
+
+  useEffect(() => {
+    try {
+      const savedOpen = localStorage.getItem('sidebar_dashboards_tree_open')
+      if (savedOpen === 'true') setDashboardsTreeOpen(true)
+      const savedFolders = localStorage.getItem('sidebar_open_folder_ids')
+      if (savedFolders) setOpenFolderIds(new Set(JSON.parse(savedFolders) as string[]))
+    } catch {
+      // localStorage indisponível (modo privado, etc) — segue com os padrões
+    }
+  }, [])
+
+  function toggleDashboardsTree() {
+    setDashboardsTreeOpen(prev => {
+      const next = !prev
+      try { localStorage.setItem('sidebar_dashboards_tree_open', String(next)) } catch { /* ignora */ }
+      return next
+    })
+  }
+
+  function toggleFolderOpen(folderId: string) {
+    setOpenFolderIds(prev => {
+      const next = new Set(prev)
+      if (next.has(folderId)) next.delete(folderId)
+      else next.add(folderId)
+      try { localStorage.setItem('sidebar_open_folder_ids', JSON.stringify(Array.from(next))) } catch { /* ignora */ }
+      return next
+    })
+  }
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -56,7 +95,19 @@ export function Sidebar() {
         .eq('id', user.id)
         .maybeSingle()
       const admin = profile?.role === 'admin'
-      if (admin) { setIsAdmin(true); setCanSeeVendas(true); return }
+      if (admin) {
+        setIsAdmin(true)
+        setCanSeeVendas(true)
+        const [foldersData, projetosMap, projetosRes] = await Promise.all([
+          fetchFolders(),
+          fetchFolderProjetoIds(),
+          supabase.from('projetos').select('id, nome').is('deleted_at', null).order('nome'),
+        ])
+        setFolders(foldersData)
+        setFolderProjetos(projetosMap)
+        setAllProjetosSidebar((projetosRes.data ?? []) as { id: string; nome: string }[])
+        return
+      }
       // Mesmo critério do /vendas: precisa ter acesso ao dashboard (pode_visualizar) E o
       // checkbox "Ver aba Vendas" marcado (pode_ver_vendas) em pelo menos um projeto.
       const { data: perms } = await supabase
@@ -115,6 +166,63 @@ export function Sidebar() {
         {visibleNavItems.map(item => {
           const active = isNavActive(item.href, pathname)
           const Icon = item.icon
+          if (item.href === '/dashboard' && isAdmin) {
+            return (
+              <div key={item.href}>
+                <div
+                  className={`flex items-center gap-1 rounded-xl px-1 py-0.5 transition-colors ${
+                    active ? 'text-cyan-100' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
+                  }`}
+                  style={active ? { background: 'linear-gradient(135deg, rgba(0,212,255,0.12), rgba(139,92,246,0.12))' } : undefined}
+                >
+                  <Link href={item.href} title={item.label} className="flex flex-1 items-center gap-3 px-2 py-2">
+                    <Icon size={17} className="flex-shrink-0" />
+                    <span className="app-sidebar-label text-sm font-medium">{item.label}</span>
+                  </Link>
+                  {folders.length > 0 && (
+                    <button onClick={toggleDashboardsTree} className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg hover:bg-white/10" title="Pastas">
+                      {dashboardsTreeOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                  )}
+                </div>
+                {dashboardsTreeOpen && folders.length > 0 && (
+                  <div className="ml-4 mt-1 space-y-0.5 border-l border-white/10 pl-3">
+                    {folders.map(folder => {
+                      const idsNaPasta = folderProjetos[folder.id] ?? []
+                      const projetosDaPasta = allProjetosSidebar.filter(p => idsNaPasta.includes(p.id))
+                      if (projetosDaPasta.length === 0) return null
+                      const folderOpen = openFolderIds.has(folder.id)
+                      return (
+                        <div key={folder.id}>
+                          <button
+                            onClick={() => toggleFolderOpen(folder.id)}
+                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-400 hover:bg-white/5 hover:text-slate-200"
+                          >
+                            {folderOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                            <Folder size={12} />
+                            <span className="truncate">{folder.nome}</span>
+                          </button>
+                          {folderOpen && (
+                            <div className="ml-4 space-y-0.5 border-l border-white/5 pl-3">
+                              {projetosDaPasta.map(projeto => (
+                                <Link
+                                  key={projeto.id}
+                                  href={`/dashboard/${projeto.id}`}
+                                  className="block truncate rounded-lg px-2 py-1.5 text-xs text-slate-500 hover:bg-white/5 hover:text-slate-200"
+                                >
+                                  {projeto.nome}
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          }
           return (
             <Link
               key={item.href}
