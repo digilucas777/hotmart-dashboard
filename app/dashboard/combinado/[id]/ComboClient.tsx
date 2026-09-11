@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft, Check, ChevronDown, LayoutGrid, Layers, Loader2, Pencil, RefreshCw, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getPeriodRange, formatBRL, formatUSD } from '@/lib/utils'
-import { fetchVendasSummary, fetchHotmartIdsForProjetos, computeWidgetDataFromSummary, type SummaryRow } from '@/lib/vendas-aggregation'
+import { fetchVendasSummaryMulti, fetchHotmartIdsForProjetos, computeWidgetDataFromSummary, type SummaryRow } from '@/lib/vendas-aggregation'
 import type { DashboardCombo, Projeto, Venda, Period } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
 import { SalesTable } from '@/components/dashboard/SalesTable'
@@ -139,29 +139,26 @@ export function ComboClient({ comboId }: { comboId: string }) {
     setLoadingSummary(true)
     setSummaryError(false)
     try {
-      // allSettled em vez de Promise.all: um projeto sozinho esbarrando num pico
-      // passageiro de carga (ex: rajada de webhooks) não pode derrubar a combinação
-      // inteira — mostra os que carregaram e loga o(s) que falharam, só marca erro
-      // de verdade se TODOS falharem.
-      const settled = await Promise.allSettled(
-        combo.projeto_ids.map(id => fetchVendasSummary(id, from, to, controller.signal)),
-      )
+      // Uma única chamada com todos os projeto_ids do combo, em vez de uma chamada
+      // por projeto em paralelo — evita amplificar a contenção de CPU compartilhada
+      // (N consultas simultâneas = N chances de travar) e evita o modo de falha onde
+      // um projeto sozinho engasgando fazia o total ficar silenciosamente menor que a
+      // soma real dos dashboards individuais. Agora ou carrega tudo, ou falha tudo de
+      // forma visível (sem número "quase certo" escondendo um projeto que faltou).
+      const rows = await fetchVendasSummaryMulti(combo.projeto_ids, from, to, controller.signal)
       if (controller.signal.aborted) return
-      const failedIds: string[] = []
-      const results = settled.map((r, i) => {
-        if (r.status === 'fulfilled') return r.value
-        failedIds.push(combo.projeto_ids[i]!)
-        return [] as SummaryRow[]
-      })
-      if (failedIds.length > 0) console.error('[combo] falha ao carregar resumo de:', failedIds)
-      if (failedIds.length === combo.projeto_ids.length) {
+      setSummary(rows)
+      setSummaryByProjeto(
+        combo.projeto_ids.map(id => ({
+          projetoId: id,
+          summary: rows.filter(r => r.projeto_id === id).map(({ status, moeda, cnt, total }) => ({ status, moeda, cnt, total })),
+        })),
+      )
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        console.error('[combo] falha ao carregar resumo:', err)
         setSummaryError(true)
-      } else {
-        setSummary(results.flat())
-        setSummaryByProjeto(combo.projeto_ids.map((id, i) => ({ projetoId: id, summary: results[i] ?? [] })))
       }
-    } catch {
-      if (!controller.signal.aborted) setSummaryError(true)
     } finally {
       if (!controller.signal.aborted) setLoadingSummary(false)
     }

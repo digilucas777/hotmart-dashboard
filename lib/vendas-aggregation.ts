@@ -34,6 +34,32 @@ export async function fetchVendasSummary(projetoId: string, from: Date, to: Date
   throw new Error('fetchVendasSummary: esgotou tentativas')
 }
 
+export type SummaryRowMulti = SummaryRow & { projeto_id: string }
+
+// Versão pro combinado (multi-projeto): busca o resumo de todos os projetos do combo
+// numa única chamada, em vez de uma chamada por projeto em paralelo. Isso reduz a
+// exposição à contenção de CPU compartilhada (N consultas simultâneas viravam N chances
+// de travar) e elimina o modo de falha onde um projeto sozinho engasgando fazia o
+// faturamento total do combinado ficar silenciosamente menor que a soma real dos
+// dashboards individuais — agora ou carrega tudo, ou falha tudo de forma visível.
+export async function fetchVendasSummaryMulti(projetoIds: string[], from: Date, to: Date, signal?: AbortSignal): Promise<SummaryRowMulti[]> {
+  if (projetoIds.length === 0) return []
+  const maxAttempts = 2
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let query = supabase.rpc('get_vendas_summary_multi_v2', {
+      p_projeto_ids: projetoIds,
+      p_from: from.toISOString(),
+      p_to: to.toISOString(),
+    })
+    if (signal) query = query.abortSignal(signal)
+    const { data, error } = await query
+    if (!error) return (data ?? []) as SummaryRowMulti[]
+    if (signal?.aborted || attempt === maxAttempts) throw error
+    await new Promise(resolve => setTimeout(resolve, 400))
+  }
+  throw new Error('fetchVendasSummaryMulti: esgotou tentativas')
+}
+
 export async function fetchVendasPorDia(projetoId: string, from: Date, to: Date, signal?: AbortSignal): Promise<DiaRow[]> {
   const maxAttempts = 2
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
