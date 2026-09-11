@@ -318,7 +318,7 @@ export function UserAppShell() {
       imagem_url: dashboard.imagem_url ?? null,
       status: dashboard.status ?? 'active',
       user_id: userId,
-      ordem: dashboards.length,
+      ordem: -1, // vai pro início da lista, não pro final — é o que acabou de ser duplicado
     }
 
     let { data: duplicated, error: duplicateError } = await supabase
@@ -330,7 +330,7 @@ export function UserAppShell() {
     if (duplicateError && (duplicateError.message.includes('schema cache') || duplicateError.message.includes('capa_url'))) {
       const retry = await supabase
         .from('projetos')
-        .insert({ nome: payload.nome, descricao: payload.descricao, user_id: userId, ordem: dashboards.length })
+        .insert({ nome: payload.nome, descricao: payload.descricao, user_id: userId, ordem: -1 })
         .select()
         .single()
       duplicated = retry.data
@@ -377,6 +377,7 @@ export function UserAppShell() {
 
     setDuplicatingId(null)
     await loadDashboards()
+    openEditDashboard(newProject)  // já abre pra trocar o nome de "Cópia de X" na hora
   }
 
   async function logout() {
@@ -851,6 +852,8 @@ export function UserAppShell() {
               <label className="block">
                 <span className="mb-1.5 block text-xs font-semibold text-slate-500">Nome</span>
                 <input
+                  autoFocus
+                  onFocus={event => event.target.select()}
                   value={dashboardName}
                   onChange={event => setDashboardName(event.target.value)}
                   className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm text-white outline-none transition-colors placeholder:text-slate-700 focus:border-cyan-300/60"
