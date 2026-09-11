@@ -9,6 +9,7 @@ import {
   Edit3,
   ExternalLink,
   FileText,
+  Folder,
   GripVertical,
   ImageIcon,
   Layers,
@@ -31,6 +32,9 @@ import { supabase } from '@/lib/supabase'
 import type { Projeto, DashboardCombo } from '@/lib/types'
 import { DashSpeedLogo } from './DashSpeedLogo'
 import { CombineDashboardsModal } from './CombineDashboardsModal'
+import { ManageFoldersModal } from './ManageFoldersModal'
+import { fetchFolders, fetchFolderProjetoIds } from '@/lib/dashboard-folders'
+import type { DashboardFolder } from '@/lib/dashboard-folders'
 
 // Mesma lista (e mesma ordem) do menu principal em components/layout/Sidebar.tsx
 // — são dois componentes de sidebar separados, então um item novo lá precisa
@@ -81,6 +85,15 @@ export function UserAppShell() {
   const [userId, setUserId] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [dashboards, setDashboards] = useState<Projeto[]>([])
+  const [folders, setFolders] = useState<DashboardFolder[]>([])
+  const [folderProjetos, setFolderProjetos] = useState<Record<string, string[]>>({})
+  const [foldersModalOpen, setFoldersModalOpen] = useState(false)
+
+  async function reloadFolders() {
+    const [foldersData, projetosMap] = await Promise.all([fetchFolders(), fetchFolderProjetoIds()])
+    setFolders(foldersData)
+    setFolderProjetos(projetosMap)
+  }
   const [siteStats, setSiteStats] = useState<{ total: number; ok: number; problema: number } | null>(null)
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -171,6 +184,7 @@ export function UserAppShell() {
         if (active && profile?.role === 'admin') {
           setIsAdmin(true)
           void loadCombos()
+          void reloadFolders()
         }
       }
     })
@@ -537,13 +551,22 @@ export function UserAppShell() {
               </div>
               <div className="flex gap-2">
                 {isAdmin && (
-                  <button
-                    onClick={() => { setEditingCombo(null); setComboModalOpen(true) }}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-violet-300/30 bg-white/[0.04] px-5 py-3 text-sm font-black text-violet-200 transition-colors hover:border-violet-300/50 hover:bg-white/[0.08]"
-                  >
-                    <Layers size={16} />
-                    Combinar dashboards
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setFoldersModalOpen(true)}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-300/30 bg-white/[0.04] px-5 py-3 text-sm font-black text-cyan-100 transition-colors hover:border-cyan-300/50 hover:bg-white/[0.08]"
+                    >
+                      <Folder size={16} />
+                      Gerenciar pastas
+                    </button>
+                    <button
+                      onClick={() => { setEditingCombo(null); setComboModalOpen(true) }}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-violet-300/30 bg-white/[0.04] px-5 py-3 text-sm font-black text-violet-200 transition-colors hover:border-violet-300/50 hover:bg-white/[0.08]"
+                    >
+                      <Layers size={16} />
+                      Combinar dashboards
+                    </button>
+                  </>
                 )}
                 <button
                   onClick={() => setShowCreate(true)}
@@ -1016,6 +1039,15 @@ export function UserAppShell() {
           </div>
         </div>
       )}
+
+      <ManageFoldersModal
+        open={foldersModalOpen}
+        onClose={() => setFoldersModalOpen(false)}
+        folders={folders}
+        folderProjetos={folderProjetos}
+        allProjetos={dashboards}
+        onChanged={reloadFolders}
+      />
     </div>
   )
 }
