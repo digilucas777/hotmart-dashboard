@@ -196,13 +196,13 @@ export function Sidebar() {
                     <span className="app-sidebar-label text-sm font-medium">{item.label}</span>
                   </Link>
                   {hasVisibleFolders && (
-                    <button onClick={toggleDashboardsTree} className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg hover:bg-white/10" title="Pastas">
+                    <button onClick={toggleDashboardsTree} className="app-sidebar-label flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg hover:bg-white/10" title="Pastas">
                       {dashboardsTreeOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     </button>
                   )}
                 </div>
                 {dashboardsTreeOpen && hasVisibleFolders && (
-                  <div className="ml-4 mt-1 space-y-0.5 border-l border-white/10 pl-3">
+                  <div className="app-sidebar-label ml-4 mt-1 space-y-0.5 border-l border-white/10 pl-3">
                     {folders.map(folder => {
                       const idsNaPasta = folderProjetos[folder.id] ?? []
                       const projetosDaPasta = allProjetosSidebar.filter(p => idsNaPasta.includes(p.id))

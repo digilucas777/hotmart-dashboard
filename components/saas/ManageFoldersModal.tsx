@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Check, Folder, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react'
 import type { Projeto } from '@/lib/types'
 import type { DashboardFolder } from '@/lib/dashboard-folders'
-import { createFolder, renameFolder, deleteFolder, setFolderProjetos } from '@/lib/dashboard-folders'
+import { createFolder, renameFolder, deleteFolder, addFolderProjeto, removeFolderProjeto } from '@/lib/dashboard-folders'
 
 export function ManageFoldersModal({
   open,
@@ -39,8 +39,9 @@ export function ManageFoldersModal({
     setError(null)
     setSavingNew(true)
     try {
-      await createFolder(nome, folders.length)
+      const created = await createFolder(nome, folders.length)
       setNewFolderName('')
+      setExpandedFolderId(created.id)
     } catch (err) {
       console.error(err)
       setError('Não foi possível criar a pasta. Tente de novo.')
@@ -81,9 +82,8 @@ export function ManageFoldersModal({
     setError(null)
     setSavingAssign(true)
     try {
-      const current = folderProjetos[folderId] ?? []
-      const next = checked ? [...current, projetoId] : current.filter(id => id !== projetoId)
-      await setFolderProjetos(folderId, next)
+      if (checked) await addFolderProjeto(folderId, projetoId)
+      else await removeFolderProjeto(folderId, projetoId)
     } catch (err) {
       console.error(err)
       setError('Não foi possível atualizar os projetos da pasta.')

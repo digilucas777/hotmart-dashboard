@@ -57,3 +57,24 @@ export async function setFolderProjetos(folderId: string, projetoIds: string[]):
     .insert(projetoIds.map(projeto_id => ({ folder_id: folderId, projeto_id })))
   if (insError) throw insError
 }
+
+// Marcar/desmarcar um checkbox de cada vez usa essas duas — cada clique é uma operação
+// de 1 linha, atômica, sem depender de reler a lista inteira da pasta primeiro. Isso evita
+// perder marcações quando o usuário clica em vários checkboxes rápido (o setFolderProjetos
+// acima reescreve a lista inteira a cada chamada, então dois cliques quase simultâneos podem
+// fazer o segundo sobrescrever o resultado do primeiro).
+export async function addFolderProjeto(folderId: string, projetoId: string): Promise<void> {
+  const { error } = await supabase
+    .from('dashboard_folder_projetos')
+    .upsert({ folder_id: folderId, projeto_id: projetoId })
+  if (error) throw error
+}
+
+export async function removeFolderProjeto(folderId: string, projetoId: string): Promise<void> {
+  const { error } = await supabase
+    .from('dashboard_folder_projetos')
+    .delete()
+    .eq('folder_id', folderId)
+    .eq('projeto_id', projetoId)
+  if (error) throw error
+}
