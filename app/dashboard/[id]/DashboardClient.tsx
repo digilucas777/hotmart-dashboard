@@ -467,6 +467,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [showClearModal, setShowClearModal] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [successToast, setSuccessToast] = useState<string | null>(null)
+  // A troca de dashboard usa navegação client-side do Next.js — sem isso, a tela antiga
+  // fica visível (só com um avisinho no canto) até a nova terminar de montar e buscar os
+  // dados, o que parece "travado numa dashboard errada" quando demora.
+  const [switchingToLabel, setSwitchingToLabel] = useState<string | null>(null)
   const [errorToast, setErrorToast] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
   const [mobileEditWarning, setMobileEditWarning] = useState(false)
@@ -492,12 +496,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   // manual) — sem isso, trocar rápido de projeto empilhava as buscas antigas (ainda em
   // voo) em cima das novas, multiplicando a carga no Postgres e derrubando tudo em timeout.
   const fetchAbortRef = useRef<AbortController | null>(null)
-  // Voltar pra um período visto há pouco (ex: Hoje -> Ontem -> Hoje) buscava tudo de novo
-  // do zero, mesmo já tendo acabado de carregar — desperdiça 2 consultas e ainda expõe o
-  // usuário à mesma instabilidade de infraestrutura sem necessidade. TTL curto porque
-  // "Hoje" continua recebendo vendas novas o tempo todo; "Atualizar" sempre limpa isso.
-  const SUMMARY_CACHE_TTL_MS = 60_000
-  const summaryCacheRef = useRef<Map<string, { current: SummaryRow[]; previous: SummaryRow[]; ts: number }>>(new Map())
+  // Voltar pra um período já visto (ex: Hoje -> Ontem -> Hoje) buscava tudo de novo do
+  // zero, mesmo já tendo acabado de carregar. Modelo combinado com o Lucas: a dashboard
+  // carrega uma vez (na entrada, ou na troca de período/projeto) e só o botão "Atualizar"
+  // busca dado novo depois disso — o painel "Ao vivo" é quem avisa quando tem venda nova
+  // que ainda não apareceu nos números. Por isso não expira sozinho.
+  const summaryCacheRef = useRef<Map<string, { current: SummaryRow[]; previous: SummaryRow[] }>>(new Map())
 
   function isAbortError(err: unknown): boolean {
     if (err instanceof DOMException && err.name === 'AbortError') return true
@@ -738,7 +742,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       const cached = summaryCacheRef.current.get(summaryCacheKey)
       let summaryCurrentRows: SummaryRow[]
       let summaryPreviousRows: SummaryRow[]
-      if (cached && Date.now() - cached.ts < SUMMARY_CACHE_TTL_MS) {
+      if (cached) {
         summaryCurrentRows = cached.current
         summaryPreviousRows = cached.previous
       } else {
@@ -746,7 +750,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           fetchVendasSummary(projectId, from, to, controller.signal),
           fetchVendasSummary(projectId, previousRange.from, previousRange.to, controller.signal),
         ])
-        summaryCacheRef.current.set(summaryCacheKey, { current: summaryCurrentRows, previous: summaryPreviousRows, ts: Date.now() })
+        summaryCacheRef.current.set(summaryCacheKey, { current: summaryCurrentRows, previous: summaryPreviousRows })
       }
       setSummaryCurrent(summaryCurrentRows)
       setSummaryPrevious(summaryPreviousRows)
@@ -1870,9 +1874,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                             onClick={() => {
                               setShowDashboardSwitcher(false)
                               if (!active) {
+                                setSwitchingToLabel(option.nome)
                                 router.push(`/dashboard/${option.id}`)
-                                setSuccessToast('Dashboard alterado')
-                                setTimeout(() => setSuccessToast(null), 3000)
                               }
                             }}
                           />
@@ -1908,6 +1911,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
                                 key={combo.id}
                                 onClick={() => {
                                   setShowDashboardSwitcher(false)
+                                  setSwitchingToLabel(combo.nome)
                                   router.push(`/dashboard/combinado/${combo.id}`)
                                 }}
                                 className="flex w-full min-w-0 items-center gap-3 rounded-2xl border border-transparent py-3 pl-2 pr-3 text-left text-[var(--dash-muted)] transition-all hover:border-violet-300/20 hover:bg-violet-400/5 hover:text-[var(--dash-text)]"
@@ -2384,6 +2388,13 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-violet-400" />
             <p className="text-sm font-medium text-white">Gerando imagem...</p>
           </div>
+        </div>
+      )}
+
+      {switchingToLabel && (
+        <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-[var(--dash-bg)]/90 backdrop-blur-sm">
+          <Spinner size={32} />
+          <p className="text-sm font-semibold text-[var(--dash-text)]">Trocando para {switchingToLabel}…</p>
         </div>
       )}
 

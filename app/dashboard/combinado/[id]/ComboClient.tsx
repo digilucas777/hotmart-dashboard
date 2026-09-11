@@ -51,11 +51,10 @@ export function ComboClient({ comboId }: { comboId: string }) {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null)
 
   const summaryAbortRef = useRef<AbortController | null>(null)
-  // Mesmo cache curto do dashboard individual: voltar pra um período visto há pouco
-  // (Hoje -> Ontem -> Hoje) reaproveita o resultado em vez de buscar tudo de novo.
-  // "Atualizar" sempre limpa isso.
-  const SUMMARY_CACHE_TTL_MS = 60_000
-  const summaryCacheRef = useRef<Map<string, { rows: SummaryRowMulti[]; ts: number }>>(new Map())
+  // Mesmo cache do dashboard individual: a tela carrega uma vez e só "Atualizar" busca
+  // dado novo depois disso — não expira sozinho (ver comentário equivalente em
+  // DashboardClient.tsx).
+  const summaryCacheRef = useRef<Map<string, { rows: SummaryRowMulti[] }>>(new Map())
 
   useEffect(() => {
     async function checkAccessAndLoad() {
@@ -153,11 +152,11 @@ export function ComboClient({ comboId }: { comboId: string }) {
       const summaryCacheKey = `${combo.projeto_ids.join(',')}|${from.toISOString()}|${to.toISOString()}`
       const cached = summaryCacheRef.current.get(summaryCacheKey)
       let rows: SummaryRowMulti[]
-      if (cached && Date.now() - cached.ts < SUMMARY_CACHE_TTL_MS) {
+      if (cached) {
         rows = cached.rows
       } else {
         rows = await fetchVendasSummaryMulti(combo.projeto_ids, from, to, controller.signal)
-        summaryCacheRef.current.set(summaryCacheKey, { rows, ts: Date.now() })
+        summaryCacheRef.current.set(summaryCacheKey, { rows })
       }
       if (controller.signal.aborted) return
       setSummary(rows)
