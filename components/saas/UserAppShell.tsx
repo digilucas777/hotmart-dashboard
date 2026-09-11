@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Bell,
+  ChevronRight,
   Copy,
   Edit3,
   ExternalLink,
@@ -21,7 +22,6 @@ import {
   Plus,
   Radio,
   Settings,
-  ShieldCheck,
   ShoppingCart,
   Target,
   Trash2,
@@ -30,7 +30,6 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { Projeto, DashboardCombo } from '@/lib/types'
-import { DashSpeedLogo } from './DashSpeedLogo'
 import { CombineDashboardsModal } from './CombineDashboardsModal'
 import { ManageFoldersModal } from './ManageFoldersModal'
 import { fetchFolders, fetchFolderProjetoIds } from '@/lib/dashboard-folders'
@@ -442,35 +441,11 @@ export function UserAppShell() {
 
   return (
     <div className="min-h-screen bg-[#07080d] text-white">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 border-r border-white/10 bg-[#0b0d14]/90 p-5 backdrop-blur-2xl lg:block">
-        <DashSpeedLogo />
-        <nav className="mt-10 space-y-2">
-          {navItems.map(({ label, icon: Icon, href }, index) => (
-            <Link
-              key={label}
-              href={href}
-              className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors ${
-                index === 0 ? 'bg-cyan-400/10 text-cyan-100' : 'text-slate-500 hover:bg-white/[0.05] hover:text-white'
-              }`}
-            >
-              <Icon size={18} />
-              {label}
-            </Link>
-          ))}
-          {isAdmin && (
-            <Link
-              href="/admin"
-              className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-slate-500 transition-colors hover:bg-white/[0.05] hover:text-white"
-            >
-              <ShieldCheck size={18} />
-              Admin
-            </Link>
-          )}
-        </nav>
-        {/* billing card hidden */}
-      </aside>
-
-      <div className="lg:pl-72">
+      {/* O menu lateral de verdade é o componente compartilhado (components/layout/Sidebar.tsx),
+          renderizado no layout raiz — essa página só reserva o espaço pra ele (60px encolhido,
+          expande ao passar o mouse, igual em toda a aplicação). Antes tinha um <aside> próprio
+          aqui, fixo em 288px e sem encolher — removido pra não duplicar o menu. */}
+      <div className="lg:pl-16">
         <header className="sticky top-0 z-30 border-b border-white/10 bg-[#07080d]/80 px-4 py-4 backdrop-blur-2xl sm:px-6">
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -554,25 +529,32 @@ export function UserAppShell() {
               <p className="mt-1 text-sm text-slate-400">
                 Organização rápida — o mesmo dashboard pode aparecer em mais de uma pasta.
               </p>
-              <div className="mt-5 space-y-5">
+              <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
                 {folders.map(folder => {
                   const idsNaPasta = folderProjetos[folder.id] ?? []
                   const projetosDaPasta = dashboards.filter(d => idsNaPasta.includes(d.id))
                   if (projetosDaPasta.length === 0) return null
                   return (
-                    <div key={folder.id}>
-                      <p className="mb-2 text-xs font-black uppercase tracking-[0.14em] text-cyan-200/70">
-                        {folder.nome}
-                      </p>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    <div key={folder.id} className="overflow-hidden rounded-2xl border border-white/10 bg-[#0b0d14]">
+                      <div className="flex items-center gap-3 border-b border-white/10 bg-gradient-to-r from-cyan-400/10 to-violet-500/10 px-4 py-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400/25 to-violet-500/30 text-cyan-100">
+                          <Folder size={16} />
+                        </div>
+                        <p className="min-w-0 flex-1 truncate text-sm font-black text-white">{folder.nome}</p>
+                        <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-300">
+                          {projetosDaPasta.length}
+                        </span>
+                      </div>
+                      <div className="divide-y divide-white/5">
                         {projetosDaPasta.map(projeto => (
                           <Link
                             key={projeto.id}
                             href={`/dashboard/${projeto.id}`}
-                            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-slate-200 transition-colors hover:border-cyan-300/30 hover:text-white"
+                            className="flex items-center gap-2 px-4 py-2.5 text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white"
                           >
-                            <LayoutDashboard size={14} className="shrink-0 text-cyan-300" />
-                            <span className="truncate">{projeto.nome}</span>
+                            <LayoutDashboard size={13} className="shrink-0 text-cyan-300/70" />
+                            <span className="min-w-0 flex-1 truncate">{projeto.nome}</span>
+                            <ChevronRight size={14} className="shrink-0 text-slate-600" />
                           </Link>
                         ))}
                       </div>
@@ -584,19 +566,26 @@ export function UserAppShell() {
                   const semPasta = dashboards.filter(d => !idsComPasta.has(d.id))
                   if (semPasta.length === 0) return null
                   return (
-                    <div>
-                      <p className="mb-2 text-xs font-black uppercase tracking-[0.14em] text-slate-500">
-                        Sem pasta
-                      </p>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="overflow-hidden rounded-2xl border border-dashed border-white/10 bg-[#0b0d14]">
+                      <div className="flex items-center gap-3 border-b border-white/10 bg-white/[0.02] px-4 py-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/5 text-slate-400">
+                          <Folder size={16} />
+                        </div>
+                        <p className="min-w-0 flex-1 truncate text-sm font-black text-slate-400">Sem pasta</p>
+                        <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-300">
+                          {semPasta.length}
+                        </span>
+                      </div>
+                      <div className="divide-y divide-white/5">
                         {semPasta.map(projeto => (
                           <Link
                             key={projeto.id}
                             href={`/dashboard/${projeto.id}`}
-                            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-slate-200 transition-colors hover:border-cyan-300/30 hover:text-white"
+                            className="flex items-center gap-2 px-4 py-2.5 text-sm text-slate-300 transition-colors hover:bg-white/[0.04] hover:text-white"
                           >
-                            <LayoutDashboard size={14} className="shrink-0 text-slate-500" />
-                            <span className="truncate">{projeto.nome}</span>
+                            <LayoutDashboard size={13} className="shrink-0 text-slate-500" />
+                            <span className="min-w-0 flex-1 truncate">{projeto.nome}</span>
+                            <ChevronRight size={14} className="shrink-0 text-slate-600" />
                           </Link>
                         ))}
                       </div>

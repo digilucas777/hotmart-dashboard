@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
@@ -15,7 +15,6 @@ import {
   Radio,
   Target,
   ChevronDown,
-  ChevronRight,
   Folder,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -44,39 +43,13 @@ export function Sidebar() {
   const [folders, setFolders] = useState<DashboardFolder[]>([])
   const [folderProjetos, setFolderProjetos] = useState<Record<string, string[]>>({})
   const [allProjetosSidebar, setAllProjetosSidebar] = useState<{ id: string; nome: string }[]>([])
-  const [dashboardsTreeOpen, setDashboardsTreeOpen] = useState(false)
-  const [openFolderIds, setOpenFolderIds] = useState<Set<string>>(new Set())
+  // Menu tipo UTMify: passar o mouse em cima de "Dashboards" abre um painel flutuante com
+  // as pastas e os projetos dentro — não precisa clicar em nada pra ver a árvore inteira.
+  const [showFlyout, setShowFlyout] = useState(false)
+  const [flyoutPos, setFlyoutPos] = useState<{ top: number; left: number } | null>(null)
+  const dashboardsRowRef = useRef<HTMLDivElement>(null)
   const pathname = usePathname()
   const router = useRouter()
-
-  useEffect(() => {
-    try {
-      const savedOpen = localStorage.getItem('sidebar_dashboards_tree_open')
-      if (savedOpen === 'true') setDashboardsTreeOpen(true)
-      const savedFolders = localStorage.getItem('sidebar_open_folder_ids')
-      if (savedFolders) setOpenFolderIds(new Set(JSON.parse(savedFolders) as string[]))
-    } catch {
-      // localStorage indisponível (modo privado, etc) — segue com os padrões
-    }
-  }, [])
-
-  function toggleDashboardsTree() {
-    setDashboardsTreeOpen(prev => {
-      const next = !prev
-      try { localStorage.setItem('sidebar_dashboards_tree_open', String(next)) } catch { /* ignora */ }
-      return next
-    })
-  }
-
-  function toggleFolderOpen(folderId: string) {
-    setOpenFolderIds(prev => {
-      const next = new Set(prev)
-      if (next.has(folderId)) next.delete(folderId)
-      else next.add(folderId)
-      try { localStorage.setItem('sidebar_open_folder_ids', JSON.stringify(Array.from(next))) } catch { /* ignora */ }
-      return next
-    })
-  }
 
   async function refetchFolderData() {
     const [foldersData, projetosMap, projetosRes] = await Promise.all([
@@ -139,7 +112,9 @@ export function Sidebar() {
     router.push('/login')
   }
 
-  const hiddenRoutes = ['/', '/login', '/register', '/forgot-password', '/pricing', '/dashboard']
+  // "/dashboard" (Meus Dashboards) também mostra o menu agora — encolhido em ícones,
+  // expande ao passar o mouse, igual em toda a aplicação.
+  const hiddenRoutes = ['/', '/login', '/register', '/forgot-password', '/pricing']
   if (hiddenRoutes.includes(pathname)) return null
 
   const visibleNavItems = NAV_ITEMS.filter(item => {
@@ -147,6 +122,16 @@ export function Sidebar() {
     if (item.href === '/integracoes') return isAdmin
     return true
   })
+
+  const hasVisibleFolders = folders.some(folder =>
+    (folderProjetos[folder.id] ?? []).some(id => allProjetosSidebar.some(p => p.id === id)),
+  )
+
+  function openFlyout() {
+    const rect = dashboardsRowRef.current?.getBoundingClientRect()
+    if (rect) setFlyoutPos({ top: rect.top, left: rect.right + 8 })
+    setShowFlyout(true)
+  }
 
   return (
     <aside
@@ -180,60 +165,63 @@ export function Sidebar() {
           const active = isNavActive(item.href, pathname)
           const Icon = item.icon
           if (item.href === '/dashboard' && isAdmin) {
-            const hasVisibleFolders = folders.some(folder =>
-              (folderProjetos[folder.id] ?? []).some(id => allProjetosSidebar.some(p => p.id === id)),
-            )
             return (
-              <div key={item.href}>
-                <div
-                  className={`flex items-center gap-1 rounded-xl px-1 py-0.5 transition-colors ${
+              <div
+                key={item.href}
+                ref={dashboardsRowRef}
+                onMouseEnter={hasVisibleFolders ? openFlyout : undefined}
+                onMouseLeave={hasVisibleFolders ? () => setShowFlyout(false) : undefined}
+              >
+                <Link
+                  href={item.href}
+                  title={item.label}
+                  className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors ${
                     active ? 'text-cyan-100' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
                   }`}
                   style={active ? { background: 'linear-gradient(135deg, rgba(0,212,255,0.12), rgba(139,92,246,0.12))' } : undefined}
                 >
-                  <Link href={item.href} title={item.label} className="flex flex-1 items-center gap-3 px-2 py-2">
-                    <Icon size={17} className="flex-shrink-0" />
-                    <span className="app-sidebar-label text-sm font-medium">{item.label}</span>
-                  </Link>
-                  {hasVisibleFolders && (
-                    <button onClick={toggleDashboardsTree} className="app-sidebar-label flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg hover:bg-white/10" title="Pastas">
-                      {dashboardsTreeOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    </button>
-                  )}
-                </div>
-                {dashboardsTreeOpen && hasVisibleFolders && (
-                  <div className="app-sidebar-label ml-4 mt-1 space-y-0.5 border-l border-white/10 pl-3">
+                  <Icon size={17} className="flex-shrink-0" />
+                  <span className="app-sidebar-label flex-1 text-sm font-medium">{item.label}</span>
+                  {hasVisibleFolders && <ChevronDown size={14} className="app-sidebar-label shrink-0" />}
+                </Link>
+
+                {showFlyout && hasVisibleFolders && flyoutPos && (
+                  <div
+                    className="w-64 overflow-hidden rounded-2xl border border-white/10 bg-[#0d0f16] py-2 shadow-2xl shadow-black/60"
+                    style={{ position: 'fixed', top: flyoutPos.top, left: flyoutPos.left, zIndex: 60 }}
+                  >
                     {folders.map(folder => {
                       const idsNaPasta = folderProjetos[folder.id] ?? []
                       const projetosDaPasta = allProjetosSidebar.filter(p => idsNaPasta.includes(p.id))
                       if (projetosDaPasta.length === 0) return null
-                      const folderOpen = openFolderIds.has(folder.id)
                       return (
-                        <div key={folder.id}>
-                          <button
-                            onClick={() => toggleFolderOpen(folder.id)}
-                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-400 hover:bg-white/5 hover:text-slate-200"
-                          >
-                            {folderOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-                            <Folder size={12} />
-                            <span className="truncate">{folder.nome}</span>
-                          </button>
-                          {folderOpen && (
-                            <div className="ml-4 space-y-0.5 border-l border-white/5 pl-3">
-                              {projetosDaPasta.map(projeto => (
-                                <Link
-                                  key={projeto.id}
-                                  href={`/dashboard/${projeto.id}`}
-                                  className="block truncate rounded-lg px-2 py-1.5 text-xs text-slate-500 hover:bg-white/5 hover:text-slate-200"
-                                >
-                                  {projeto.nome}
-                                </Link>
-                              ))}
-                            </div>
-                          )}
+                        <div key={folder.id} className="px-2 py-1">
+                          <p className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-black uppercase tracking-wide text-cyan-200/70">
+                            <Folder size={11} />
+                            {folder.nome}
+                          </p>
+                          {projetosDaPasta.map(projeto => (
+                            <Link
+                              key={projeto.id}
+                              href={`/dashboard/${projeto.id}`}
+                              onClick={() => setShowFlyout(false)}
+                              className="block truncate rounded-lg px-3 py-1.5 text-sm text-slate-300 hover:bg-white/5 hover:text-white"
+                            >
+                              {projeto.nome}
+                            </Link>
+                          ))}
                         </div>
                       )
                     })}
+                    <div className="mt-1 border-t border-white/5 px-2 pt-2">
+                      <Link
+                        href="/dashboard"
+                        onClick={() => setShowFlyout(false)}
+                        className="block rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-white/5 hover:text-slate-300"
+                      >
+                        Ver todos os dashboards
+                      </Link>
+                    </div>
                   </div>
                 )}
               </div>
