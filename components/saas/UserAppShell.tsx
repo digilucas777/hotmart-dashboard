@@ -543,6 +543,65 @@ export function UserAppShell() {
             </section>
           )}
 
+          {isAdmin && folders.length > 0 && (
+            <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.04] p-6">
+              <h2 className="text-lg font-black">Por pasta</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Organização rápida — o mesmo dashboard pode aparecer em mais de uma pasta.
+              </p>
+              <div className="mt-5 space-y-5">
+                {folders.map(folder => {
+                  const idsNaPasta = folderProjetos[folder.id] ?? []
+                  const projetosDaPasta = dashboards.filter(d => idsNaPasta.includes(d.id))
+                  if (projetosDaPasta.length === 0) return null
+                  return (
+                    <div key={folder.id}>
+                      <p className="mb-2 text-xs font-black uppercase tracking-[0.14em] text-cyan-200/70">
+                        {folder.nome}
+                      </p>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {projetosDaPasta.map(projeto => (
+                          <Link
+                            key={projeto.id}
+                            href={`/dashboard/${projeto.id}`}
+                            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-slate-200 transition-colors hover:border-cyan-300/30 hover:text-white"
+                          >
+                            <LayoutDashboard size={14} className="shrink-0 text-cyan-300" />
+                            <span className="truncate">{projeto.nome}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+                {(() => {
+                  const idsComPasta = new Set(Object.values(folderProjetos).flat())
+                  const semPasta = dashboards.filter(d => !idsComPasta.has(d.id))
+                  if (semPasta.length === 0) return null
+                  return (
+                    <div>
+                      <p className="mb-2 text-xs font-black uppercase tracking-[0.14em] text-slate-500">
+                        Sem pasta
+                      </p>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {semPasta.map(projeto => (
+                          <Link
+                            key={projeto.id}
+                            href={`/dashboard/${projeto.id}`}
+                            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm text-slate-200 transition-colors hover:border-cyan-300/30 hover:text-white"
+                          >
+                            <LayoutDashboard size={14} className="shrink-0 text-slate-500" />
+                            <span className="truncate">{projeto.nome}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            </section>
+          )}
+
           <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.04] p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
