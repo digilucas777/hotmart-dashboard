@@ -415,8 +415,14 @@ export function ComboClient({ comboId }: { comboId: string }) {
             <button onClick={() => void fetchAll()} className="font-bold underline">Tentar de novo</button>
           </div>
         ) : loadingSummary || loadingCustos ? (
-          <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {[0, 1, 2, 3].map(i => <div key={i} className="h-28 animate-pulse rounded-2xl border border-white/10 bg-white/[0.035]" />)}
+          <div className="mt-6">
+            <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-cyan-200/70">
+              <Spinner size={14} />
+              Carregando métricas combinadas…
+            </div>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {[0, 1, 2, 3].map(i => <div key={i} className="h-28 animate-pulse rounded-2xl border border-white/10 bg-white/[0.06]" />)}
+            </div>
           </div>
         ) : (
           <div className="mt-6">
@@ -427,10 +433,16 @@ export function ComboClient({ comboId }: { comboId: string }) {
         <div className="mt-10">
           <h2 className="mb-4 text-lg font-black">Por projeto</h2>
           {loadingSummary || loadingCustos ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {(combo.projeto_ids.length > 0 ? combo.projeto_ids : ['a', 'b', 'c']).map(id => (
-                <div key={id} className="h-40 animate-pulse rounded-2xl border border-white/10 bg-white/[0.035]" />
-              ))}
+            <div>
+              <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-cyan-200/70">
+                <Spinner size={14} />
+                Carregando dados de {combo.projeto_ids.length} projeto{combo.projeto_ids.length === 1 ? '' : 's'}…
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {(combo.projeto_ids.length > 0 ? combo.projeto_ids : ['a', 'b', 'c']).map(id => (
+                  <div key={id} className="h-40 animate-pulse rounded-2xl border border-white/10 bg-white/[0.06]" />
+                ))}
+              </div>
             </div>
           ) : perProjeto.length === 0 ? (
             <p className="text-sm text-slate-500">Nenhum projeto nesta combinação.</p>
@@ -489,8 +501,9 @@ export function ComboClient({ comboId }: { comboId: string }) {
         <div className="mt-10">
           <h2 className="mb-4 text-lg font-black">Transações</h2>
           {loadingVendas ? (
-            <div className="flex h-40 items-center justify-center">
+            <div className="flex h-40 flex-col items-center justify-center gap-3">
               <Spinner size={24} />
+              <p className="text-xs font-semibold uppercase tracking-wide text-cyan-200/70">Carregando transações dos projetos combinados…</p>
             </div>
           ) : (
             <SalesTable key={comboId} vendas={vendas} exchangeRate={exchangeRate} initialStatusFilter="approved" />
