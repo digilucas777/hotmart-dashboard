@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/app/api/meta/_utils'
+import { canManageTracking } from '@/app/api/track/_utils'
 
 // Usada pro bloco "Ao vivo" do painel — contadores de hoje (meia-noite local
 // até agora) e % de qualidade dos eventos capi. O cliente manda start/end em
@@ -9,9 +10,8 @@ export async function GET(request: Request) {
   const { supabase, user } = await getAuthenticatedUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  const { data: profile } = await supabase.from('user_profiles').select('role').eq('id', user.id).maybeSingle()
-  if (profile?.role !== 'admin') {
-    return NextResponse.json({ error: 'módulo em teste — só administradores podem usar por enquanto' }, { status: 403 })
+  if (!(await canManageTracking(supabase, user.id))) {
+    return NextResponse.json({ error: 'você não tem permissão de gerenciar rastreamento' }, { status: 403 })
   }
 
   const { searchParams } = new URL(request.url)
@@ -28,13 +28,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'start/end inválidos' }, { status: 400 })
   }
 
-  // track_events não tem user_id direto — confirma que a instalação existe
-  // (a query em track_installations já é protegida por RLS: só acha se for
-  // do usuário logado ou se ele for admin).
+  // track_events não tem user_id direto — confirma que a instalação existe E
+  // é do usuário logado (checagem explícita aqui, não só a RLS — outro
+  // usuário com permissão de rastreamento não pode ler resumo de instalação
+  // que não é dele mesmo adivinhando o ID).
   const { data: installation } = await supabase
     .from('track_installations')
     .select('id')
     .eq('id', installationId)
+    .eq('user_id', user.id)
     .maybeSingle()
   if (!installation) return NextResponse.json({ error: 'instalação não encontrada' }, { status: 404 })
 

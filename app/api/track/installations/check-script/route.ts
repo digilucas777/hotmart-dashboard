@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/app/api/meta/_utils'
+import { canManageTracking } from '@/app/api/track/_utils'
 
 type DomainRow = { domain: string; tipo: string }
 
@@ -30,9 +31,8 @@ export async function POST(request: Request) {
   const { supabase, user } = await getAuthenticatedUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  const { data: profile } = await supabase.from('user_profiles').select('role').eq('id', user.id).maybeSingle()
-  if (profile?.role !== 'admin') {
-    return NextResponse.json({ error: 'módulo em teste — só administradores podem usar por enquanto' }, { status: 403 })
+  if (!(await canManageTracking(supabase, user.id))) {
+    return NextResponse.json({ error: 'você não tem permissão de gerenciar rastreamento' }, { status: 403 })
   }
 
   const { id, url } = await request.json().catch(() => ({})) as { id?: string; url?: string }
@@ -42,6 +42,7 @@ export async function POST(request: Request) {
     .from('track_installations')
     .select('worker_subdomain, track_domains(*)')
     .eq('id', id)
+    .eq('user_id', user.id)
     .single()
   if (fetchError || !installation) return NextResponse.json({ error: 'instalação não encontrada' }, { status: 404 })
   if (!installation.worker_subdomain) {

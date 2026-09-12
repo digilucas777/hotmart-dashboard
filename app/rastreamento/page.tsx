@@ -51,8 +51,8 @@ export default function RastreamentoPage() {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
-      const { data: profile } = await supabase.from('user_profiles').select('role').eq('id', user.id).maybeSingle()
-      const admin = profile?.role === 'admin'
+      const { data: profile } = await supabase.from('user_profiles').select('role, pode_gerenciar_rastreamento').eq('id', user.id).maybeSingle()
+      const admin = profile?.role === 'admin' || profile?.pode_gerenciar_rastreamento === true
       setIsAdmin(admin)
       setCheckingAccess(false)
       if (admin) await fetchInstallations()

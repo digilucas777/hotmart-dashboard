@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Check, ChevronDown, ChevronUp, History, LayoutDashboard, Lock, Mail, Shield, Trash2, UserPlus, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, History, LayoutDashboard, Lock, Mail, Radio, Shield, Trash2, UserPlus, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 type UserProfile = {
@@ -11,6 +11,7 @@ type UserProfile = {
   email: string | null
   nome: string | null
   created_at: string
+  pode_gerenciar_rastreamento: boolean
 }
 
 type Projeto = {
@@ -229,6 +230,7 @@ export default function AdminPage() {
   const [expandedAccessesUser, setExpandedAccessesUser] = useState<string | null>(null)
   const [userAccesses, setUserAccesses] = useState<Record<string, AccessEntry[]>>({})
   const [loadingAccesses, setLoadingAccesses] = useState<string | null>(null)
+  const [savingRastreamentoId, setSavingRastreamentoId] = useState<string | null>(null)
   const [lastSeen, setLastSeen] = useState<Record<string, string | null>>({})
 
   // Invite
@@ -269,7 +271,7 @@ export default function AdminPage() {
       const [{ data: allUsers }, projetosRes, pendingRes, lastSeenRes] = await Promise.all([
         supabase
           .from('user_profiles')
-          .select('id, email, nome, created_at')
+          .select('id, email, nome, created_at, pode_gerenciar_rastreamento')
           .eq('role', 'user')
           .order('created_at', { ascending: false }),
         fetch('/api/admin/dashboards').then(r => r.json() as Promise<{ dashboards?: Projeto[] }>),
@@ -314,6 +316,23 @@ export default function AdminPage() {
     setUserAccesses(prev => ({ ...prev, [userId]: json.accesses ?? [] }))
     setExpandedAccessesUser(userId)
     setLoadingAccesses(null)
+  }
+
+  // Libera/tira SÓ a aba de Rastreamento (sem tornar a pessoa admin do resto
+  // do painel) — permissão específica, separada do "role" global.
+  async function toggleRastreamento(userId: string, current: boolean) {
+    setSavingRastreamentoId(userId)
+    setUsers(prev => prev.map(u => (u.id === userId ? { ...u, pode_gerenciar_rastreamento: !current } : u)))
+    const res = await fetch('/api/admin/toggle-rastreamento', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, pode_gerenciar_rastreamento: !current }),
+    })
+    if (!res.ok) {
+      // reverte se a chamada falhou
+      setUsers(prev => prev.map(u => (u.id === userId ? { ...u, pode_gerenciar_rastreamento: current } : u)))
+    }
+    setSavingRastreamentoId(null)
   }
 
   async function openEditPerms(u: PermsTarget) {
@@ -579,6 +598,24 @@ export default function AdminPage() {
                   ) : (
                     <ChevronDown size={13} />
                   )}
+                </button>
+                <button
+                  onClick={() => toggleRastreamento(user.id, user.pode_gerenciar_rastreamento)}
+                  disabled={savingRastreamentoId === user.id}
+                  title="Libera só a aba de Rastreamento (Pixel/CAPI), sem dar acesso a mais nada do painel"
+                  className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
+                    user.pode_gerenciar_rastreamento
+                      ? 'border-cyan-400/40 bg-cyan-400/10 text-cyan-300 hover:border-cyan-400/60'
+                      : 'border-white/10 text-slate-300 hover:border-cyan-300/30 hover:text-cyan-200'
+                  }`}
+                >
+                  <Radio size={13} />
+                  Rastreamento
+                  {savingRastreamentoId === user.id ? (
+                    <div className="h-3 w-3 animate-spin rounded-full border border-cyan-400 border-t-transparent" />
+                  ) : user.pode_gerenciar_rastreamento ? (
+                    <Check size={13} />
+                  ) : null}
                 </button>
                 <button
                   onClick={() => setDeleteTarget({ id: user.id, email: user.email ?? user.nome ?? '' })}

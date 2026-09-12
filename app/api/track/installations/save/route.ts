@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { getAuthenticatedUser } from '@/app/api/meta/_utils'
+import { canManageTracking } from '@/app/api/track/_utils'
 import { encryptSecret } from '@/lib/crypto'
 import { mapInstallationRow, type InstallationRow } from '@/lib/track/mapRow'
 import type {
@@ -22,9 +23,8 @@ export async function POST(request: Request) {
   const { supabase, user } = await getAuthenticatedUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  const { data: profile } = await supabase.from('user_profiles').select('role').eq('id', user.id).maybeSingle()
-  if (profile?.role !== 'admin') {
-    return NextResponse.json({ error: 'módulo em teste — só administradores podem usar por enquanto' }, { status: 403 })
+  if (!(await canManageTracking(supabase, user.id))) {
+    return NextResponse.json({ error: 'você não tem permissão de gerenciar rastreamento' }, { status: 403 })
   }
 
   const body = await request.json().catch(() => null) as TrackInstallationSaveInput | null
@@ -73,10 +73,15 @@ export async function POST(request: Request) {
   let installationId = body.id
 
   if (installationId) {
+    // .eq('user_id', user.id) aqui é reforço explícito, não só a RLS: mesmo
+    // que outro usuário com permissão de rastreamento adivinhe/veja este ID
+    // em algum lugar, essa checagem sozinha já barra edição/leitura fora do
+    // que é dele — não depende só da policy do banco.
     const { data: existing } = await supabase
       .from('track_installations')
       .select('id')
       .eq('id', installationId)
+      .eq('user_id', user.id)
       .maybeSingle()
     if (!existing) return NextResponse.json({ error: 'instalação não encontrada' }, { status: 404 })
 
@@ -125,6 +130,7 @@ export async function POST(request: Request) {
     .from('track_installations')
     .select(SELECT)
     .eq('id', installationId)
+    .eq('user_id', user.id)
     .single()
   if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 })
 
