@@ -83,6 +83,11 @@ type PendingUser = {
   invited_at: string
 }
 
+// openEditPerms/editPermsUser só precisam de id (pra chamar a API) e email/nome (pro
+// título do modal) — assim o mesmo modal serve tanto pra usuário confirmado (UserProfile)
+// quanto pra convite pendente (PendingUser, que não tem nome/created_at).
+type PermsTarget = { id: string; email: string | null; nome?: string | null }
+
 function PermissionsProjectList({
   projetos,
   perms,
@@ -234,7 +239,7 @@ export default function AdminPage() {
   const [inviteStatus, setInviteStatus] = useState('')
 
   // Permissions modal
-  const [editPermsUser, setEditPermsUser] = useState<UserProfile | null>(null)
+  const [editPermsUser, setEditPermsUser] = useState<PermsTarget | null>(null)
   const [editPerms, setEditPerms] = useState<Record<string, PermRow>>({})
   const [loadingPerms, setLoadingPerms] = useState(false)
   const [savingPerms, setSavingPerms] = useState(false)
@@ -272,7 +277,11 @@ export default function AdminPage() {
         fetch('/api/admin/last-seen').then(r => r.json() as Promise<{ lastSeen?: { id: string; last_sign_in_at: string | null }[] }>),
       ])
 
-      setUsers((allUsers ?? []) as UserProfile[])
+      // user_profiles ganha a linha do usuário na hora do convite (antes de ele confirmar o
+      // e-mail) — sem esse filtro, quem ainda não aceitou aparecia duplicado: uma vez como
+      // "ativo" (com botão de permissões) e outra como "convite pendente" (sem botão).
+      const pendingIds = new Set((pendingRes.pending ?? []).map(p => p.id))
+      setUsers(((allUsers ?? []) as UserProfile[]).filter(u => !pendingIds.has(u.id)))
       const projetos = projetosRes.dashboards ?? []
       setAllProjetos(projetos)
       setPendingUsers(pendingRes.pending ?? [])
@@ -307,7 +316,7 @@ export default function AdminPage() {
     setLoadingAccesses(null)
   }
 
-  async function openEditPerms(u: UserProfile) {
+  async function openEditPerms(u: PermsTarget) {
     setEditPermsUser(u)
     setEditPerms({})
     setLoadingPerms(true)
@@ -647,6 +656,13 @@ export default function AdminPage() {
                 <p className="shrink-0 text-xs text-slate-500">
                   {new Date(p.invited_at).toLocaleDateString('pt-BR')}
                 </p>
+                <button
+                  onClick={() => openEditPerms({ id: p.id, email: p.email })}
+                  className="flex shrink-0 items-center gap-2 rounded-xl border border-violet-400/25 bg-violet-400/10 px-3 py-1.5 text-xs font-semibold text-violet-300 transition-colors hover:border-violet-400/50 hover:text-violet-200"
+                >
+                  <Lock size={12} />
+                  Editar permissões
+                </button>
                 <button
                   onClick={() => resendInvite(p.email)}
                   disabled={resendingEmail === p.email}
