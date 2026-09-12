@@ -7,7 +7,6 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const targetUserId = new URL(request.url).searchParams.get('user_id')
-  if (!targetUserId) return NextResponse.json({ error: 'user_id é obrigatório' }, { status: 400 })
 
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!serviceKey) return NextResponse.json({ error: 'service key not configured' }, { status: 500 })
@@ -26,6 +25,19 @@ export async function GET(request: Request) {
 
   if (profile?.role !== 'admin') {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  }
+
+  // Sem user_id: admin está montando a lista de TODOS os dashboards do sistema pra
+  // escolher o que conceder (checklist de permissões no convite / "Editar permissões") —
+  // não é sobre o que um usuário específico já acessa, então não filtra por dono/partilha.
+  if (!targetUserId) {
+    const { data, error } = await serviceClient
+      .from('projetos')
+      .select('id, nome, descricao, data_criacao')
+      .is('deleted_at', null)
+      .order('nome', { ascending: true })
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ dashboards: data ?? [] })
   }
 
   // Dashboards do usuário-alvo: os que ele é dono, mais os que foram compartilhados com
