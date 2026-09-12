@@ -86,6 +86,7 @@ export function UserAppShell() {
   const [folders, setFolders] = useState<DashboardFolder[]>([])
   const [folderProjetos, setFolderProjetos] = useState<Record<string, string[]>>({})
   const [foldersModalOpen, setFoldersModalOpen] = useState(false)
+  const [folderToEditId, setFolderToEditId] = useState<string | null>(null)
 
   async function reloadFolders() {
     try {
@@ -441,10 +442,12 @@ export function UserAppShell() {
   return (
     <div className="min-h-screen bg-[#07080d] text-white">
       {/* O menu lateral de verdade é o componente compartilhado (components/layout/Sidebar.tsx),
-          renderizado no layout raiz — essa página só reserva o espaço pra ele (60px encolhido,
-          expande ao passar o mouse, igual em toda a aplicação). Antes tinha um <aside> próprio
-          aqui, fixo em 288px e sem encolher — removido pra não duplicar o menu. */}
-      <div className="lg:pl-16">
+          renderizado no layout raiz — como ele é position:fixed, essa página reserva o espaço
+          igual à largura MÁXIMA dele (220px expandido ao passar o mouse), não só a largura
+          encolhida (60px) — senão o menu expandido fica sobrepondo o conteúdo em vez de
+          conviver do lado. Antes tinha um <aside> próprio aqui, fixo em 288px e sem encolher —
+          removido pra não duplicar o menu. */}
+      <div className="lg:pl-[224px]">
         <header className="sticky top-0 z-30 border-b border-white/10 bg-[#07080d]/80 px-4 py-4 backdrop-blur-2xl sm:px-6">
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -528,7 +531,7 @@ export function UserAppShell() {
               <p className="mt-1 text-sm text-slate-400">
                 Organização rápida — o mesmo dashboard pode aparecer em mais de uma pasta.
               </p>
-              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {folders.map(folder => {
                   const idsNaPasta = folderProjetos[folder.id] ?? []
                   const projetosDaPasta = dashboards.filter(d => idsNaPasta.includes(d.id))
@@ -543,6 +546,13 @@ export function UserAppShell() {
                         <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-300">
                           {projetosDaPasta.length}
                         </span>
+                        <button
+                          onClick={() => { setFolderToEditId(folder.id); setFoldersModalOpen(true) }}
+                          title="Gerenciar pasta"
+                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-white/10 hover:text-white"
+                        >
+                          <Edit3 size={12} />
+                        </button>
                       </div>
                       <div className="divide-y divide-white/5">
                         {projetosDaPasta.map(projeto => (
@@ -1097,11 +1107,12 @@ export function UserAppShell() {
       {foldersModalOpen && (
         <ManageFoldersModal
           open={foldersModalOpen}
-          onClose={() => setFoldersModalOpen(false)}
+          onClose={() => { setFoldersModalOpen(false); setFolderToEditId(null) }}
           folders={folders}
           folderProjetos={folderProjetos}
           allProjetos={dashboards}
           onChanged={reloadFolders}
+          initialExpandedFolderId={folderToEditId}
         />
       )}
     </div>

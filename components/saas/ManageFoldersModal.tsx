@@ -13,6 +13,7 @@ export function ManageFoldersModal({
   folderProjetos,
   allProjetos,
   onChanged,
+  initialExpandedFolderId,
 }: {
   open: boolean
   onClose: () => void
@@ -20,12 +21,13 @@ export function ManageFoldersModal({
   folderProjetos: Record<string, string[]>
   allProjetos: Projeto[]
   onChanged: () => Promise<void>
+  initialExpandedFolderId?: string | null
 }) {
   const [newFolderName, setNewFolderName] = useState('')
   const [savingNew, setSavingNew] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
-  const [expandedFolderId, setExpandedFolderId] = useState<string | null>(null)
+  const [expandedFolderId, setExpandedFolderId] = useState<string | null>(initialExpandedFolderId ?? null)
   const [savingAssign, setSavingAssign] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
