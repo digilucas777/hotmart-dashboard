@@ -602,7 +602,6 @@ export default function AdminPage() {
                 <button
                   onClick={() => toggleRastreamento(user.id, user.pode_gerenciar_rastreamento)}
                   disabled={savingRastreamentoId === user.id}
-                  title="Libera só a aba de Rastreamento (Pixel/CAPI), sem dar acesso a mais nada do painel"
                   className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
                     user.pode_gerenciar_rastreamento
                       ? 'border-cyan-400/40 bg-cyan-400/10 text-cyan-300 hover:border-cyan-400/60'
