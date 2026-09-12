@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Bell,
+  ChevronDown,
+  ChevronRight,
   Copy,
   Edit3,
   ExternalLink,
@@ -87,6 +89,16 @@ export function UserAppShell() {
   const [folderProjetos, setFolderProjetos] = useState<Record<string, string[]>>({})
   const [foldersModalOpen, setFoldersModalOpen] = useState(false)
   const [folderToEditId, setFolderToEditId] = useState<string | null>(null)
+  // Vazio = todas as pastas começam fechadas; só abre a que o usuário clicar.
+  const [openFolderIds, setOpenFolderIds] = useState<Set<string>>(new Set())
+  function toggleFolderOpen(folderId: string) {
+    setOpenFolderIds(prev => {
+      const next = new Set(prev)
+      if (next.has(folderId)) next.delete(folderId)
+      else next.add(folderId)
+      return next
+    })
+  }
 
   async function reloadFolders() {
     try {
@@ -536,13 +548,24 @@ export function UserAppShell() {
                   const idsNaPasta = folderProjetos[folder.id] ?? []
                   const projetosDaPasta = dashboards.filter(d => idsNaPasta.includes(d.id))
                   if (projetosDaPasta.length === 0) return null
+                  const isOpen = openFolderIds.has(folder.id)
                   return (
                     <div key={folder.id} className="overflow-hidden rounded-2xl border border-white/10 bg-[#0b0d14]">
                       <div className="flex items-center gap-2 border-b border-white/10 bg-gradient-to-r from-cyan-400/10 to-violet-500/10 px-3 py-2.5">
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400/25 to-violet-500/30 text-cyan-100">
-                          <Folder size={13} />
-                        </div>
-                        <p className="min-w-0 flex-1 truncate text-xs font-black uppercase tracking-wide text-white">{folder.nome}</p>
+                        <button
+                          onClick={() => toggleFolderOpen(folder.id)}
+                          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                        >
+                          {isOpen ? (
+                            <ChevronDown size={14} className="shrink-0 text-slate-400" />
+                          ) : (
+                            <ChevronRight size={14} className="shrink-0 text-slate-400" />
+                          )}
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400/25 to-violet-500/30 text-cyan-100">
+                            <Folder size={13} />
+                          </div>
+                          <p className="min-w-0 flex-1 truncate text-xs font-black uppercase tracking-wide text-white">{folder.nome}</p>
+                        </button>
                         <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-300">
                           {projetosDaPasta.length}
                         </span>
@@ -554,20 +577,22 @@ export function UserAppShell() {
                           <Edit3 size={12} />
                         </button>
                       </div>
-                      <div className="divide-y divide-white/5">
-                        {projetosDaPasta.map(projeto => (
-                          <div key={projeto.id} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300">
-                            <LayoutDashboard size={12} className="shrink-0 text-cyan-300/70" />
-                            <span className="min-w-0 flex-1 truncate">{projeto.nome}</span>
-                            <Link
-                              href={`/dashboard/${projeto.id}`}
-                              className="shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[11px] font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white"
-                            >
-                              Abrir
-                            </Link>
-                          </div>
-                        ))}
-                      </div>
+                      {isOpen && (
+                        <div className="divide-y divide-white/5">
+                          {projetosDaPasta.map(projeto => (
+                            <div key={projeto.id} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300">
+                              <LayoutDashboard size={12} className="shrink-0 text-cyan-300/70" />
+                              <span className="min-w-0 flex-1 truncate">{projeto.nome}</span>
+                              <Link
+                                href={`/dashboard/${projeto.id}`}
+                                className="shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[11px] font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white"
+                              >
+                                Abrir
+                              </Link>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -575,31 +600,44 @@ export function UserAppShell() {
                   const idsComPasta = new Set(Object.values(folderProjetos).flat())
                   const semPasta = dashboards.filter(d => !idsComPasta.has(d.id))
                   if (semPasta.length === 0) return null
+                  const isOpen = openFolderIds.has('__sem_pasta__')
                   return (
                     <div className="overflow-hidden rounded-2xl border border-dashed border-white/10 bg-[#0b0d14]">
                       <div className="flex items-center gap-2 border-b border-white/10 bg-white/[0.02] px-3 py-2.5">
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-400">
-                          <Folder size={13} />
-                        </div>
-                        <p className="min-w-0 flex-1 truncate text-xs font-black uppercase tracking-wide text-slate-400">Sem pasta</p>
+                        <button
+                          onClick={() => toggleFolderOpen('__sem_pasta__')}
+                          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                        >
+                          {isOpen ? (
+                            <ChevronDown size={14} className="shrink-0 text-slate-400" />
+                          ) : (
+                            <ChevronRight size={14} className="shrink-0 text-slate-400" />
+                          )}
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-400">
+                            <Folder size={13} />
+                          </div>
+                          <p className="min-w-0 flex-1 truncate text-xs font-black uppercase tracking-wide text-slate-400">Sem pasta</p>
+                        </button>
                         <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-300">
                           {semPasta.length}
                         </span>
                       </div>
-                      <div className="divide-y divide-white/5">
-                        {semPasta.map(projeto => (
-                          <div key={projeto.id} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300">
-                            <LayoutDashboard size={12} className="shrink-0 text-slate-500" />
-                            <span className="min-w-0 flex-1 truncate">{projeto.nome}</span>
-                            <Link
-                              href={`/dashboard/${projeto.id}`}
-                              className="shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[11px] font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white"
-                            >
-                              Abrir
-                            </Link>
-                          </div>
-                        ))}
-                      </div>
+                      {isOpen && (
+                        <div className="divide-y divide-white/5">
+                          {semPasta.map(projeto => (
+                            <div key={projeto.id} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300">
+                              <LayoutDashboard size={12} className="shrink-0 text-slate-500" />
+                              <span className="min-w-0 flex-1 truncate">{projeto.nome}</span>
+                              <Link
+                                href={`/dashboard/${projeto.id}`}
+                                className="shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[11px] font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white"
+                              >
+                                Abrir
+                              </Link>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )
                 })()}
@@ -613,19 +651,19 @@ export function UserAppShell() {
                 <h2 className="text-lg font-black">Todos os dashboards</h2>
                 <p className="mt-1 text-sm text-slate-400">Crie, abra e edite os dashboards que já usam a estrutura atual.</p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {isAdmin && (
                   <>
                     <button
                       onClick={() => setFoldersModalOpen(true)}
-                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-300/30 bg-white/[0.04] px-5 py-3 text-sm font-black text-cyan-100 transition-colors hover:border-cyan-300/50 hover:bg-white/[0.08]"
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-300/30 bg-white/[0.04] px-4 py-2.5 text-sm font-black text-cyan-100 transition-colors hover:border-cyan-300/50 hover:bg-white/[0.08] sm:px-5 sm:py-3"
                     >
                       <Folder size={16} />
                       Gerenciar pastas
                     </button>
                     <button
                       onClick={() => { setEditingCombo(null); setComboModalOpen(true) }}
-                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-violet-300/30 bg-white/[0.04] px-5 py-3 text-sm font-black text-violet-200 transition-colors hover:border-violet-300/50 hover:bg-white/[0.08]"
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-violet-300/30 bg-white/[0.04] px-4 py-2.5 text-sm font-black text-violet-200 transition-colors hover:border-violet-300/50 hover:bg-white/[0.08] sm:px-5 sm:py-3"
                     >
                       <Layers size={16} />
                       Combinar dashboards
@@ -634,7 +672,7 @@ export function UserAppShell() {
                 )}
                 <button
                   onClick={() => setShowCreate(true)}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-300/30 bg-white/[0.04] px-5 py-3 text-sm font-black text-cyan-100 transition-colors hover:border-cyan-300/50 hover:bg-white/[0.08]"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-300/30 bg-white/[0.04] px-4 py-2.5 text-sm font-black text-cyan-100 transition-colors hover:border-cyan-300/50 hover:bg-white/[0.08] sm:px-5 sm:py-3"
                 >
                   <Plus size={16} />
                   Novo dashboard
