@@ -10,21 +10,16 @@ import {
   Copy,
   Edit3,
   ExternalLink,
-  FileText,
   Folder,
   GripVertical,
   ImageIcon,
   Layers,
   LayoutDashboard,
-  LayoutGrid,
   Loader2,
   LogOut,
   Plug,
   Plus,
   Radio,
-  Settings,
-  ShoppingCart,
-  Target,
   Trash2,
   UserRound,
   X,
@@ -35,19 +30,6 @@ import { CombineDashboardsModal } from './CombineDashboardsModal'
 import { ManageFoldersModal } from './ManageFoldersModal'
 import { fetchFolders, fetchFolderProjetoIds } from '@/lib/dashboard-folders'
 import type { DashboardFolder } from '@/lib/dashboard-folders'
-
-// Mesma lista (e mesma ordem) do menu principal em components/layout/Sidebar.tsx
-// — são dois componentes de sidebar separados, então um item novo lá precisa
-// ser replicado aqui manualmente.
-const navItems = [
-  { label: 'Dashboards', icon: LayoutGrid, href: '/dashboard' },
-  { label: 'Vendas', icon: ShoppingCart, href: '/vendas' },
-  { label: 'Relatórios', icon: FileText, href: '/relatorios' },
-  { label: 'Sites', icon: Radio, href: '/sites' },
-  { label: 'Rastreamento', icon: Target, href: '/rastreamento' },
-  { label: 'Integrações', icon: Plug, href: '/integracoes' },
-  { label: 'Configurações', icon: Settings, href: '/configuracoes' },
-]
 
 const META_TRAFFIC_TEMPLATE = [
   // Row 1-8: 4 metric cards
@@ -867,15 +849,6 @@ export function UserAppShell() {
           </section>
         </main>
       </div>
-
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t border-white/10 bg-[#0b0d14]/95 p-2 backdrop-blur-2xl lg:hidden">
-        {navItems.map(({ label, icon: Icon, href }, index) => (
-          <Link key={label} href={href} className={`flex min-w-0 flex-1 flex-col items-center justify-center rounded-2xl px-1 py-2 text-[10px] font-bold ${index === 0 ? 'bg-cyan-400/10 text-cyan-100' : 'text-slate-500'}`}>
-            <Icon size={17} className="shrink-0" />
-            <span className="mt-1 truncate">{label.split(' ')[0]}</span>
-          </Link>
-        ))}
-      </nav>
 
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">

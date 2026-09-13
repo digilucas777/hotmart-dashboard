@@ -196,7 +196,7 @@ export function Sidebar() {
           const Icon = item.icon
           if (item.href === '/dashboard' && isAdmin) {
             return (
-              <div key={item.href}>
+              <div key={item.href} className="app-sidebar-dash-item">
                 <button
                   onClick={hasAnyFolderContent ? toggleDashboardsTree : () => router.push(item.href)}
                   title={item.label}
@@ -215,7 +215,16 @@ export function Sidebar() {
                 </button>
 
                 {dashboardsTreeOpen && hasAnyFolderContent && (
-                  <div className="app-sidebar-label ml-4 mt-0.5 space-y-0.5 border-l border-white/10 pl-3">
+                  <>
+                    {/* Fundo escurecido — só existe visualmente no mobile (vira
+                        painel fixo ali, ver .app-sidebar-folder-backdrop no
+                        globals.css); no desktop essa div fica com display:none
+                        e some, a árvore normal já aparece embutida ao lado. */}
+                    <div
+                      className="app-sidebar-folder-backdrop"
+                      onClick={toggleDashboardsTree}
+                    />
+                    <div className="app-sidebar-label app-sidebar-folder-panel ml-4 mt-0.5 space-y-0.5 border-l border-white/10 pl-3">
                     {folders.map(folder => {
                       const idsNaPasta = folderProjetos[folder.id] ?? []
                       const projetosDaPasta = allProjetosSidebar.filter(p => idsNaPasta.includes(p.id))
@@ -284,7 +293,8 @@ export function Sidebar() {
                     >
                       Ver todos os dashboards
                     </Link>
-                  </div>
+                    </div>
+                  </>
                 )}
               </div>
             )
