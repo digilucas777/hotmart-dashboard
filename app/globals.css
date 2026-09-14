@@ -313,31 +313,36 @@ body {
     flex: 1;
   }
 
-  .app-sidebar-nav a {
+  .app-sidebar-nav a,
+  .app-sidebar-dash-row {
+    display: flex;
+    height: 100%;
+  }
+
+  .app-sidebar-nav a,
+  .app-sidebar-dash-link {
     flex-direction: column !important;
     gap: 0.2rem !important;
     justify-content: center;
     border-radius: 1rem;
     padding: 0.5rem 0.25rem !important;
-  }
-
-  /* O botão "Dashboards" (dentro de .app-sidebar-dash-item) não é um <a> —
-     por isso não pegava o mesmo layout em coluna/tamanho dos outros itens
-     acima. Sem isso ele ficava com cara diferente dos vizinhos na fileira. */
-  .app-sidebar-dash-item > button {
-    flex-direction: column !important;
-    gap: 0.2rem !important;
-    justify-content: center;
     width: 100%;
     height: 100%;
-    padding: 0.5rem 0.25rem !important;
   }
-  .app-sidebar-dash-item > button > span:last-child {
-    display: none !important; /* seta de abrir/fechar não faz sentido no ícone empilhado do mobile */
+
+  /* No celular, "Dashboards" tem que se comportar exatamente como qualquer
+     outro ícone da barra: tocar leva direto pra /dashboard. A setinha de
+     abrir pastas some aqui — não cabe bem nessa barra estreita, e a mesma
+     organização por pasta já existe na seção "Por pasta" dentro da própria
+     tela de Meus Dashboards, que é um lugar melhor pra navegar isso no
+     celular do que um painel flutuando por cima da barra de navegação. */
+  .app-sidebar-dash-toggle,
+  .app-sidebar-folder-panel {
+    display: none !important;
   }
 
   .app-sidebar-nav a svg,
-  .app-sidebar-dash-item > button svg {
+  .app-sidebar-dash-link svg {
     width: 19px;
     height: 19px;
   }
@@ -349,45 +354,6 @@ body {
     font-size: 0.64rem;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  /* Painel de pastas: no desktop é uma lista embutida, comum, na coluna do
-     menu. No mobile isso quebrava tudo — sendo um bloco alto e vertical
-     dentro da MESMA fileira horizontal dos ícones, ele empurrava os ícones
-     seguintes pro lado (e como a fileira rola/overflow-x, "arrastar" revelava
-     esse buraco). Aqui ele vira uma folha separada, fixa, que sobe por cima
-     da barra de ícones em vez de disputar espaço na mesma linha.
-  */
-  .app-sidebar-folder-panel {
-    position: fixed !important;
-    left: 0.75rem !important;
-    right: 0.75rem !important;
-    bottom: calc(4.75rem + 0.75rem) !important;
-    top: auto !important;
-    max-height: 60vh;
-    overflow-y: auto;
-    margin: 0 !important;
-    padding: 0.75rem !important;
-    border-radius: 1.25rem !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    background: #0b0d14 !important;
-    box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.45);
-    z-index: 60;
-  }
-
-  .app-sidebar-folder-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 55;
-    background: rgba(0, 0, 0, 0.5);
-  }
-}
-
-@media (min-width: 761px) {
-  /* No desktop essa div só existe pra abrir/fechar o painel no mobile —
-     não deve renderizar nada ali. */
-  .app-sidebar-folder-backdrop {
-    display: none;
   }
 }
 

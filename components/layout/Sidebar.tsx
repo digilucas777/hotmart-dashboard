@@ -197,33 +197,36 @@ export function Sidebar() {
           if (item.href === '/dashboard' && isAdmin) {
             return (
               <div key={item.href} className="app-sidebar-dash-item">
-                <button
-                  onClick={hasAnyFolderContent ? toggleDashboardsTree : () => router.push(item.href)}
-                  title={item.label}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
-                    active ? 'text-cyan-100' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
-                  }`}
-                  style={active ? { background: 'linear-gradient(135deg, rgba(0,212,255,0.12), rgba(139,92,246,0.12))' } : undefined}
-                >
-                  <Icon size={17} className="flex-shrink-0" />
-                  <span className="app-sidebar-label flex-1 text-sm font-medium">{item.label}</span>
+                <div className="app-sidebar-dash-row flex items-center gap-1">
+                  {/* Clicar aqui sempre vai direto pra /dashboard, igual todo item do
+                      menu — a árvore de pastas é só um atalho a mais, não substitui a
+                      navegação normal. No celular só essa parte aparece (a setinha some
+                      via CSS): tocar no ícone leva direto pra tela, sem abrir painel
+                      nenhum — a organização por pasta ali é a seção "Por pasta" que já
+                      existe na própria tela de Meus Dashboards. */}
+                  <Link
+                    href={item.href}
+                    title={item.label}
+                    className={`app-sidebar-dash-link flex flex-1 items-center gap-3 rounded-xl px-3 py-2.5 transition-colors ${
+                      active ? 'text-cyan-100' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
+                    }`}
+                    style={active ? { background: 'linear-gradient(135deg, rgba(0,212,255,0.12), rgba(139,92,246,0.12))' } : undefined}
+                  >
+                    <Icon size={17} className="flex-shrink-0" />
+                    <span className="app-sidebar-label text-sm font-medium">{item.label}</span>
+                  </Link>
                   {hasAnyFolderContent && (
-                    <span className="app-sidebar-label shrink-0">
+                    <button
+                      onClick={toggleDashboardsTree}
+                      title="Ver pastas"
+                      className="app-sidebar-label app-sidebar-dash-toggle flex shrink-0 items-center justify-center rounded-lg p-2 text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-300"
+                    >
                       {dashboardsTreeOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    </span>
+                    </button>
                   )}
-                </button>
+                </div>
 
                 {dashboardsTreeOpen && hasAnyFolderContent && (
-                  <>
-                    {/* Fundo escurecido — só existe visualmente no mobile (vira
-                        painel fixo ali, ver .app-sidebar-folder-backdrop no
-                        globals.css); no desktop essa div fica com display:none
-                        e some, a árvore normal já aparece embutida ao lado. */}
-                    <div
-                      className="app-sidebar-folder-backdrop"
-                      onClick={toggleDashboardsTree}
-                    />
                     <div className="app-sidebar-label app-sidebar-folder-panel ml-4 mt-0.5 space-y-0.5 border-l border-white/10 pl-3">
                     {folders.map(folder => {
                       const idsNaPasta = folderProjetos[folder.id] ?? []
@@ -294,7 +297,6 @@ export function Sidebar() {
                       Ver todos os dashboards
                     </Link>
                     </div>
-                  </>
                 )}
               </div>
             )
