@@ -118,7 +118,15 @@ function buildTriggerCode(trigger) {
 // é a arquitetura "Pixel + Conversions API" que a própria Meta recomenda.
 function buildPixelLoaderCode(pixelIds) {
   if (!pixelIds || pixelIds.length === 0) return ''
-  const initCalls = pixelIds.map(id => `fbq('init', ${jsString(String(id))});`).join('\n  ')
+  // autoConfig desligado ANTES do init: por padrão o pixel da Meta tenta detectar
+  // "Purchase" (e outros eventos padrão) sozinho, só olhando o conteúdo da página
+  // (preço, texto de confirmação/agradecimento) — sem nenhum fbq('track', ...)
+  // nosso. Isso soma em cima do Purchase que a gente já manda certo pelo servidor
+  // (webhook + CAPI, com dedup por transação), duplicando a compra no Gerenciador
+  // de Eventos sem aparecer em nenhum log nosso (o navegador manda direto pra
+  // Meta, nunca passa pelo nosso Worker). Confirmado num caso real: Gerenciador
+  // de Eventos recebeu 14 "Compra" no dia, nosso sistema mandou só 5.
+  const initCalls = pixelIds.map(id => `fbq('set', 'autoConfig', false, ${jsString(String(id))});\n  fbq('init', ${jsString(String(id))});`).join('\n  ')
   return `
   !function(f,b,e,v,n,t,s)
   {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
