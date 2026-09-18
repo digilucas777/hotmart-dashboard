@@ -1,0 +1,23 @@
+-- Painel de Rastreamento (/rastreamento) mostrava "Não foi possível carregar os eventos."
+-- pro Francês (instalação mais antiga e com mais volume, 45 mil linhas em track_events).
+--
+-- Causa: /api/track/events/summary dispara 11 contagens (count:'exact') em paralelo pra
+-- track_events, todas filtrando por installation_id + intervalo de received_at. Só existiam
+-- índices separados em installation_id e em received_at — Postgres tinha que combinar os dois
+-- (BitmapAnd) em cada uma das 11 consultas, ao mesmo tempo, na mesma tabela. Medido com
+-- EXPLAIN ANALYZE real (Francês, hoje = ~2.500 linhas de ~45 mil no total): 609ms por consulta
+-- — com 11 delas em paralelo, batia na instabilidade de CPU compartilhada já documentada em
+-- outras partes do projeto e a rota falhava.
+--
+-- CONCURRENTLY porque track_events recebe escrita o tempo todo via webhook/collect; um CREATE
+-- INDEX normal tomaria lock de escrita enquanto constrói. Por isso essa migration não roda
+-- dentro da transação padrão do runner de migrations — foi aplicada manualmente via
+-- execute_sql e só fica registrada aqui pro histórico (mesmo padrão da migration 070).
+--
+-- Resultado após criar o índice (mesmo EXPLAIN ANALYZE, mesmos parâmetros): 4,4ms — 138x mais
+-- rápido, usando "Index Scan using idx_track_events_installation_received" em vez de
+-- "Bitmap Heap Scan" + "BitmapAnd" de dois índices.
+--
+-- ROLLBACK: drop index concurrently if exists idx_track_events_installation_received;
+create index concurrently if not exists idx_track_events_installation_received
+on track_events (installation_id, received_at);
