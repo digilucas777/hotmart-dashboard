@@ -117,6 +117,15 @@ function dayRangeToISO(dateKey: string): { start: string; end: string } {
   return { start: start.toISOString(), end: end.toISOString() }
 }
 
+// A Meta manda "NOME_DO_ANUNCIO|ID_DO_ANUNCIO" em utm_content (mesmo padrão de
+// utm_campaign com nome+ID da campanha) — aqui só o nome interessa pro painel,
+// o ID não ajuda quem tá lendo.
+function adName(utmContent: string | null): string | null {
+  if (!utmContent) return null
+  const [name] = utmContent.split('|')
+  return name.trim() || null
+}
+
 function geoLabel(e: RecentEvent): string | null {
   const parts = [e.geo_city, e.geo_region, e.geo_country].filter(Boolean)
   return parts.length > 0 ? parts.join(', ') : null
@@ -204,6 +213,12 @@ function EventRow({ e }: { e: RecentEvent }) {
           </span>
         )}
       </div>
+      {adName(e.utm_content) && (
+        <div className="text-[11px]">
+          <span className="text-slate-600">🎯 anúncio: </span>
+          <span className="font-medium text-slate-300">{adName(e.utm_content)}</span>
+        </div>
+      )}
       {(e.utm_source || e.utm_medium || e.utm_campaign || e.src) && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600">
           {e.utm_source && <span>utm_source: <span className="text-slate-400">{e.utm_source}</span></span>}
