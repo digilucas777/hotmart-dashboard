@@ -358,8 +358,6 @@ async function handleHotmartWebhook(request, env, ctx) {
   const purchaseProductIds = parseEnvJson(env.PURCHASE_PRODUCT_IDS_JSON, [])
   const productAllowedForMeta = purchaseProductIds.length === 0 || (product.id != null && purchaseProductIds.includes(String(product.id)))
 
-  const isTrackedSale = srcTracked && productAllowedForMeta
-
   const userData = {}
   if (buyer.email) userData.em = await sha256Hex(buyer.email)
   // Hotmart já manda o nome separado (first_name/last_name) — usar isso é
@@ -425,6 +423,17 @@ async function handleHotmartWebhook(request, env, ctx) {
       }
     }
   }
+
+  // Achar a sessão (sck) é uma prova de origem mais forte do que o "src" cru
+  // que a Hotmart devolve: prova que esse comprador passou pela NOSSA página
+  // rastreada antes de comprar (tem fbp/fbc reais cruzados). Achado real:
+  // vendas com sessão cruzada perfeita (fbp+fbc+UTMs completos) estavam
+  // caindo em "não trackeada" só porque a Hotmart devolveu origin.src vazio
+  // pra aquele checkout específico — o "-tracker" nunca chega a existir se o
+  // link de checkout daquela página não tinha um "src" prévio pra decorar. Sem
+  // isso, sessionHit (calculado só depois desse ponto) nunca influenciava
+  // isTrackedSale, e vendas de anúncio de verdade paravam de ir pra Meta.
+  const isTrackedSale = (srcTracked || sessionHit) && productAllowedForMeta
 
   // Reforço: fbp/fbc que o próprio script já colou direto no link de checkout
   // (não dependem do cruzamento por "sck" ter funcionado). Cobre o caso de

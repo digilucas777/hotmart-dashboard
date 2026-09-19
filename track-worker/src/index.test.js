@@ -1008,6 +1008,44 @@ test('webhook da Hotmart MANDA pra Meta quando REQUIRE_TRACKER_SRC está ligado 
   }
 })
 
+test('webhook da Hotmart MANDA pra Meta quando REQUIRE_TRACKER_SRC está ligado, o src veio vazio, mas a sessão bateu pelo sck (venda real de anúncio — achado em produção: Francês perdeu vendas rastreadas porque origin.src às vezes vem vazio mesmo com sck e fbp/fbc reais)', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest({ REQUIRE_TRACKER_SRC: 'true' })
+    await env.SESSIONS.put('sid:sess-sem-src', JSON.stringify({ fbp: 'fb.1.111', fbc: 'fb.1.222', ip: '1.2.3.4', userAgent: 'ua', geo: { city: 'Lyon', country: 'FR' } }))
+    const ctx = makeCtx()
+    const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
+      method: 'POST',
+      body: JSON.stringify({
+        event: 'PURCHASE_APPROVED',
+        data: {
+          buyer: { name: 'Sessao Sem Src', email: 'semsrc@exemplo.com' },
+          // origin.src ausente (não null explícito, o campo nem existe) — exatamente o
+          // formato real que a Hotmart manda quando o checkout daquela página não tinha
+          // um "src" prévio pro nosso decorador colar o sufixo "-tracker".
+          purchase: { transaction: 'HP-SEM-SRC', price: { value: 97, currency_value: 'BRL' }, origin: { sck: 'sess-sem-src' } },
+        },
+      }),
+    })
+    const res = await worker.fetch(req, env, ctx)
+    assert.equal(res.status, 200)
+    await Promise.all(ctx._tasks)
+
+    assert.equal(calls.filter(c => c.url.includes('graph.facebook.com')).length, 1, 'devia mandar pra Meta mesmo sem src, por causa da sessão cruzada')
+    const ingestCall = calls.find(c => c.url === env.INGEST_URL)
+    const ingestBody = JSON.parse(ingestCall.init.body)
+    assert.equal(ingestBody.source, 'capi')
+    assert.equal(ingestBody.session_hit, true)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('webhook da Hotmart manda pra Meta normalmente quando REQUIRE_TRACKER_SRC não está ligado (comportamento padrão, compatível)', async () => {
   const originalFetch = globalThis.fetch
   const calls = []
