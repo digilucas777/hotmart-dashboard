@@ -50,7 +50,9 @@ type SectionState = {
   hasMore: boolean
 }
 
-const EVENT_TYPES: EventName[] = ['PageView', 'ViewContent', 'AddToCart', 'InitiateCheckout', 'Purchase']
+// Funil de baixo pra cima: Purchase (o que mais importa) primeiro, PageView
+// (o topo do funil, o menos decisivo) por último.
+const EVENT_TYPES: EventName[] = ['Purchase', 'InitiateCheckout', 'AddToCart', 'ViewContent', 'PageView']
 const PAGE_SIZE = 50
 
 const EVENT_ICON: Record<string, string> = {
@@ -254,8 +256,10 @@ function EventTypeSection({
       {section.open && (
         <div className="border-t border-white/10">
           {/* Rolagem própria da seção (não da página) — senão uma seção com
-              muitos eventos empurra as outras duas pra longe. */}
-          <div className="max-h-80 space-y-1.5 overflow-y-auto p-3">
+              muitos eventos empurra as outras duas pra longe. Altura calculada
+              pra caber uns 4 eventos (Purchase é o mais alto, com a linha de
+              anúncio) antes de precisar rolar. */}
+          <div className="max-h-[36rem] space-y-1.5 overflow-y-auto p-3">
             {section.error ? (
               <p className="text-xs text-red-300">{section.error}</p>
             ) : section.events === null ? null : section.events.length === 0 ? (
