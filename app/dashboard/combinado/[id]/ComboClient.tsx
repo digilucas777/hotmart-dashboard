@@ -451,8 +451,8 @@ export function ComboClient({ comboId }: { comboId: string }) {
                 <Spinner size={14} />
                 Carregando dados de {combo.projeto_ids.length} projeto{combo.projeto_ids.length === 1 ? '' : 's'}…
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {(combo.projeto_ids.length > 0 ? combo.projeto_ids : ['a', 'b', 'c']).map(id => (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {(combo.projeto_ids.length > 0 ? combo.projeto_ids : ['a', 'b', 'c', 'd']).map(id => (
                   <div key={id} className="h-40 animate-pulse rounded-2xl border border-white/10 bg-white/[0.06]" />
                 ))}
               </div>
@@ -460,7 +460,7 @@ export function ComboClient({ comboId }: { comboId: string }) {
           ) : perProjeto.length === 0 ? (
             <p className="text-sm text-slate-500">Nenhum projeto nesta combinação.</p>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {perProjeto.map(p => {
                 const faturamento = computeWidgetDataFromSummary(p.summary, 'total_converted', exchangeRate)
                 const faturamentoBRL = computeWidgetDataFromSummary(p.summary, 'total_brl', exchangeRate)
@@ -468,41 +468,46 @@ export function ComboClient({ comboId }: { comboId: string }) {
                 const lucro = computeWidgetDataFromSummary(p.summary, 'lucro', exchangeRate, p.custoTotal, p.custoUSD)
                 const roas = computeWidgetDataFromSummary(p.summary, 'roas', exchangeRate, p.custoTotal, p.custoUSD)
                 return (
-                  <div key={p.projetoId} className="rounded-2xl border border-white/10 bg-[#0b0d14] p-5">
+                  <div key={p.projetoId} className="rounded-2xl border border-white/10 bg-[#0b0d14] p-4">
                     <p className="truncate text-sm font-black text-white">{p.nome}</p>
 
-                    <div className="mt-4">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Faturamento</p>
-                      <p className="mt-1 text-lg font-black text-white">{faturamento?.kind === 'metric' ? faturamento.value : '—'}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">
-                        {faturamentoBRL?.kind === 'metric' ? faturamentoBRL.value : formatBRL(0)} BRL
-                        {' + '}
-                        {faturamentoUSD?.kind === 'metric' ? faturamentoUSD.value : formatUSD(0)} USD
+                    <div className="mt-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Faturamento</p>
+                      {/* Dólar em destaque ao lado do total já convertido pra real — antes
+                          o valor em USD só aparecia minúsculo e cinza junto do BRL. */}
+                      <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <span className="text-base font-black text-white">{faturamento?.kind === 'metric' ? faturamento.value : '—'}</span>
+                        <span className="text-sm font-black text-emerald-300">
+                          {faturamentoUSD?.kind === 'metric' ? faturamentoUSD.value : formatUSD(0)} USD
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-[11px] text-slate-500">
+                        {faturamentoBRL?.kind === 'metric' ? faturamentoBRL.value : formatBRL(0)} BRL na moeda original
                       </p>
                     </div>
 
-                    <div className="mt-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Gasto</p>
+                    <div className="mt-2.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Gasto</p>
                       {p.custoTotal > 0 ? (
                         <>
-                          <p className="mt-1 text-lg font-black text-white">{formatBRL(p.custoTotal)}</p>
-                          {p.custoUSD > 0 && <p className="mt-0.5 text-xs text-slate-500">{formatUSD(p.custoUSD)} USD</p>}
+                          <p className="mt-1 text-base font-black text-white">{formatBRL(p.custoTotal)}</p>
+                          {p.custoUSD > 0 && <p className="mt-0.5 text-[11px] text-slate-500">{formatUSD(p.custoUSD)} USD</p>}
                         </>
                       ) : (
-                        <p className="mt-1 text-xs text-slate-500">Sem custo cadastrado</p>
+                        <p className="mt-1 text-[11px] text-slate-500">Sem custo cadastrado</p>
                       )}
                     </div>
 
-                    <div className="mt-3 border-t border-white/10 pt-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Lucro</p>
-                      <p className="mt-1 text-lg font-black text-white">{lucro?.kind === 'metric' ? lucro.value : '—'}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">{lucro?.kind === 'metric' ? lucro.subValue : ''}</p>
+                    <div className="mt-2.5 border-t border-white/10 pt-2.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Lucro</p>
+                      <p className="mt-1 text-base font-black text-white">{lucro?.kind === 'metric' ? lucro.value : '—'}</p>
+                      <p className="mt-0.5 text-[11px] text-slate-500">{lucro?.kind === 'metric' ? lucro.subValue : ''}</p>
                     </div>
 
-                    <div className="mt-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">ROAS</p>
-                      <p className="mt-1 text-lg font-black text-white">{roas?.kind === 'metric' ? roas.value : '—'}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">{roas?.kind === 'metric' ? roas.subValue : ''}</p>
+                    <div className="mt-2.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">ROAS</p>
+                      <p className="mt-1 text-base font-black text-white">{roas?.kind === 'metric' ? roas.value : '—'}</p>
+                      <p className="mt-0.5 text-[11px] text-slate-500">{roas?.kind === 'metric' ? roas.subValue : ''}</p>
                     </div>
                   </div>
                 )
