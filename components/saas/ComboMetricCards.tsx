@@ -37,11 +37,15 @@ function HighlightCard({
   title,
   value,
   subValue,
+  usdValue,
 }: {
   theme: typeof HIGHLIGHT_THEME[keyof typeof HIGHLIGHT_THEME]
   title: string
   value: string
   subValue: string
+  /** Faturamento em dólar em destaque ao lado do total já convertido em BRL —
+      sem isso o USD só aparecia escondido lá embaixo no card neutro "Faturamento USD". */
+  usdValue?: string
 }) {
   return (
     <div className={`min-w-0 rounded-2xl border ${theme.border} ${theme.bg} p-4 sm:p-5`}>
@@ -51,7 +55,10 @@ function HighlightCard({
           ("120.796,8" / "0"). Sem break-words, o navegador só quebra em
           espaço — na pior das hipóteses "R$" cai numa linha e o valor na
           outra, nunca corta um dígito ao meio. */}
-      <p className={`mt-2 text-lg font-black sm:text-xl lg:text-2xl xl:text-3xl ${theme.text}`}>{value}</p>
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className={`text-lg font-black sm:text-xl lg:text-2xl xl:text-3xl ${theme.text}`}>{value}</span>
+        {usdValue && <span className="text-sm font-black text-emerald-300 sm:text-base">{usdValue} USD</span>}
+      </div>
       <p className="mt-1 truncate text-xs text-slate-500">{subValue}</p>
     </div>
   )
@@ -69,6 +76,7 @@ export function ComboMetricCards({
   custoUSD?: number
 }) {
   const faturamento = computeWidgetDataFromSummary(summary, 'total_converted', exchangeRate)
+  const faturamentoUSD = computeWidgetDataFromSummary(summary, 'total_usd', exchangeRate)
   const lucro = computeWidgetDataFromSummary(summary, 'lucro', exchangeRate, custoTotal, custoUSD)
   const roas = computeWidgetDataFromSummary(summary, 'roas', exchangeRate, custoTotal, custoUSD)
 
@@ -87,7 +95,13 @@ export function ComboMetricCards({
           batendo de frente e estourando números grandes tipo "R$ 120.796,80". */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
         {faturamento && faturamento.kind === 'metric' && (
-          <HighlightCard theme={HIGHLIGHT_THEME.faturamento} title="Faturamento" value={faturamento.value} subValue={faturamento.subValue} />
+          <HighlightCard
+            theme={HIGHLIGHT_THEME.faturamento}
+            title="Faturamento"
+            value={faturamento.value}
+            subValue={faturamento.subValue}
+            usdValue={faturamentoUSD?.kind === 'metric' ? faturamentoUSD.value : undefined}
+          />
         )}
         <HighlightCard
           theme={HIGHLIGHT_THEME.gasto}
