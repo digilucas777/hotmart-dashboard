@@ -392,6 +392,18 @@ export default function RelatoriosPage() {
       setConnections(connectionRows)
       setSchedules((schedulesRes.data ?? []) as ReportSchedule[])
       setWhatsappOpen(connectionRows.length === 0)
+
+      // Reaproveita a config da Evolution já salva — sem isso, toda aba nova
+      // pedia URL/API key/instância de novo antes de conseguir gerar QR Code.
+      const evolutionConn = connectionRows.find(c => c.provider === 'evolution')
+      if (evolutionConn) {
+        setConnectionName(evolutionConn.nome)
+        setConnectionPhone(evolutionConn.telefone)
+        setEvolutionUrl(evolutionConn.evolution_url ?? '')
+        setEvolutionApiKey(evolutionConn.evolution_api_key ?? '')
+        setEvolutionInstance(evolutionConn.evolution_instance ?? 'hotmart-dashboard')
+      }
+
       setForm(prev => ({
         ...prev,
         projeto_id: prev.projeto_id || projectRows[0]?.id || '',
@@ -634,9 +646,11 @@ export default function RelatoriosPage() {
       setQrImage(json.base64 ?? null)
       setPairingCode(json.pairingCode ?? null)
 
+      // Upsert por evolution_instance — senão cada "Gerar QR Code" (ex: ao
+      // reconectar depois de um QR expirado) criava uma linha nova.
       const { data } = await supabase
         .from('whatsapp_connections')
-        .insert({
+        .upsert({
           nome: connectionName.trim() || evolutionInstance.trim(),
           telefone: connectionPhone.trim() || evolutionInstance.trim(),
           provider: 'evolution',
@@ -644,7 +658,7 @@ export default function RelatoriosPage() {
           evolution_api_key: evolutionApiKey.trim(),
           evolution_instance: evolutionInstance.trim(),
           status: 'connected',
-        })
+        }, { onConflict: 'evolution_instance' })
         .select()
         .single()
 
