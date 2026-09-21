@@ -309,6 +309,10 @@ export default function RelatoriosPage() {
   const [qrImage, setQrImage] = useState<string | null>(null)
   const [pairingCode, setPairingCode] = useState<string | null>(null)
   const [qrError, setQrError] = useState<string | null>(null)
+  // Estado REAL da conexão (aparelho pareado de verdade), diferente de
+  // `isConnected` abaixo — aquele só checa se existe uma linha salva no
+  // banco, não se o WhatsApp realmente aceitou o pareamento.
+  const [evolutionPaired, setEvolutionPaired] = useState(false)
   const [form, setForm] = useState({
     nome: 'Relatório diário',
     projeto_id: '',
@@ -624,12 +628,53 @@ export default function RelatoriosPage() {
     }
   }
 
+  const checkEvolutionStatus = useCallback(async (baseUrl: string, apiKey: string, instanceName: string) => {
+    if (!baseUrl.trim() || !apiKey.trim() || !instanceName.trim()) return false
+    try {
+      const res = await fetch('/api/whatsapp/evolution-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baseUrl: baseUrl.trim(), apiKey: apiKey.trim(), instanceName: instanceName.trim() }),
+      })
+      const json = await res.json()
+      const connected = res.ok && json.connected === true
+      setEvolutionPaired(connected)
+      return connected
+    } catch {
+      return false
+    }
+  }, [])
+
+  // Assim que a página carrega uma conexão Evolution já salva, confere se
+  // o aparelho continua pareado de verdade (não só se existe linha no banco).
+  useEffect(() => {
+    if (evolutionUrl && evolutionApiKey && evolutionInstance) {
+      void checkEvolutionStatus(evolutionUrl, evolutionApiKey, evolutionInstance)
+    }
+  }, [evolutionUrl, evolutionApiKey, evolutionInstance, checkEvolutionStatus])
+
+  // Depois de escanear o QR, o pareamento leva alguns segundos do lado do
+  // WhatsApp — fica checando até confirmar (ou até 2 minutos, pra não
+  // ficar checando pra sempre se o usuário desistiu de escanear).
+  useEffect(() => {
+    if (!qrImage && !pairingCode) return
+    if (evolutionPaired) return
+    let attempts = 0
+    const interval = setInterval(async () => {
+      attempts += 1
+      const connected = await checkEvolutionStatus(evolutionUrl, evolutionApiKey, evolutionInstance)
+      if (connected || attempts >= 24) clearInterval(interval)
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [qrImage, pairingCode, evolutionPaired, evolutionUrl, evolutionApiKey, evolutionInstance, checkEvolutionStatus])
+
   async function generateQrCode() {
     if (!evolutionUrl.trim() || !evolutionApiKey.trim() || !evolutionInstance.trim()) return
     setSaving(true)
     setQrError(null)
     setQrImage(null)
     setPairingCode(null)
+    setEvolutionPaired(false)
     try {
       const res = await fetch('/api/whatsapp/evolution-qr', {
         method: 'POST',
@@ -908,7 +953,7 @@ export default function RelatoriosPage() {
                 </button>
 
                 {whatsappOpen && (
-                  <div className="border-t border-white/10 px-4 pb-5 pt-4 sm:px-5 lg:max-h-[220px] lg:overflow-y-auto">
+                  <div className="border-t border-white/10 px-4 pb-5 pt-4 sm:px-5 lg:max-h-[480px] lg:overflow-y-auto">
                     <div className="grid gap-5 lg:grid-cols-2">
                       {/* QR Code / Evolution */}
                       <div>
@@ -919,16 +964,26 @@ export default function RelatoriosPage() {
                           <input value={evolutionUrl} onChange={e => setEvolutionUrl(e.target.value)} className={`${fieldClass} w-full`} placeholder="URL Evolution API" />
                           <input value={evolutionApiKey} onChange={e => setEvolutionApiKey(e.target.value)} className={`${fieldClass} w-full`} placeholder="API key da Evolution" type="password" autoComplete="new-password" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" />
                           <input value={evolutionInstance} onChange={e => setEvolutionInstance(e.target.value)} className={`${fieldClass} w-full`} placeholder="Nome da instância" />
-                          <Button onClick={generateQrCode} disabled={saving || !evolutionUrl.trim() || !evolutionApiKey.trim() || !evolutionInstance.trim()}>
-                            <MessageCircle size={14} />
-                            Gerar QR Code
-                          </Button>
-                          {(qrImage || pairingCode || qrError) && (
+
+                          {evolutionPaired ? (
+                            <div className="flex items-center gap-2 rounded-xl border border-green-500/30 bg-green-500/10 px-3 py-2.5">
+                              <CheckCircle2 size={16} className="shrink-0 text-green-400" />
+                              <p className="text-sm font-bold text-green-300">Aparelho pareado — WhatsApp conectado de verdade.</p>
+                            </div>
+                          ) : (
+                            <Button onClick={generateQrCode} disabled={saving || !evolutionUrl.trim() || !evolutionApiKey.trim() || !evolutionInstance.trim()}>
+                              <MessageCircle size={14} />
+                              Gerar QR Code
+                            </Button>
+                          )}
+
+                          {!evolutionPaired && (qrImage || pairingCode || qrError) && (
                             <div className="rounded-xl border border-white/10 bg-[#10101d] p-3">
-                              {qrImage && <img src={qrImage} alt="QR Code WhatsApp" className="mx-auto h-40 w-40 rounded-lg bg-white p-2" />}
+                              {qrImage && <img src={qrImage} alt="QR Code WhatsApp" className="mx-auto h-48 w-48 rounded-lg bg-white p-2" />}
                               {pairingCode && <p className="mt-2 text-center text-sm font-bold text-slate-100">Código: {pairingCode}</p>}
                               {qrError && <p className="text-xs font-semibold text-red-300">{qrError}</p>}
                               <p className="mt-2 text-center text-xs text-slate-500">Abra WhatsApp → Aparelhos conectados → Conectar aparelho.</p>
+                              <p className="mt-1 text-center text-xs text-slate-600">Verificando pareamento automaticamente…</p>
                             </div>
                           )}
                         </div>
