@@ -9,8 +9,18 @@ const supabase = createClient(
 
 export async function POST(req: NextRequest) {
   try {
-    const { user } = await getAuthenticatedUser()
-    if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    // Duas formas de autenticar: sessão normal do dashboard (usuário logado,
+    // usado pela tela de Relatórios) OU um segredo dedicado — para rotinas
+    // automatizadas (ex: robôs do Claude) que não têm cookie de sessão, só
+    // uma chamada de servidor pra servidor.
+    const routineSecret = process.env.ROUTINE_API_SECRET
+    const authHeader = req.headers.get('authorization')
+    const isRoutineCall = !!routineSecret && authHeader === `Bearer ${routineSecret}`
+
+    if (!isRoutineCall) {
+      const { user } = await getAuthenticatedUser()
+      if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    }
 
     const body = await req.json()
     const connectionId = String(body.connectionId ?? '')
