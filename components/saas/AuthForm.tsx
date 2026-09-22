@@ -3,11 +3,11 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { AlertCircle, Lock, Mail, UserRound } from 'lucide-react'
+import { AlertCircle, Lock, Mail } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { DashSpeedLogo } from './DashSpeedLogo'
 
-type AuthMode = 'login' | 'register' | 'forgot'
+type AuthMode = 'login' | 'forgot'
 
 function GoogleIcon() {
   return (
@@ -33,7 +33,6 @@ function MetaIcon() {
 
 export function AuthForm({ mode }: { mode: AuthMode }) {
   const router = useRouter()
-  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -41,7 +40,6 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   const [error, setError] = useState('')
 
   const isLogin = mode === 'login'
-  const isRegister = mode === 'register'
   const isForgot = mode === 'forgot'
 
   async function handleSubmit(e: React.FormEvent) {
@@ -59,24 +57,6 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
       }
       router.push('/dashboard')
       router.refresh()
-      return
-    }
-
-    if (isRegister) {
-      const { error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { full_name: name },
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
-        },
-      })
-      setLoading(false)
-      if (authError) {
-        setError(authError.message)
-        return
-      }
-      setMessage('Cadastro criado. Confira seu e-mail para confirmar o acesso.')
       return
     }
 
@@ -112,14 +92,12 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         <div className="rounded-[2rem] border border-white/10 bg-white/[0.055] p-6 shadow-2xl shadow-black/40 backdrop-blur-2xl">
           <div className="mb-6 text-center">
             <h1 className="text-2xl font-black">
-              {isLogin ? 'Entrar no Dash Speed' : isRegister ? 'Criar sua conta' : 'Recuperar senha'}
+              {isLogin ? 'Entrar no Dash Speed' : 'Recuperar senha'}
             </h1>
             <p className="mt-2 text-sm text-slate-400">
               {isLogin
                 ? 'Acesse seus dashboards e relatórios inteligentes.'
-                : isRegister
-                  ? 'Comece a organizar seus dados em poucos minutos.'
-                  : 'Informe seu e-mail para receber as instruções.'}
+                : 'Informe seu e-mail para receber as instruções.'}
             </p>
           </div>
 
@@ -145,15 +123,6 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {isRegister && (
-              <label className="block">
-                <span className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-                  <UserRound size={12} />
-                  Nome
-                </span>
-                <input name="name" autoComplete="name" value={name} onChange={e => setName(e.target.value)} required className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm outline-none transition-colors focus:border-cyan-300/60" />
-              </label>
-            )}
             <label className="block">
               <span className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
                 <Mail size={12} />
@@ -167,7 +136,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
                   <Lock size={12} />
                   Senha
                 </span>
-                <input type="password" name="password" autoComplete={isRegister ? 'new-password' : 'current-password'} value={password} onChange={e => setPassword(e.target.value)} required minLength={6} className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm outline-none transition-colors focus:border-cyan-300/60" />
+                <input type="password" name="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm outline-none transition-colors focus:border-cyan-300/60" />
               </label>
             )}
 
@@ -180,14 +149,13 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
             {message && <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-3 py-2 text-xs text-cyan-100">{message}</div>}
 
             <button disabled={loading} className="h-12 w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-violet-500 text-sm font-black text-white shadow-[0_0_30px_rgba(0,212,255,0.22)] transition-transform hover:-translate-y-0.5 disabled:opacity-60">
-              {loading ? 'Aguarde...' : isLogin ? 'Entrar' : isRegister ? 'Criar conta' : 'Enviar recuperação'}
+              {loading ? 'Aguarde...' : isLogin ? 'Entrar' : 'Enviar recuperação'}
             </button>
           </form>
 
           <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-sm text-slate-500">
-            {isLogin && <Link href="/forgot-password" className="hover:text-white">Esqueci minha senha</Link>}
             {isLogin ? (
-              <Link href="/register" className="font-semibold text-cyan-200 hover:text-white">Criar conta</Link>
+              <Link href="/forgot-password" className="hover:text-white">Esqueci minha senha</Link>
             ) : (
               <Link href="/login" className="font-semibold text-cyan-200 hover:text-white">Voltar ao login</Link>
             )}
