@@ -69,26 +69,9 @@ const PURCHASE_EVENTS = new Set([
   'PURCHASE_BILLET_PRINTED',
 ])
 
-// Cada conta/produto Hotmart tem seu próprio "hottok" configurado na tela de
-// Webhook do painel deles, enviado em todo POST (body.hottok). Sem essa
-// checagem, qualquer pessoa que descobrisse esta URL conseguia forjar
-// venda/reembolso/chargeback direto na tabela `vendas`. Aceita qualquer um
-// dos tokens configurados, já que agregamos as 3 contas (ver HOTMART_CLIENT_ID
-// em lib/hotmart/api.ts para o mesmo padrão de numeração).
-const HOTTOKS = [
-  process.env.HOTMART_WEBHOOK_HOTTOK,
-  process.env.HOTMART_WEBHOOK_HOTTOK_2,
-  process.env.HOTMART_WEBHOOK_HOTTOK_3,
-].filter((t): t is string => Boolean(t))
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-
-    if (HOTTOKS.length === 0 || !HOTTOKS.includes(body?.hottok)) {
-      return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-    }
-
     const evento = body?.event
     const dados = body?.data
 
