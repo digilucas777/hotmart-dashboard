@@ -11,6 +11,7 @@ import { InstallationModal } from './_components/InstallationModal'
 import { HelpGuideModal } from './_components/HelpGuideModal'
 import { EventsPanel } from './_components/EventsPanel'
 import type { TrackInstallation } from '@/lib/track/types'
+import { buildFullHeadSnippet } from '@/lib/track/utmSnippet'
 
 export default function RastreamentoPage() {
   const router = useRouter()
@@ -107,7 +108,12 @@ export default function RastreamentoPage() {
 
   async function handleCopySnippet(installation: TrackInstallation) {
     if (!installation.worker_subdomain) return
-    await navigator.clipboard.writeText(`<script src="https://${installation.worker_subdomain}/t.js"></script>`)
+    const snippet = buildFullHeadSnippet(
+      installation.worker_subdomain,
+      installation.domains.filter(d => d.tipo === 'lp').map(d => d.domain),
+      installation.domains.filter(d => d.tipo === 'checkout').map(d => d.domain)
+    )
+    await navigator.clipboard.writeText(snippet)
     setCopiedScriptId(installation.id)
     setTimeout(() => setCopiedScriptId(prev => (prev === installation.id ? null : prev)), 2000)
   }
@@ -255,10 +261,10 @@ export default function RastreamentoPage() {
 
                 {inst.status === 'deployed' && inst.worker_subdomain && expandedScript === inst.id && (
                   <div className="mt-3 space-y-2 rounded-lg p-2.5 ring-1 ring-white/10" style={{ background: '#111120' }}>
-                    <p className="text-[10px] font-medium text-slate-500">Script pra colar na &lt;head&gt; da página</p>
+                    <p className="text-[10px] font-medium text-slate-500">Script pra colar na &lt;head&gt; da página (cole em todas as páginas do funil)</p>
                     <div className="flex items-center gap-2">
                       <code className="flex-1 truncate text-[11px] text-cyan-300">
-                        {`<script src="https://${inst.worker_subdomain}/t.js"></script>`}
+                        {`<script src="https://${inst.worker_subdomain}/t.js"></script> + repasse de fbclid/UTM pro checkout`}
                       </code>
                       <button
                         onClick={() => handleCopySnippet(inst)}
@@ -271,6 +277,10 @@ export default function RastreamentoPage() {
                     <div className="flex gap-1.5 rounded-lg border border-blue-500/20 bg-blue-500/10 p-2 text-[10px] text-blue-200">
                       <span>ℹ️</span>
                       <p>Se já tem o pixel nativo da Meta na página, pode deixar — esse script carrega ele sozinho e funde tudo em 1 evento (nunca conta em dobro).</p>
+                    </div>
+                    <div className="flex gap-1.5 rounded-lg border border-amber-500/20 bg-amber-500/10 p-2 text-[10px] text-amber-200">
+                      <span>⚠️</span>
+                      <p>Já vem com o repasse de fbclid/UTM pro checkout embutido — importante se algum botão do funil (pressel/cloaker) tem link fixo pro checkout, senão a venda não conta pro Meta.</p>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <input
