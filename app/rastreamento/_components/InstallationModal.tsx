@@ -59,6 +59,7 @@ ${targetsJs}
   ];
 
   var PARAMS_TO_TRACK = [
+    'src', 'sck', 'xcod',
     'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
     'fbclid', 'gclid', 'ttclid'
   ];
