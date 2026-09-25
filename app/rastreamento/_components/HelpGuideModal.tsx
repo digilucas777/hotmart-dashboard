@@ -72,6 +72,10 @@ const PARTS: Part[] = [
     title: 'Parte E — Snippet e webhook (próximas etapas)',
     steps: [
       { id: 'e1', text: 'Depois que o Worker existir (Etapa 2), copie o snippet gerado e cole na <head> das suas páginas de vendas.' },
+      {
+        id: 'e1b',
+        text: 'Copie também o script "repassar fbclid/UTM pro checkout" (logo abaixo do snippet da head, na seção 2) e cole em TODAS as páginas do funil — pressel, black/white, obrigado, etc. — mesmo nas que não têm botão de checkout. Sem isso, botões com link fixo pro checkout (comum em pressel/cloaker) perdem o fbclid/UTM do clique original e a venda não conta pro Meta, mesmo aparecendo certinha no seu faturamento.',
+      },
       { id: 'e2', text: 'Configure o webhook na Hotmart (Ferramentas → Webhook → Cadastrar Webhook) com a URL mostrada na edição da instalação, evento "Compra Aprovada".' },
     ],
   },

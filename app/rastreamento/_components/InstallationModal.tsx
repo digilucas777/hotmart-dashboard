@@ -44,6 +44,200 @@ function emptyTrigger(): TriggerForm {
   return { _key: nextKey(), tipo: 'click_link', meta_event: 'Lead', config: {}, ativo: true }
 }
 
+function buildUtmPassthroughSnippet(lpDomains: string[], checkoutDomains: string[]): string {
+  const targets = Array.from(
+    new Set([...checkoutDomains, ...lpDomains, 'pay.hotmart.com', 'go.hotmart.com'].filter(Boolean))
+  )
+  const targetsJs = targets.map(d => `    '${d}'`).join(',\n')
+  return `<script>
+(function () {
+  // Repassa fbclid/utm_* (e sck da Hotmart) de página em página do funil,
+  // inclusive pro botão final de checkout — sem isso, link fixo de botão
+  // perde o rastreio do anúncio e a venda não conta pro Meta.
+  var TARGET_DOMAINS = [
+${targetsJs}
+  ];
+
+  var PARAMS_TO_TRACK = [
+    'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
+    'fbclid', 'gclid', 'ttclid'
+  ];
+
+  var STORAGE_KEY = 'track_utm_passthrough';
+
+  function parseQueryString(qs) {
+    var params = {};
+    if (!qs) return params;
+    qs.split('&').forEach(function (pair) {
+      if (!pair) return;
+      var kv = pair.split('=');
+      var key = decodeURIComponent(kv[0]);
+      var value = kv[1] ? decodeURIComponent(kv[1].replace(/\\+/g, ' ')) : '';
+      params[key] = value;
+    });
+    return params;
+  }
+
+  function getUrlParams() {
+    return parseQueryString(window.location.search.substring(1));
+  }
+
+  function loadStoredParams() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveParams(params) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(params));
+    } catch (e) {}
+  }
+
+  function mergeParams() {
+    var current = getUrlParams();
+    var stored = loadStoredParams();
+    var merged = stored;
+    PARAMS_TO_TRACK.forEach(function (key) {
+      if (current[key]) {
+        merged[key] = current[key];
+      }
+    });
+    saveParams(merged);
+    return merged;
+  }
+
+  function buildQueryString(params) {
+    var parts = [];
+    Object.keys(params).forEach(function (key) {
+      if (params[key]) {
+        parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(params[key]));
+      }
+    });
+    return parts.join('&');
+  }
+
+  function mergeParamsIntoUrl(originalUrl, newParams) {
+    var hashSplit = originalUrl.split('#');
+    var withoutHash = hashSplit[0];
+    var hash = hashSplit.length > 1 ? '#' + hashSplit.slice(1).join('#') : '';
+
+    var qIndex = withoutHash.indexOf('?');
+    var base = qIndex !== -1 ? withoutHash.substring(0, qIndex) : withoutHash;
+    var existingQs = qIndex !== -1 ? withoutHash.substring(qIndex + 1) : '';
+    var existingParams = parseQueryString(existingQs);
+
+    Object.keys(newParams).forEach(function (key) {
+      var newValue = newParams[key];
+      if (!newValue) return;
+      if (!existingParams[key]) {
+        existingParams[key] = newValue;
+      }
+    });
+
+    var newQs = buildQueryString(existingParams);
+    return base + (newQs ? '?' + newQs : '') + hash;
+  }
+
+  function isTargetLink(href) {
+    return TARGET_DOMAINS.some(function (domain) {
+      return href.indexOf(domain) !== -1;
+    });
+  }
+
+  function appendParamsToLink(link, params) {
+    if (link.dataset.utmApplied === '1') return;
+    var href = link.getAttribute('href');
+    if (!href) return;
+    link.setAttribute('href', mergeParamsIntoUrl(href, params));
+    link.dataset.utmApplied = '1';
+  }
+
+  function applyToAllLinks() {
+    var params = mergeParams();
+    if (Object.keys(params).length === 0) return;
+
+    document.querySelectorAll('a[href]').forEach(function (link) {
+      var href = link.getAttribute('href');
+      if (!href) return;
+
+      if (isTargetLink(href)) {
+        appendParamsToLink(link, params);
+        return;
+      }
+
+      var isAnchorOrSpecial =
+        href.indexOf('#') === 0 ||
+        href.indexOf('mailto:') === 0 ||
+        href.indexOf('tel:') === 0 ||
+        href.indexOf('javascript:') === 0;
+      var isExternal = /^https?:\\/\\//i.test(href) && href.indexOf(window.location.hostname) === -1;
+
+      if (!isAnchorOrSpecial && !isExternal) {
+        appendParamsToLink(link, params);
+      }
+    });
+  }
+
+  function processOnclickButtons() {
+    var params = mergeParams();
+    if (Object.keys(params).length === 0) return;
+
+    document.querySelectorAll('[onclick]').forEach(function (el) {
+      if (el.dataset.utmAppliedOnclick === '1') return;
+      var onclickAttr = el.getAttribute('onclick');
+      if (!onclickAttr) return;
+      var isTarget = TARGET_DOMAINS.some(function (domain) {
+        return onclickAttr.indexOf(domain) !== -1;
+      });
+      if (!isTarget) return;
+      var urlMatch = onclickAttr.match(/(['"])(https?:\\/\\/[^'"]+)\\1/);
+      if (!urlMatch) return;
+      var newUrl = mergeParamsIntoUrl(urlMatch[2], params);
+      el.setAttribute('onclick', onclickAttr.split(urlMatch[2]).join(newUrl));
+      el.dataset.utmAppliedOnclick = '1';
+    });
+  }
+
+  function processDataUrlButtons() {
+    var params = mergeParams();
+    if (Object.keys(params).length === 0) return;
+
+    document.querySelectorAll('[data-url]').forEach(function (el) {
+      if (el.dataset.utmAppliedDataUrl === '1') return;
+      var encoded = el.getAttribute('data-url');
+      if (!encoded) return;
+      var decoded;
+      try { decoded = atob(encoded); } catch (e) { return; }
+      var isTarget = TARGET_DOMAINS.some(function (domain) {
+        return decoded.indexOf(domain) !== -1;
+      });
+      if (!isTarget) return;
+      var newUrl = mergeParamsIntoUrl(decoded, params);
+      var newEncoded;
+      try { newEncoded = btoa(newUrl); } catch (e) { return; }
+      el.setAttribute('data-url', newEncoded);
+      el.dataset.utmAppliedDataUrl = '1';
+    });
+  }
+
+  function applyToEverything() {
+    applyToAllLinks();
+    processOnclickButtons();
+    processDataUrlButtons();
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    applyToEverything();
+    new MutationObserver(applyToEverything).observe(document.body, { childList: true, subtree: true });
+  });
+})();
+</script>`
+}
+
 const inputClass = 'w-full rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 outline-none ring-1 ring-white/10 focus:ring-indigo-500/60'
 const inputStyle = { background: '#111120' }
 const labelClass = 'mb-1.5 block text-xs font-medium text-slate-500'
@@ -147,12 +341,19 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
   const [deploying, setDeploying] = useState(false)
   const [deployError, setDeployError] = useState<string | null>(null)
   const [copiedScript, setCopiedScript] = useState(false)
+  const [copiedUtmScript, setCopiedUtmScript] = useState(false)
   const [copiedWebhook, setCopiedWebhook] = useState(false)
 
   async function handleCopyScript(snippet: string) {
     await navigator.clipboard.writeText(snippet)
     setCopiedScript(true)
     setTimeout(() => setCopiedScript(false), 2000)
+  }
+
+  async function handleCopyUtmScript(snippet: string) {
+    await navigator.clipboard.writeText(snippet)
+    setCopiedUtmScript(true)
+    setTimeout(() => setCopiedUtmScript(false), 2000)
   }
 
   async function handleCopyWebhookUrl(url: string) {
@@ -436,6 +637,40 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
               </div>
             </div>
           )}
+
+          {(() => {
+            const utmSnippet = buildUtmPassthroughSnippet(
+              lpDomains.map(d => d.domain.trim()).filter(Boolean),
+              checkoutDomains.map(d => d.domain.trim()).filter(Boolean)
+            )
+            return (
+              <div className="rounded-xl p-3 ring-1 ring-white/10" style={inputStyle}>
+                <p className={labelClass}>Script pra repassar fbclid/UTM pro checkout</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 truncate text-xs text-cyan-300">
+                    {'<script> ... repassa fbclid/utm_* pra pay.hotmart.com ... </script>'}
+                  </code>
+                  <button
+                    onClick={() => handleCopyUtmScript(utmSnippet)}
+                    className="shrink-0 rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+                    title={copiedUtmScript ? 'Copiado!' : 'Copiar'}
+                  >
+                    {copiedUtmScript ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                  </button>
+                </div>
+                <div className="mt-2 flex gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-2 text-[11px] text-amber-200">
+                  <span>⚠️</span>
+                  <p>
+                    Se algum botão do seu funil é um link fixo direto pro checkout (comum em pressel/cloaker),
+                    o clique perde o fbclid/UTM do anúncio e a venda não conta pro Meta. Cole este script em
+                    <strong> todas as páginas do funil</strong> — inclusive a pressel, mesmo sem botão de checkout
+                    nela — pra ele capturar o rastreio logo na entrada e ir repassando de página em página até o
+                    botão final.
+                  </p>
+                </div>
+              </div>
+            )
+          })()}
         </section>
 
         {/* Diagnóstico — bloco solto, mesma posição da ferramenta de referência */}
