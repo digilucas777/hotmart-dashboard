@@ -57,13 +57,6 @@ const GRID_COLUMNS = 12
 const LAYOUT_STORAGE_PREFIX = 'dashboard-layout:'
 const THEME_STORAGE_KEY = 'dashboard-theme'
 
-// Colunas explícitas evitam buscar campos extras do banco (created_at, updated_at, etc.)
-const VENDA_COLUMNS = 'id,hotmart_id,hotmart_produto_id,produto,oferta_codigo,oferta_nome,oferta_descricao,oferta_preco,oferta_moeda,plano_id,plano_nome,comprador_nome,comprador_email,valor,valor_recebido,valor_bruto,taxa_hotmart,comissao_produtor,comissao_coprodutor,comissao_afiliado,valor_operacional_final,moeda,status,data_venda,forma_pagamento,pais,origem,afiliado_nome'
-
-// combinedVendas só alimenta o CombinedChartWidget (computa combined_by_day a partir de
-// data_venda/status/moeda/valor_operacional_final) e os filtros de origem/afiliado — não
-// precisa dos campos de comprador/oferta completos que VENDA_COLUMNS carrega.
-const COMBINED_COLUMNS = 'id,hotmart_produto_id,oferta_codigo,status,moeda,valor_operacional_final,data_venda,origem,afiliado_nome'
 
 // Three content-aware snap heights for metric cards:
 // 7 rows = icon + title + value
@@ -622,35 +615,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       })
   }, [projectId])
 
-
-  const filterRowsByOfferSelection = useCallback((
-    rows: Venda[],
-    produtos: { id: string; hotmart_id: string }[],
-    productLinks: ProjetoProdutoLink[],
-    offerLinks: ProjetoProdutoOfertaLink[],
-  ) => {
-    const productIdByHotmartId = new Map(produtos.map(p => [p.hotmart_id, p.id]))
-    const allOfferProducts = new Set(
-      productLinks
-        .filter(link => link.todas_ofertas !== false)
-        .map(link => link.produto_id),
-    )
-    const allowedOffersByProduct = offerLinks.reduce((acc, link) => {
-      if (!acc[link.produto_id]) acc[link.produto_id] = new Set<string>()
-      acc[link.produto_id]!.add(link.oferta_codigo)
-      return acc
-    }, {} as Record<string, Set<string>>)
-
-    return rows.filter(venda => {
-      const productId = venda.hotmart_produto_id ? productIdByHotmartId.get(venda.hotmart_produto_id) : undefined
-      if (!productId) return false
-      if (allOfferProducts.has(productId)) return true
-      const allowedOffers = allowedOffersByProduct[productId]
-      if (!allowedOffers || allowedOffers.size === 0) return false
-      return !!venda.oferta_codigo && allowedOffers.has(venda.oferta_codigo)
-    })
-  }, [])
-
   const fetchVendas = useCallback(async () => {
     // Cancela qualquer busca anterior ainda em voo antes de iniciar esta — evita que uma
     // troca rápida de projeto/período empilhe buscas concorrentes no Postgres.
@@ -717,21 +681,16 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         config = { hotmartIds, products, productLinks, offerLinks }
         hotmartCacheRef.current = config
 
-        // recentVendas não depende do período — busca apenas na primeira carga e após refresh
+        // recentVendas não depende do período — busca apenas na primeira carga e após refresh.
+        // get_vendas_detalhadas já aplica a mesma regra de "produto/oferta permitido" que
+        // filterRowsByOfferSelection fazia manualmente, e também reconhece vendas com
+        // projeto_atribuido_id/projeto_atribuido_extra_id (ver migration 078) — por isso não
+        // filtra mais por hotmartIds crus aqui.
         const { data: recentData, error: recentError } = await supabase
-          .from('vendas')
-          .select(VENDA_COLUMNS)
-          .in('hotmart_produto_id', hotmartIds)
-          .eq('status', 'approved')
-          .order('data_venda', { ascending: false })
-          .limit(80)
+          .rpc('get_vendas_detalhadas', { p_projeto_id: projectId, p_status: 'approved', p_limit: 80 })
           .abortSignal(controller.signal)
         if (recentError) throw recentError
-        setRecentVendas(
-          filterRowsByOfferSelection(
-            (recentData ?? []) as Venda[], products, productLinks, offerLinks,
-          ).slice(0, 8),
-        )
+        setRecentVendas(((recentData ?? []) as Venda[]).slice(0, 8))
       }
 
       // Fase rápida: só o resumo agregado (get_vendas_summary, no máx. ~14 linhas) — é o que
@@ -777,7 +736,6 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     // isso o botão "Atualizar" ficava preso no overlay de tela cheia até essa busca pesada
     // terminar). Por isso é disparada com `void` em vez de `await`ada aqui.
     if (!config) return
-    const cfg = config
 
     // Busca paginada: PostgREST limita a 1000 rows/req independente do .limit() do cliente.
     //
@@ -790,27 +748,28 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     // (mais de uma venda no mesmo segundo é comum) — só pelo timestamp perderia vendas
     // bem na borda entre duas páginas. Compartilhada pelas duas buscas abaixo (Transações
     // e o intervalo curto hoje+ontem do gráfico combinado).
-    const fetchAllForPeriod = async (fromISO: string, toISO: string, columns: string): Promise<Venda[]> => {
+    //
+    // Usa get_vendas_detalhadas (RPC) em vez de `.from('vendas').in('hotmart_produto_id', ...)`
+    // direto: a busca crua só sabia filtrar por produto natural do projeto, então uma venda
+    // reatribuída manualmente (projeto_atribuido_id/projeto_atribuido_extra_id — ver migration
+    // 078) nunca aparecia aqui mesmo já estando correta nos cards de resumo. A RPC aplica a
+    // mesma regra de "produto/oferta permitido" (antes feita client-side em
+    // filterRowsByOfferSelection) e também reconhece os dois campos de atribuição.
+    const fetchAllForPeriod = async (fromISO: string, toISO: string): Promise<Venda[]> => {
       const PAGE_SIZE = 1000
       const all: Venda[] = []
       let cursor: { data: string; id: string } | null = null
       while (true) {
-        let query = supabase
-          .from('vendas')
-          .select(columns)
-          .in('hotmart_produto_id', cfg.hotmartIds)
-          .gte('data_venda', fromISO)
-          .lt('data_venda', toISO)
-        if (cursor) {
-          query = query
-            .lte('data_venda', cursor.data)
-            .or(`data_venda.lt.${cursor.data},and(data_venda.eq.${cursor.data},id.lt.${cursor.id})`)
-        }
         const runPage = () =>
-          query
-            .order('data_venda', { ascending: false })
-            .order('id', { ascending: false })
-            .limit(PAGE_SIZE)
+          supabase
+            .rpc('get_vendas_detalhadas', {
+              p_projeto_id: projectId,
+              p_from: fromISO,
+              p_to: toISO,
+              p_cursor_data: cursor?.data ?? null,
+              p_cursor_id: cursor?.id ?? null,
+              p_limit: PAGE_SIZE,
+            })
             .abortSignal(controller.signal)
 
         // Uma página isolada pode esbarrar num pico passageiro de carga no banco
@@ -842,8 +801,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     void (async () => {
       setVendasLoading(true)
       try {
-        const currentData = await fetchAllForPeriod(from.toISOString(), to.toISOString(), VENDA_COLUMNS)
-        setVendas(filterRowsByOfferSelection(currentData, cfg.products, cfg.productLinks, cfg.offerLinks))
+        const currentData = await fetchAllForPeriod(from.toISOString(), to.toISOString())
+        setVendas(currentData)
       } catch (err) {
         if (isAbortError(err)) return
         console.error('[fetchVendas] falha ao carregar vendas cruas (tabela/gráficos):', err)
@@ -867,18 +826,18 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
 
         const [hourlyRaw, dailyRowsResult] = await Promise.all([
-          fetchAllForPeriod(yesterdayStart.toISOString(), tomorrowStart.toISOString(), COMBINED_COLUMNS),
+          fetchAllForPeriod(yesterdayStart.toISOString(), tomorrowStart.toISOString()),
           fetchVendasPorDia(projectId, lastMonthStart, tomorrowStart, controller.signal),
         ])
         if (fetchAbortRef.current !== controller) return
-        setCombinedVendas(filterRowsByOfferSelection(hourlyRaw, cfg.products, cfg.productLinks, cfg.offerLinks))
+        setCombinedVendas(hourlyRaw)
         setDailyRows(dailyRowsResult)
       } catch (err) {
         if (isAbortError(err)) return
         console.error('[fetchVendas] falha ao carregar dados do gráfico combinado:', err)
       }
     })()
-  }, [projectId, period, customDateRange, filterRowsByOfferSelection])
+  }, [projectId, period, customDateRange])
 
   useEffect(() => {
     fetchVendas().catch(() => {
