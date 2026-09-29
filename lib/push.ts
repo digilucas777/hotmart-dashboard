@@ -368,17 +368,32 @@ export async function notifyCloudflareUsageWarning(params: {
   }
 }
 
-// Diferente das outras notificações desta lista: essa só é chamada quando a
-// Supabase JÁ voltou a responder (o cron de saúde só a dispara depois de uma
-// checagem que teve sucesso). O aviso de QUEDA em si não pode passar por
-// aqui: se a Supabase está fora do ar, não tem como ler quem tem inscrição
-// pra avisar. Esse lado (queda) é coberto pelo próprio e-mail automático que
-// o GitHub Actions manda pro dono do repositório quando o job de checagem
-// falha.
-//
 // Aviso de infraestrutura, não de negócio — só quem administra o sistema
-// (role='admin' em user_profiles) precisa ver "Sistema normalizado";
+// (role='admin' em user_profiles) precisa ver esses dois avisos;
 // gestores/usuários comuns não devem receber isso.
+//
+// Os dois só disparam a partir da 2ª checagem seguida com falha (ver
+// route.ts) — um soluço isolado que se resolve sozinho na checagem seguinte
+// não gera nem aviso de queda nem de recuperação. Isso existe justamente
+// porque o e-mail automático do GitHub Actions (que continua acontecendo em
+// TODA falha, sem esse filtro) já cobre a rede de segurança; o push é só
+// pra quando vale a pena interromper alguém de verdade.
+export async function notifySupabaseDown() {
+  try {
+    if (!ensureVapidConfigured()) return
+    const { data: admins } = await supabase.from('user_profiles').select('id').eq('role', 'admin')
+    const userIds = (admins ?? []).map((a: { id: string }) => a.id)
+    await Promise.all(userIds.map(userId => sendPushToUser(userId, {
+      title: '🚨 Sistema fora do ar',
+      body: 'A Supabase não está respondendo há pelo menos 2 checagens seguidas — os dados podem não estar carregando.',
+      url: '/dashboard',
+      tag: 'supabase-status',
+    })))
+  } catch (err) {
+    console.error('[PUSH] notifySupabaseDown falhou:', err)
+  }
+}
+
 export async function notifySupabaseRecovered() {
   try {
     if (!ensureVapidConfigured()) return

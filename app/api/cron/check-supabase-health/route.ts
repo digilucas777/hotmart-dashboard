@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { notifySupabaseRecovered } from '@/lib/push'
+import { notifySupabaseDown, notifySupabaseRecovered } from '@/lib/push'
 
 function getServiceClient() {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -16,16 +16,23 @@ function getServiceClient() {
 // isso do nosso lado (é infraestrutura de terceiro), mas dá pra detectar e
 // avisar rápido em vez de só descobrir quando um usuário reclama.
 //
-// Aviso de QUEDA: não tem como mandar push nesse momento — pra mandar,
-// precisaríamos ler push_subscriptions DA PRÓPRIA Supabase, que é exatamente
-// o que está fora do ar. Por isso a checagem simplesmente falha (status
-// diferente de 200) e deixa o workflow do GitHub Actions falhar também — o
-// GitHub já manda e-mail automático pro dono do repositório nesse caso
-// (mesmo mecanismo que já avisou de outras falhas de cron nesta sessão).
-// Aviso de RECUPERAÇÃO: aqui sim dá pra mandar push pra todo mundo, porque
-// se chegamos a essa resposta é porque a Supabase já está respondendo de
-// novo. O workflow passa "anterior=failure" só quando a checagem anterior
-// tinha falhado, pra não mandar esse push toda hora com tudo normal.
+// Pedido do usuário (2026-09-29): soluço isolado (1 falha, resolvida na
+// checagem seguinte) não merece aviso nenhum — só incomoda. O workflow do
+// GitHub Actions conta quantas checagens seguidas já falharam ANTES desta
+// (falhas_seguidas) e só a partir da 2ª falha seguida é que os pushes abaixo
+// disparam. O e-mail automático do GitHub (toda vez que o curl falha, sem
+// limiar nenhum) continua sendo a rede de segurança que nunca depende de a
+// Supabase estar de pé pra funcionar.
+//
+// Aviso de QUEDA: melhor esforço — tentamos mandar push mesmo assim porque
+// nem toda falha na tabela "vendas" significa a Supabase inteira fora do ar
+// (pode ser só uma trava pontual naquela consulta); se ler push_subscriptions
+// também falhar (Supabase realmente fora do ar), notifySupabaseDown() já
+// engole o erro sozinho e não derruba esta rota — o e-mail do GitHub cobre
+// esse caso de qualquer forma.
+// Aviso de RECUPERAÇÃO: mesma lógica — só dispara se a queda anterior já
+// tinha atingido o limiar de 2+ falhas seguidas, pra não mandar "sistema
+// normalizado" depois de um soluço que ninguém percebeu.
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET
   if (!cronSecret) return NextResponse.json({ error: 'CRON_SECRET não configurado' }, { status: 500 })
@@ -38,7 +45,7 @@ export async function GET(request: Request) {
   const admin = getServiceClient()
   if (!admin) return NextResponse.json({ error: 'service key not configured' }, { status: 500 })
 
-  const anteriorFalhou = new URL(request.url).searchParams.get('anterior') === 'failure'
+  const falhasSeguidas = Number(new URL(request.url).searchParams.get('falhas_seguidas')) || 0
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 10000)
@@ -50,6 +57,11 @@ export async function GET(request: Request) {
       .abortSignal(controller.signal)
     if (error) throw new Error(error.message)
   } catch (err) {
+    // Só avisa quando ESTA falha completa 2+ seguidas — uma falha isolada
+    // não dispara nada, só a próxima checagem decide se virou queda de verdade.
+    if (falhasSeguidas + 1 >= 2) {
+      await notifySupabaseDown()
+    }
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : String(err) },
       { status: 503 },
@@ -58,9 +70,10 @@ export async function GET(request: Request) {
     clearTimeout(timeoutId)
   }
 
-  if (anteriorFalhou) {
+  const recuperado = falhasSeguidas >= 2
+  if (recuperado) {
     await notifySupabaseRecovered()
   }
 
-  return NextResponse.json({ ok: true, recuperado: anteriorFalhou })
+  return NextResponse.json({ ok: true, recuperado })
 }

@@ -10,24 +10,35 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      # A run desta checagem mais recente JÁ CONCLUÍDA (nunca a atual, que
-      # ainda está rodando) diz se a Supabase já estava fora do ar na última
-      # vez — é assim que a rota sabe se, ao responder ok agora, é uma
-      # recuperação (e deve avisar todo mundo por push) ou só mais uma
-      # checagem de rotina com tudo normal (não avisa, senão manda push a
-      # cada 5 minutos pra sempre).
-      - name: Descobrir se a checagem anterior tinha falhado
+      # Conta quantas checagens JÁ CONCLUÍDAS seguidas (a mais recente pra trás)
+      # falharam antes desta rodar — é o que diferencia um soluço isolado (1
+      # falha, resolvido na próxima checagem, não merece aviso nenhum) de uma
+      # queda de verdade (2+ falhas seguidas). Só olha as últimas 5 pra não
+      # gastar chamada de API à toa.
+      - name: Contar falhas seguidas antes desta checagem
         id: anterior
         run: |
-          CONCLUSAO=$(curl -s "https://api.github.com/repos/${{ github.repository }}/actions/workflows/check-supabase-health.yml/runs?status=completed&per_page=1" \
-            | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const j=JSON.parse(d);console.log(j.workflow_runs?.[0]?.conclusion||'nenhuma')}catch{console.log('nenhuma')}})")
-          echo "conclusao=$CONCLUSAO" >> "$GITHUB_OUTPUT"
+          SEGUIDAS=$(curl -s "https://api.github.com/repos/${{ github.repository }}/actions/workflows/check-supabase-health.yml/runs?status=completed&per_page=5" \
+            | node -e "
+              let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
+                try {
+                  const runs = JSON.parse(d).workflow_runs || [];
+                  let count = 0;
+                  for (const r of runs) {
+                    if (r.conclusion === 'failure') count++;
+                    else break;
+                  }
+                  console.log(count);
+                } catch { console.log(0) }
+              })")
+          echo "seguidas=$SEGUIDAS" >> "$GITHUB_OUTPUT"
 
       # Se a Supabase estiver fora do ar, esse curl (com -f) falha e o
       # próprio GitHub manda e-mail automático pro dono do repositório —
-      # não precisa de nenhum código nosso pra esse aviso de queda.
-      - name: Checar Supabase (avisa recuperação se a checagem anterior tinha falhado)
+      # continua sendo a rede de segurança, independente do aviso por push
+      # (que só dispara a partir da 2ª falha seguida, ver route.ts).
+      - name: Checar Supabase (avisa queda/recuperação só se for 2+ falhas seguidas)
         run: |
           curl -sf --connect-timeout 10 --max-time 30 -X GET \
-            "https://hotmart-dashboard-woad.vercel.app/api/cron/check-supabase-health?anterior=${{ steps.anterior.outputs.conclusao }}" \
+            "https://hotmart-dashboard-woad.vercel.app/api/cron/check-supabase-health?falhas_seguidas=${{ steps.anterior.outputs.seguidas }}" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
