@@ -78,6 +78,7 @@ export function ComboMetricCards({
   const faturamento = computeWidgetDataFromSummary(summary, 'total_converted', exchangeRate)
   const faturamentoUSD = computeWidgetDataFromSummary(summary, 'total_usd', exchangeRate)
   const lucro = computeWidgetDataFromSummary(summary, 'lucro', exchangeRate, custoTotal, custoUSD)
+  const lucroUSD = computeWidgetDataFromSummary(summary, 'lucro_usd', exchangeRate, custoTotal, custoUSD)
   const roas = computeWidgetDataFromSummary(summary, 'roas', exchangeRate, custoTotal, custoUSD)
 
   // "lucro" cai pra faturamento bruto (sem custo cadastrado) quando custoTotal<=0
@@ -110,7 +111,17 @@ export function ComboMetricCards({
           subValue={custoUSD > 0 ? `${formatUSD(custoUSD)} USD` : custoTotal > 0 ? 'Custo em BRL' : 'Sem custo cadastrado'}
         />
         {lucro && lucro.kind === 'metric' && (
-          <HighlightCard theme={lucroTheme} title="Lucro" value={lucro.value} subValue={lucro.subValue} />
+          <HighlightCard
+            theme={lucroTheme}
+            title="Lucro"
+            value={lucro.value}
+            subValue={lucro.subValue}
+            // Só mostra o USD quando existe custo cadastrado (custoTotal > 0) —
+            // sem custo, "lucro" já cai pro faturamento bruto (ver comentário
+            // acima em lucroValor), então o USD seria só o faturamento USD de
+            // novo, duplicando o card de Faturamento sem dizer nada novo.
+            usdValue={custoTotal > 0 && lucroUSD?.kind === 'metric' ? lucroUSD.value : undefined}
+          />
         )}
         {roas && roas.kind === 'metric' && (
           <HighlightCard theme={HIGHLIGHT_THEME.roas} title="ROAS" value={roas.value} subValue={roas.subValue} />
@@ -125,6 +136,13 @@ export function ComboMetricCards({
 
       {/* Métricas de contexto — sem destaque, grid neutro */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        {custoUSD > 0 && (
+          <div className="min-w-0 rounded-2xl border border-white/10 bg-[#0b0d14] p-4 sm:p-5">
+            <p className="truncate text-xs font-semibold uppercase tracking-wide text-slate-500">Gasto USD</p>
+            <p className="mt-2 break-words text-lg font-black text-white sm:text-2xl">{formatUSD(custoUSD)}</p>
+            <p className="mt-1 truncate text-xs text-slate-500">Parte do gasto total registrada em dólar</p>
+          </div>
+        )}
         {SALES_CARDS.map(({ source, title }) => {
           const data = computeWidgetDataFromSummary(summary, source, exchangeRate)
           if (!data || data.kind !== 'metric') return null

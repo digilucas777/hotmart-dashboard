@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Check, ChevronDown, LayoutGrid, Layers, Loader2, Pencil, RefreshCw, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { getPeriodRange, formatBRL, formatUSD } from '@/lib/utils'
+import { getPeriodRange, formatBRL, formatUSD, formatRelativeTime, getOfficialSaleAmount } from '@/lib/utils'
 import { fetchVendasSummaryMulti, fetchHotmartIdsForProjetos, computeWidgetDataFromSummary, type SummaryRow, type SummaryRowMulti } from '@/lib/vendas-aggregation'
 import type { DashboardCombo, Projeto, Venda, Period } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
@@ -247,6 +247,29 @@ export function ComboClient({ comboId }: { comboId: string }) {
   const comboCustoTotal = useMemo(() => perProjeto.reduce((sum, p) => sum + p.custoTotal, 0), [perProjeto])
   const comboCustoUSD = useMemo(() => perProjeto.reduce((sum, p) => sum + p.custoUSD, 0), [perProjeto])
 
+  // Painel "Ao vivo" — reaproveita o `vendas` já buscado pra Transações (já vem
+  // ordenado por data_venda desc), sem nenhuma consulta nova ao banco. Único
+  // efeito colateral: respeita o período selecionado (igual à tabela de
+  // Transações), diferente do dashboard individual que ignora o período aqui.
+  const approvedRecentVendas = useMemo(() => vendas.filter(v => v.status === 'approved').slice(0, 8), [vendas])
+  const latestCombinedSale = approvedRecentVendas[0]
+  function countryDisplay(country?: string | null) {
+    const code = (country || '').trim().toUpperCase()
+    const labels: Record<string, string> = {
+      BR: '🇧🇷 Brasil', US: '🇺🇸 US', USA: '🇺🇸 US', GB: '🇬🇧 UK', UK: '🇬🇧 UK',
+      PT: '🇵🇹 Portugal', ES: '🇪🇸 Espanha', FR: '🇫🇷 França', DE: '🇩🇪 Alemanha',
+      IT: '🇮🇹 Itália', CA: '🇨🇦 Canadá', AU: '🇦🇺 Austrália', MX: '🇲🇽 México',
+      AR: '🇦🇷 Argentina', CL: '🇨🇱 Chile', CO: '🇨🇴 Colômbia',
+    }
+    return labels[code] ?? (code || 'Unknown')
+  }
+  function formatSaleAmount(venda: Venda) {
+    const value = getOfficialSaleAmount(venda)
+    return venda.moeda === 'USD'
+      ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)
+      : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+  }
+
   async function handleRefresh() {
     setIsRefreshing(true)
     summaryCacheRef.current.clear()  // "Atualizar" sempre busca dado novo, nunca usa cache
@@ -442,6 +465,43 @@ export function ComboClient({ comboId }: { comboId: string }) {
             <ComboMetricCards summary={summary} exchangeRate={exchangeRate} custoTotal={comboCustoTotal} custoUSD={comboCustoUSD} />
           </div>
         )}
+
+        {/* "Ao vivo" — mesmo padrão visual do dashboard individual
+            (DashboardClient.tsx), fixo no canto e só a partir de xl: pra não
+            disputar espaço com o conteúdo principal em telas menores. */}
+        <aside className="dashboard-panel fixed right-4 top-28 z-20 hidden max-h-[calc(100vh-8rem)] w-56 overflow-y-auto rounded-xl p-2 xl:block">
+          <div className="mb-2 flex items-center gap-2 rounded-lg border border-emerald-400/12 bg-emerald-400/[0.04] px-2 py-1.5">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-45" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-300" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300">Ao vivo</p>
+              <p className="truncate text-[11px] text-[var(--dash-faint)]">Última venda {formatRelativeTime(latestCombinedSale?.data_venda)}</p>
+            </div>
+          </div>
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--dash-muted)]">Últimas vendas</h3>
+            <span className="h-2 w-2 rounded-full bg-emerald-300" />
+          </div>
+          <div className={`relative max-h-[360px] space-y-1 overflow-y-auto pr-1 transition-opacity duration-300 ${loadingVendas ? 'pointer-events-none opacity-35' : ''}`}>
+            {approvedRecentVendas.length === 0 ? (
+              <p className="py-6 text-center text-xs text-[var(--dash-faint)]">Aguardando vendas</p>
+            ) : approvedRecentVendas.map(venda => (
+              <div key={venda.id} className="group rounded-lg border border-white/[0.06] bg-white/[0.025] px-2 py-1.5 transition-colors hover:border-emerald-300/18 hover:bg-white/[0.045]">
+                <div className="mb-0.5 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5">
+                  <span className="truncate text-[11px] font-medium text-[var(--dash-text)]">
+                    {countryDisplay(venda.pais)} • {formatSaleAmount(venda)}
+                  </span>
+                  <span className="shrink-0 rounded-full bg-emerald-400/[0.08] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-emerald-300">Live</span>
+                </div>
+                <p className="truncate text-[11px] font-normal leading-snug text-[var(--dash-muted)]">{venda.produto ?? 'Produto'}</p>
+                <p className="mt-1 text-[10px] text-[var(--dash-faint)]">{formatRelativeTime(venda.data_venda)}</p>
+              </div>
+            ))}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-[var(--dash-panel)] to-transparent" />
+          </div>
+        </aside>
 
         <div className="mt-10">
           <h2 className="mb-4 text-lg font-black">Por projeto</h2>
