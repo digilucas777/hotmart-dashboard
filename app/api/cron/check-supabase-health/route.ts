@@ -19,11 +19,22 @@ function getServiceClient() {
 // Pedido do usuário (2026-09-29): soluço isolado (1 falha, resolvida na
 // checagem seguinte) não merece aviso nenhum — só incomoda. O workflow do
 // GitHub Actions conta quantas checagens seguidas já falharam ANTES desta
-// (falhas_seguidas) e só a partir da 2ª falha seguida é que os pushes abaixo
-// disparam. O e-mail automático do GitHub (toda vez que o curl falha, sem
-// limiar nenhum) continua sendo a rede de segurança que nunca depende de a
-// Supabase estar de pé pra funcionar.
+// (falhas_seguidas) e só a partir do limiar abaixo é que os pushes disparam.
+// O e-mail automático do GitHub (toda vez que o curl falha, sem limiar
+// nenhum) continua sendo a rede de segurança que nunca depende de a Supabase
+// estar de pé pra funcionar.
 //
+// Limiar ajustado em 2026-10-02 (pedido do usuário): uma queda de 5-10min
+// (limiar antigo, 2 falhas) normalmente nem chega a afetar vendas de verdade
+// (o webhook da Hotmart grava com service role, que não passa pela RLS que
+// costuma ser o gargalo, e confirmadamente continuou gravando em <2min de
+// atraso mesmo durante os incidentes de 27-28/09 e 02/10). Só vale interromper
+// alguém quando já durou o suficiente pra arriscar perder uma venda de
+// verdade — por isso o limiar subiu pra 6 checagens seguidas (cron a cada
+// 5min = ~25-30min de queda contínua). Se mudar o intervalo do cron em
+// check-supabase-health.yml, reconsiderar este número junto.
+const FALHAS_PARA_ALERTAR = 6
+
 // Aviso de QUEDA: melhor esforço — tentamos mandar push mesmo assim porque
 // nem toda falha na tabela "vendas" significa a Supabase inteira fora do ar
 // (pode ser só uma trava pontual naquela consulta); se ler push_subscriptions
@@ -31,7 +42,7 @@ function getServiceClient() {
 // engole o erro sozinho e não derruba esta rota — o e-mail do GitHub cobre
 // esse caso de qualquer forma.
 // Aviso de RECUPERAÇÃO: mesma lógica — só dispara se a queda anterior já
-// tinha atingido o limiar de 2+ falhas seguidas, pra não mandar "sistema
+// tinha atingido o limiar de FALHAS_PARA_ALERTAR, pra não mandar "sistema
 // normalizado" depois de um soluço que ninguém percebeu.
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET
@@ -57,9 +68,9 @@ export async function GET(request: Request) {
       .abortSignal(controller.signal)
     if (error) throw new Error(error.message)
   } catch (err) {
-    // Só avisa quando ESTA falha completa 2+ seguidas — uma falha isolada
-    // não dispara nada, só a próxima checagem decide se virou queda de verdade.
-    if (falhasSeguidas + 1 >= 2) {
+    // Só avisa quando ESTA falha completa o limiar — uma queda curta não
+    // dispara nada, só a próxima checagem decide se já durou o suficiente.
+    if (falhasSeguidas + 1 >= FALHAS_PARA_ALERTAR) {
       await notifySupabaseDown()
     }
     return NextResponse.json(
@@ -70,7 +81,7 @@ export async function GET(request: Request) {
     clearTimeout(timeoutId)
   }
 
-  const recuperado = falhasSeguidas >= 2
+  const recuperado = falhasSeguidas >= FALHAS_PARA_ALERTAR
   if (recuperado) {
     await notifySupabaseRecovered()
   }

@@ -372,9 +372,10 @@ export async function notifyCloudflareUsageWarning(params: {
 // (role='admin' em user_profiles) precisa ver esses dois avisos;
 // gestores/usuários comuns não devem receber isso.
 //
-// Os dois só disparam a partir da 2ª checagem seguida com falha (ver
-// route.ts) — um soluço isolado que se resolve sozinho na checagem seguinte
-// não gera nem aviso de queda nem de recuperação. Isso existe justamente
+// Os dois só disparam a partir do limiar de checagens seguidas com falha
+// (FALHAS_PARA_ALERTAR em route.ts, hoje ~25-30min de queda contínua) — uma
+// queda curta que se resolve sozinha não gera nem aviso de queda nem de
+// recuperação. Isso existe justamente
 // porque o e-mail automático do GitHub Actions (que continua acontecendo em
 // TODA falha, sem esse filtro) já cobre a rede de segurança; o push é só
 // pra quando vale a pena interromper alguém de verdade.
@@ -385,7 +386,7 @@ export async function notifySupabaseDown() {
     const userIds = (admins ?? []).map((a: { id: string }) => a.id)
     await Promise.all(userIds.map(userId => sendPushToUser(userId, {
       title: '🚨 Sistema fora do ar',
-      body: 'A Supabase não está respondendo há pelo menos 2 checagens seguidas — os dados podem não estar carregando.',
+      body: 'A Supabase não está respondendo há pelo menos 25-30min seguidos — os dados podem não estar carregando.',
       url: '/dashboard',
       tag: 'supabase-status',
     })))

@@ -11,14 +11,15 @@ jobs:
     timeout-minutes: 2
     steps:
       # Conta quantas checagens JÁ CONCLUÍDAS seguidas (a mais recente pra trás)
-      # falharam antes desta rodar — é o que diferencia um soluço isolado (1
-      # falha, resolvido na próxima checagem, não merece aviso nenhum) de uma
-      # queda de verdade (2+ falhas seguidas). Só olha as últimas 5 pra não
-      # gastar chamada de API à toa.
+      # falharam antes desta rodar — é o que diferencia uma queda curta (não
+      # merece aviso) de uma queda de verdade (6+ falhas seguidas = ~25-30min
+      # com o cron a cada 5min, ver FALHAS_PARA_ALERTAR em route.ts). Olha as
+      # últimas 10 pra ter folga acima do limiar sem gastar chamada de API à
+      # toa.
       - name: Contar falhas seguidas antes desta checagem
         id: anterior
         run: |
-          SEGUIDAS=$(curl -s "https://api.github.com/repos/${{ github.repository }}/actions/workflows/check-supabase-health.yml/runs?status=completed&per_page=5" \
+          SEGUIDAS=$(curl -s "https://api.github.com/repos/${{ github.repository }}/actions/workflows/check-supabase-health.yml/runs?status=completed&per_page=10" \
             | node -e "
               let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{
                 try {
