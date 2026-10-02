@@ -19,6 +19,12 @@ self.addEventListener('push', (event) => {
     badge: payload.badge || '/icon-192.png',
     data: { url: payload.url || '/dashboard' },
     tag: payload.tag,
+    // Vários avisos (queda/recuperação de Supabase, site, cloaker) reaproveitam
+    // a mesma tag entre o estado de "problema" e o de "resolvido" — sem isso, o
+    // navegador troca a notificação na bandeja em silêncio (sem som/popup) em
+    // vez de alertar de novo, e quem já tinha visto a primeira nunca percebe
+    // que a segunda chegou.
+    renotify: true,
   }
 
   event.waitUntil(self.registration.showNotification(title, options))
