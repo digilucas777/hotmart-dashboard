@@ -63,6 +63,21 @@ export function Sidebar() {
     }
   }, [])
 
+  // Saindo da seção de dashboards (Vendas, Configurações, etc.) a árvore de pastas
+  // fecha sozinha — sem isso ela ficava persistida aberta pra sempre (localStorage),
+  // deixando espaço vazio na barra lateral em telas que não têm nada a ver com pastas.
+  useEffect(() => {
+    if (isNavActive('/dashboard', pathname)) return
+    setDashboardsTreeOpen(false)
+    setOpenFolderIds(new Set())
+    try {
+      localStorage.setItem('sidebar_dashboards_tree_open', 'false')
+      localStorage.removeItem('sidebar_open_folder_ids')
+    } catch {
+      // localStorage indisponível — sem problema, já fechou em memória
+    }
+  }, [pathname])
+
   function toggleDashboardsTree() {
     setDashboardsTreeOpen(prev => {
       const next = !prev
