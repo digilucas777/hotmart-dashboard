@@ -98,17 +98,50 @@ export function ComboClient({ comboId }: { comboId: string }) {
     void checkAccessAndLoad()
   }, [comboId, router])
 
+  // "Período máximo": venda mais antiga entre TODOS os projetos do combinado.
+  // Essa tela é só pra admin (checagem de role acima), então não tem o cuidado
+  // de dados_visiveis_a_partir do dashboard individual — é sempre a data real
+  // da primeira venda.
+  const [maxPeriodFrom, setMaxPeriodFrom] = useState<Date | null>(null)
+
   const customDateRange = useMemo(() => {
-    if (period !== 'custom') return undefined
-    const parseLocal = (s: string) => {
-      const [y, m, d] = s.split('-').map(Number)
-      return new Date(y!, m! - 1, d!)
+    if (period === 'custom') {
+      const parseLocal = (s: string) => {
+        const [y, m, d] = s.split('-').map(Number)
+        return new Date(y!, m! - 1, d!)
+      }
+      return {
+        from: parseLocal(customFrom),
+        to: new Date(parseLocal(customTo).getTime() + 86_400_000),
+      }
     }
-    return {
-      from: parseLocal(customFrom),
-      to: new Date(parseLocal(customTo).getTime() + 86_400_000),
+    if (period === 'maxPeriod' && maxPeriodFrom) {
+      const todayStart = new Date(new Date().setHours(0, 0, 0, 0))
+      return { from: maxPeriodFrom, to: new Date(todayStart.getTime() + 86_400_000) }
     }
-  }, [period, customFrom, customTo])
+    return undefined
+  }, [period, customFrom, customTo, maxPeriodFrom])
+  useEffect(() => {
+    setMaxPeriodFrom(null)
+    if (!combo || combo.projeto_ids.length === 0) return
+    let cancelled = false
+    async function loadMaxPeriodFrom() {
+      const hotmartIds = await fetchHotmartIdsForProjetos(combo!.projeto_ids)
+      if (hotmartIds.length === 0) return
+      const { data, error } = await supabase
+        .from('vendas')
+        .select('data_venda')
+        .in('hotmart_produto_id', hotmartIds)
+        .order('data_venda', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      if (cancelled || error || !data?.data_venda) return
+      setMaxPeriodFrom(new Date(data.data_venda))
+    }
+    void loadMaxPeriodFrom()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [combo?.id, combo?.projeto_ids.join(',')])
 
   useEffect(() => {
     const toLocalDate = (d: Date) =>
@@ -443,6 +476,7 @@ export function ComboClient({ comboId }: { comboId: string }) {
           customTo={customTo}
           updatedAt={lastUpdatedAt}
           onCustomChange={(from, to) => { setCustomFrom(from); setCustomTo(to) }}
+          maxPeriodFrom={maxPeriodFrom}
         />
 
         {summaryError ? (

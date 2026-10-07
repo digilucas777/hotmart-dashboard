@@ -43,7 +43,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { DashboardGrid } from '@/components/dashboard/DashboardGrid'
 import { supabase } from '@/lib/supabase'
 import { formatRelativeTime, getPeriodRange, getPreviousPeriodRange, getOfficialSaleAmount, parseOrigem } from '@/lib/utils'
-import { fetchVendasSummary, fetchDistinctOrigens, fetchDistinctAfiliados, fetchVendasPorDia, type SummaryRow } from '@/lib/vendas-aggregation'
+import { fetchVendasSummary, fetchDistinctOrigens, fetchDistinctAfiliados, fetchVendasPorDia, fetchHotmartIdsForProjetos, type SummaryRow } from '@/lib/vendas-aggregation'
 import type { Venda, Projeto, Produto, Period, WidgetConfig, WidgetType, WidgetDataSource, DashboardCombo, DiaRow } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
 import { AddWidgetModal } from '@/components/dashboard/AddWidgetModal'
@@ -534,16 +534,49 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const afiliadosDropdownRef = useRef<HTMLDivElement>(null)
   const dashboardSwitcherRef = useRef<HTMLDivElement>(null)
 
+  // "Período máximo": busca a venda mais antiga que o usuário atual tem permissão
+  // de ver pra esse projeto. Vai pela tabela `vendas` normal (RLS liga sozinho) —
+  // pra admin isso é a venda mais antiga de verdade; pra gestor com acesso
+  // restrito, o RLS (migration 083) já filtra por dados_visiveis_a_partir antes
+  // de chegar aqui, então o MIN() que volta já é a data certa pra mostrar, sem
+  // precisar repetir essa regra aqui no front.
+  const [maxPeriodFrom, setMaxPeriodFrom] = useState<Date | null>(null)
+
   const customDateRange = useMemo((): { from: Date; to: Date } | undefined => {
-    if (period !== 'custom') return undefined
-    const parseLocal = (s: string) => {
-      const [y, m, d] = s.split('-').map(Number)
-      return new Date(y!, m! - 1, d!)
+    if (period === 'custom') {
+      const parseLocal = (s: string) => {
+        const [y, m, d] = s.split('-').map(Number)
+        return new Date(y!, m! - 1, d!)
+      }
+      const from = parseLocal(customFrom)
+      const to = new Date(parseLocal(customTo).getTime() + 86_400_000)
+      return { from, to }
     }
-    const from = parseLocal(customFrom)
-    const to = new Date(parseLocal(customTo).getTime() + 86_400_000)
-    return { from, to }
-  }, [period, customFrom, customTo])
+    if (period === 'maxPeriod' && maxPeriodFrom) {
+      const todayStart = new Date(new Date().setHours(0, 0, 0, 0))
+      return { from: maxPeriodFrom, to: new Date(todayStart.getTime() + 86_400_000) }
+    }
+    return undefined
+  }, [period, customFrom, customTo, maxPeriodFrom])
+  useEffect(() => {
+    setMaxPeriodFrom(null)
+    let cancelled = false
+    async function loadMaxPeriodFrom() {
+      const hotmartIds = await fetchHotmartIdsForProjetos([projectId])
+      if (hotmartIds.length === 0) return
+      const { data, error } = await supabase
+        .from('vendas')
+        .select('data_venda')
+        .in('hotmart_produto_id', hotmartIds)
+        .order('data_venda', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      if (cancelled || error || !data?.data_venda) return
+      setMaxPeriodFrom(new Date(data.data_venda))
+    }
+    void loadMaxPeriodFrom()
+    return () => { cancelled = true }
+  }, [projectId])
 
   useEffect(() => {
     const toLocalDate = (d: Date) =>
@@ -1951,6 +1984,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               customTo={customTo}
               updatedAt={lastUpdatedAt}
               onCustomChange={(from, to) => { setCustomFrom(from); setCustomTo(to) }}
+              maxPeriodFrom={maxPeriodFrom}
             />
           </div>
           <div className="flex flex-row flex-wrap gap-2 lg:contents">

@@ -1,7 +1,12 @@
 import type { Period, Venda, WidgetDataSource, Status, DiaRow } from './types'
 
 export function getPeriodRange(period: Period, customRange?: { from: Date; to: Date }): { from: Date; to: Date } {
-  if (period === 'custom') {
+  // 'maxPeriod' usa o mesmo mecanismo de range externo que 'custom' — quem chama
+  // (DashboardClient/ComboClient) calcula a data de início real (venda mais antiga
+  // que o usuário tem permissão de ver, via RLS) e monta o range igual a um
+  // período personalizado. Sem esse range ainda calculado, cai no mesmo
+  // fallback de "hoje" que 'custom' usa enquanto carrega.
+  if (period === 'custom' || period === 'maxPeriod') {
     if (customRange) return customRange
     const now = new Date()
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -58,6 +63,7 @@ export function formatPeriodContext(period: Period, customRange?: { from: Date; 
     thisMonth: `Este mês • ${monthName.format(from)}`,
     lastMonth: `Último mês • ${monthName.format(from)}`,
     custom: `Personalizado • ${formatShortDate(from)} -> ${formatShortDate(inclusiveTo)}`,
+    maxPeriod: `Período máximo • ${formatShortDate(from)}/${from.getFullYear()} -> ${formatShortDate(inclusiveTo)}`,
   }
   return labels[period]
 }
@@ -675,6 +681,7 @@ export function formatPeriodComparisonLabel(period: Period): string {
     thisMonth: 'mês anterior',
     lastMonth: 'mês anterior',
     custom: 'período anterior',
+    maxPeriod: 'período anterior',
   }
   return labels[period]
 }

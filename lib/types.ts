@@ -65,7 +65,7 @@ export type Produto = {
   nome: string
 }
 
-export type Period = 'today' | 'yesterday' | 'thisWeek' | 'lastWeek' | 'thisMonth' | 'lastMonth' | 'custom'
+export type Period = 'today' | 'yesterday' | 'thisWeek' | 'lastWeek' | 'thisMonth' | 'lastMonth' | 'custom' | 'maxPeriod'
 
 export type WidgetType =
   | 'metric'

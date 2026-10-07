@@ -23,6 +23,11 @@ interface PeriodFilterProps {
   customTo?: string
   onCustomChange?: (from: string, to: string) => void
   updatedAt?: Date | null
+  // Data da venda mais antiga que o usuário atual pode ver (já respeitando RLS/
+  // dados_visiveis_a_partir) — quem calcula é o componente pai, que tem acesso
+  // aos hotmart_produto_id do projeto/combinado. null enquanto ainda não
+  // carregou (botão "Período máximo" some até ter um valor).
+  maxPeriodFrom?: Date | null
 }
 
 
@@ -55,6 +60,7 @@ export function PeriodFilter({
   customTo = '',
   onCustomChange,
   updatedAt,
+  maxPeriodFrom = null,
 }: PeriodFilterProps) {
   const [showCustom, setShowCustom] = useState(false)
   const [draftFrom, setDraftFrom] = useState(customFrom)
@@ -69,12 +75,18 @@ export function PeriodFilter({
   }, [])
 
   const customRange = useMemo(() => {
-    if (value !== 'custom' || !customFrom || !customTo) return undefined
-    return { from: parseLocal(customFrom), to: new Date(parseLocal(customTo).getTime() + 86_400_000) }
-  }, [value, customFrom, customTo])
+    if (value === 'custom' && customFrom && customTo) {
+      return { from: parseLocal(customFrom), to: new Date(parseLocal(customTo).getTime() + 86_400_000) }
+    }
+    if (value === 'maxPeriod' && maxPeriodFrom) {
+      const todayStart = new Date(new Date().setHours(0, 0, 0, 0))
+      return { from: maxPeriodFrom, to: new Date(todayStart.getTime() + 86_400_000) }
+    }
+    return undefined
+  }, [value, customFrom, customTo, maxPeriodFrom])
 
   const rangeLabel = useMemo(() => {
-    const range = value === 'custom' ? customRange : undefined
+    const range = value === 'custom' || value === 'maxPeriod' ? customRange : undefined
     const [prefix, rest] = formatPeriodContext(value, range).split('•').map(part => part.trim())
     return { prefix, rest }
   }, [customRange, value])
@@ -144,6 +156,18 @@ export function PeriodFilter({
             </button>
           )
         })}
+        {maxPeriodFrom && (
+          <button
+            onClick={() => onChange('maxPeriod')}
+            className={`shrink-0 rounded-md px-2.5 py-1.5 text-sm font-semibold transition-colors ${
+              value === 'maxPeriod'
+                ? 'bg-gradient-to-r from-cyan-500 to-violet-500 text-white shadow-lg shadow-cyan-500/20'
+                : 'border border-[var(--dash-border)] bg-white/5 text-[var(--dash-muted)] hover:border-[var(--dash-border-strong)] hover:bg-white/10 hover:text-[var(--dash-text)]'
+            }`}
+          >
+            Período máximo
+          </button>
+        )}
         <button
           onClick={openCustom}
           className={`shrink-0 rounded-md px-2.5 py-1.5 text-sm font-semibold transition-colors ${
