@@ -674,13 +674,26 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       return acc
     }, {} as Record<string, Set<string>>)
 
+    // Produtos com split por origem (ex: migrations 084/086) gravam a oferta real + sufixo
+    // (__app/__rec) só no resumo pré-calculado — vendas.oferta_codigo nunca tem o sufixo.
+    // Pra bater com esses registros aqui na tabela/gráfico de vendas cruas, reconstrói o
+    // mesmo sufixo a partir de vendas.origem antes de comparar.
+    const virtualSuffix = (origem: string | null | undefined) => {
+      const o = (origem ?? '').toLowerCase()
+      if (o.startsWith('rec') || o.startsWith('upsell') || o.startsWith('renov') || o.includes('recusada')) return '__rec'
+      if (o === 'app' || o.startsWith('bannerapp') || o === 'hotmart_site_app') return '__app'
+      return ''
+    }
+
     return rows.filter(venda => {
       const productId = venda.hotmart_produto_id ? productIdByHotmartId.get(venda.hotmart_produto_id) : undefined
       if (!productId) return false
       if (allOfferProducts.has(productId)) return true
       const allowedOffers = allowedOffersByProduct[productId]
       if (!allowedOffers || allowedOffers.size === 0) return false
-      return !!venda.oferta_codigo && allowedOffers.has(venda.oferta_codigo)
+      const realCode = venda.oferta_codigo ?? ''
+      if (allowedOffers.has(realCode)) return true
+      return allowedOffers.has(realCode + virtualSuffix(venda.origem))
     })
   }, [])
 
