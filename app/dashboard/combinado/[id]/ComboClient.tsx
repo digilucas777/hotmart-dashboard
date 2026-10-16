@@ -11,6 +11,12 @@ import type { DashboardCombo, Projeto, Venda, Period } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
 import { SalesTable } from '@/components/dashboard/SalesTable'
 import { ComboMetricCards } from '@/components/saas/ComboMetricCards'
+import { AssinaturaComissaoCard } from '@/components/saas/AssinaturaComissaoCard'
+
+// Combinado "Assinaturas Recorrentes (33%)" (criado 16/10/2026) — único com o card de
+// comissão especial (ver AssinaturaComissaoCard.tsx). Checagem por id em vez de nome
+// pra não quebrar se o Lucas renomear o combinado depois.
+const COMBO_ASSINATURA_ID = 'be30010c-ff69-4d51-addd-d079f73f3189'
 import { CombineDashboardsModal } from '@/components/saas/CombineDashboardsModal'
 import { Spinner } from '@/components/ui/Spinner'
 
@@ -495,8 +501,11 @@ export function ComboClient({ comboId }: { comboId: string }) {
             </div>
           </div>
         ) : (
-          <div className="mt-6">
+          <div className="mt-6 space-y-5">
             <ComboMetricCards summary={summary} exchangeRate={exchangeRate} custoTotal={comboCustoTotal} custoUSD={comboCustoUSD} />
+            {comboId === COMBO_ASSINATURA_ID && (
+              <AssinaturaComissaoCard summary={summary} exchangeRate={exchangeRate} />
+            )}
           </div>
         )}
 
