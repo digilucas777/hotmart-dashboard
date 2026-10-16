@@ -502,9 +502,13 @@ export function ComboClient({ comboId }: { comboId: string }) {
           </div>
         ) : (
           <div className="mt-6 space-y-5">
-            <ComboMetricCards summary={summary} exchangeRate={exchangeRate} custoTotal={comboCustoTotal} custoUSD={comboCustoUSD} />
-            {comboId === COMBO_ASSINATURA_ID && (
+            {comboId === COMBO_ASSINATURA_ID ? (
+              // Combo de assinaturas: só o card de comissão dedicado — os cards genéricos
+              // (Gasto/Lucro/ROAS/Comissão por lucro) não fazem sentido aqui, já que não
+              // há gasto de anúncio nessas recorrências (ficavam todos em "—").
               <AssinaturaComissaoCard summary={summary} exchangeRate={exchangeRate} />
+            ) : (
+              <ComboMetricCards summary={summary} exchangeRate={exchangeRate} custoTotal={comboCustoTotal} custoUSD={comboCustoUSD} />
             )}
           </div>
         )}
