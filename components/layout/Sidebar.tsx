@@ -82,6 +82,13 @@ export function Sidebar() {
     setDashboardsTreeOpen(prev => {
       const next = !prev
       try { localStorage.setItem('sidebar_dashboards_tree_open', String(next)) } catch { /* ignora */ }
+      // Fechando o menu "Dashboards": as pastas abertas dentro dele também fecham —
+      // sem isso, reabrir o menu mostrava as mesmas pastas já expandidas de antes
+      // (só limpava ao trocar de página, nunca ao fechar manualmente pela setinha).
+      if (!next) {
+        setOpenFolderIds(new Set())
+        try { localStorage.removeItem('sidebar_open_folder_ids') } catch { /* ignora */ }
+      }
       return next
     })
   }
