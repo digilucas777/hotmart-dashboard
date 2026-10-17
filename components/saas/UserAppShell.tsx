@@ -24,6 +24,16 @@ import {
   UserRound,
   X,
 } from 'lucide-react'
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import { SortableContext, useSortable, arrayMove, rectSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '@/lib/supabase'
 import type { Projeto, DashboardCombo } from '@/lib/types'
 import { CombineDashboardsModal } from './CombineDashboardsModal'
@@ -59,6 +69,101 @@ const META_TRAFFIC_TEMPLATE = [
   { type: 'pie',           data_source: 'by_country',            title: 'Por País',                    width: '1/3', height: 'large', col_start: 1,  row_start: 71, col_span: 4,  row_span: 18 },
   { type: 'line',          data_source: 'revenue_by_day',        title: 'Faturamento por Dia',         width: '2/3', height: 'large', col_start: 5,  row_start: 71, col_span: 8,  row_span: 18 },
 ] as const
+
+// Card de dashboard arrastável — extraído num componente próprio porque useSortable()
+// é um hook e cada card precisa da sua própria instância (não dá pra chamar hook
+// dentro de um .map() direto no componente pai). Corrige o reorder nativo
+// (draggable+onDrop) que só pegava o drop quando ele caía exatamente em cima de
+// outro card: no grid de várias colunas, arrastar pra cima costumava soltar numa
+// borda/gap entre cards sem nenhum onDrop ativo, e o item simplesmente não movia —
+// dnd-kit com rectSortingStrategy calcula a célula mais próxima, então funciona
+// em qualquer direção.
+function SortableDashboardCard({
+  dashboard,
+  index,
+  openEditDashboard,
+  duplicateDashboard,
+  duplicatingId,
+  setDeleteTarget,
+}: {
+  dashboard: Projeto
+  index: number
+  openEditDashboard: (dashboard: Projeto) => void
+  duplicateDashboard: (dashboard: Projeto) => void
+  duplicatingId: string | null
+  setDeleteTarget: (dashboard: Projeto) => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: dashboard.id })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
+      className="relative rounded-2xl border border-white/10 bg-[#0b0d14] p-5 transition-colors hover:border-cyan-300/30"
+    >
+      {/* Grip */}
+      <div
+        {...attributes}
+        {...listeners}
+        className="absolute left-2 top-2 cursor-grab touch-none p-1 text-white active:cursor-grabbing"
+        title="Arrastar para reordenar"
+      >
+        <GripVertical size={14} />
+      </div>
+
+      <div className="mb-4 mt-3 h-24 rounded-xl bg-[linear-gradient(135deg,rgba(0,212,255,0.2),rgba(167,139,250,0.14))] p-3 lg:h-28">
+        <div className="flex h-full items-end justify-between">
+          <div className="h-7 w-14 rounded-lg bg-white/10" />
+          <div className="flex gap-1">
+            <div className="h-10 w-2 rounded-full bg-cyan-300/70" />
+            <div className="h-7 w-2 rounded-full bg-violet-300/70" />
+            <div className="h-12 w-2 rounded-full bg-cyan-100/80" />
+          </div>
+        </div>
+      </div>
+
+      <p className="text-base font-bold">{dashboard.nome}</p>
+      <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+        {dashboard.descricao || (index === 0 ? 'Dashboard principal da operação' : 'Dashboard pronto para configurar')}
+      </p>
+
+      <div className="mt-4 space-y-2">
+        <Link
+          href={`/dashboard/${dashboard.id}`}
+          className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-400 to-violet-500 text-sm font-black text-white transition-transform hover:-translate-y-0.5"
+        >
+          Abrir
+          <ExternalLink size={13} />
+        </Link>
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            onClick={() => openEditDashboard(dashboard)}
+            title="Editar"
+            className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/10 text-xs font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white"
+          >
+            <Edit3 size={13} />
+            Editar
+          </button>
+          <button
+            onClick={() => duplicateDashboard(dashboard)}
+            disabled={duplicatingId === dashboard.id}
+            title="Duplicar"
+            className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/10 text-xs font-bold text-slate-300 transition-colors hover:border-violet-300/40 hover:text-white disabled:opacity-60"
+          >
+            {duplicatingId === dashboard.id ? <Loader2 size={13} className="animate-spin" /> : <Copy size={13} />}
+            Duplicar
+          </button>
+          <button
+            onClick={() => setDeleteTarget(dashboard)}
+            title="Excluir"
+            className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/10 text-xs font-bold text-slate-400 transition-colors hover:border-red-300/35 hover:bg-red-500/10 hover:text-red-200"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export function UserAppShell() {
   const router = useRouter()
@@ -110,7 +215,7 @@ export function UserAppShell() {
   const [dashboardStatus, setDashboardStatus] = useState('active')
   const [dashboardTemplate, setDashboardTemplate] = useState<'blank' | 'meta-traffic'>('blank')
   const [error, setError] = useState('')
-  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
   const [combos, setCombos] = useState<DashboardCombo[]>([])
   const [comboModalOpen, setComboModalOpen] = useState(false)
   const [editingCombo, setEditingCombo] = useState<DashboardCombo | null>(null)
@@ -132,6 +237,7 @@ export function UserAppShell() {
       const { data, error: projectsError } = await supabase
         .from('projetos')
         .select('*')
+        .is('deleted_at', null)
         .order('ordem', { ascending: true })
         .order('data_criacao', { ascending: false })
         .abortSignal(controller.signal)
@@ -247,6 +353,23 @@ export function UserAppShell() {
     setDashboardTemplate('blank')
     setDashboards(prev => [newProject, ...prev])
     router.push(`/dashboard/${newProject.id}`)
+  }
+
+  const handleDashboardsDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = dashboards.findIndex(d => d.id === active.id)
+    const newIndex = dashboards.findIndex(d => d.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+    const reordered = arrayMove(dashboards, oldIndex, newIndex)
+    setDashboards(reordered)
+    Promise.all(
+      reordered.map((d, idx) => supabase.from('projetos').update({ ordem: idx }).eq('id', d.id)),
+    ).then(results => {
+      if (results.some(r => r.error)) {
+        setError('Não foi possível salvar a nova ordem. Recarregue a página.')
+      }
+    })
   }
 
   function openEditDashboard(dashboard: Projeto) {
@@ -699,91 +822,23 @@ export function UserAppShell() {
                 </button>
               </div>
             ) : (
-              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {dashboards.map((dashboard, index) => (
-                  <div
-                    key={dashboard.id}
-                    draggable={true}
-                    onDragStart={() => setDragIndex(index)}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => {
-                      if (dragIndex === null || dragIndex === index) return
-                      const novo = [...dashboards]
-                      const [item] = novo.splice(dragIndex, 1)
-                      novo.splice(index, 0, item)
-                      setDashboards(novo)
-                      setDragIndex(null)
-                      Promise.all(
-                        novo.map((d, idx) => supabase.from('projetos').update({ ordem: idx }).eq('id', d.id)),
-                      ).then(results => {
-                        if (results.some(r => r.error)) {
-                          setError('Não foi possível salvar a nova ordem. Recarregue a página.')
-                        }
-                      })
-                    }}
-                    onDragEnd={() => setDragIndex(null)}
-                    style={{ opacity: dragIndex === index ? 0.5 : 1 }}
-                    className="relative rounded-2xl border border-white/10 bg-[#0b0d14] p-5 transition-all hover:border-cyan-300/30"
-                  >
-                    {/* Grip */}
-                    <div className="absolute left-2 top-2 cursor-move p-1 text-white">
-                      <GripVertical size={14} />
-                    </div>
-
-                    <div className="mb-4 mt-3 h-24 rounded-xl bg-[linear-gradient(135deg,rgba(0,212,255,0.2),rgba(167,139,250,0.14))] p-3 lg:h-28">
-                      <div className="flex h-full items-end justify-between">
-                        <div className="h-7 w-14 rounded-lg bg-white/10" />
-                        <div className="flex gap-1">
-                          <div className="h-10 w-2 rounded-full bg-cyan-300/70" />
-                          <div className="h-7 w-2 rounded-full bg-violet-300/70" />
-                          <div className="h-12 w-2 rounded-full bg-cyan-100/80" />
-                        </div>
-                      </div>
-                    </div>
-
-                    <p className="text-base font-bold">{dashboard.nome}</p>
-                    <p className="mt-1 line-clamp-2 text-xs text-slate-500">
-                      {dashboard.descricao || (index === 0 ? 'Dashboard principal da operação' : 'Dashboard pronto para configurar')}
-                    </p>
-
-                    <div className="mt-4 space-y-2">
-                      <Link
-                        href={`/dashboard/${dashboard.id}`}
-                        className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-400 to-violet-500 text-sm font-black text-white transition-transform hover:-translate-y-0.5"
-                      >
-                        Abrir
-                        <ExternalLink size={13} />
-                      </Link>
-                      <div className="grid grid-cols-3 gap-2">
-                        <button
-                          onClick={() => openEditDashboard(dashboard)}
-                          title="Editar"
-                          className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/10 text-xs font-bold text-slate-300 transition-colors hover:border-cyan-300/40 hover:text-white"
-                        >
-                          <Edit3 size={13} />
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => duplicateDashboard(dashboard)}
-                          disabled={duplicatingId === dashboard.id}
-                          title="Duplicar"
-                          className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/10 text-xs font-bold text-slate-300 transition-colors hover:border-violet-300/40 hover:text-white disabled:opacity-60"
-                        >
-                          {duplicatingId === dashboard.id ? <Loader2 size={13} className="animate-spin" /> : <Copy size={13} />}
-                          Duplicar
-                        </button>
-                        <button
-                          onClick={() => setDeleteTarget(dashboard)}
-                          title="Excluir"
-                          className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/10 text-xs font-bold text-slate-400 transition-colors hover:border-red-300/35 hover:bg-red-500/10 hover:text-red-200"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </div>
+              <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleDashboardsDragEnd}>
+                <SortableContext items={dashboards.map(d => d.id)} strategy={rectSortingStrategy}>
+                  <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {dashboards.map((dashboard, index) => (
+                      <SortableDashboardCard
+                        key={dashboard.id}
+                        dashboard={dashboard}
+                        index={index}
+                        openEditDashboard={openEditDashboard}
+                        duplicateDashboard={duplicateDashboard}
+                        duplicatingId={duplicatingId}
+                        setDeleteTarget={setDeleteTarget}
+                      />
+                    ))}
                   </div>
-                ))}
-              </div>
+                </SortableContext>
+              </DndContext>
             )}
           </section>
 
