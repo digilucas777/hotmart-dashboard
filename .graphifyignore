@@ -1,0 +1,16 @@
+.env*
+node_modules/
+.next/
+.vercel/
+.claude/
+.superpowers/
+.scratch/
+_arquivo/
+graphify-out/
+scripts/_*
+debug*
+backfill_out*
+*.png
+*.html
+package-lock.json
+tsconfig.tsbuildinfo

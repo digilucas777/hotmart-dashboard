@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Worktrees de agentes, skills locais e arquivos fora do app
+    ".claude/**",
+    "_arquivo/**",
+    "graphify-out/**",
   ]),
 ]);
 
