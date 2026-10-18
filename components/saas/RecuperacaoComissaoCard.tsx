@@ -69,15 +69,6 @@ export function RecuperacaoComissaoCard({
         </div>
         <p className="mt-1 truncate text-xs text-slate-500">Taxa: R$ {exchangeRate.toFixed(2)}/USD</p>
       </div>
-      <div className="min-w-0 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4 sm:p-5">
-        <p className="truncate text-xs font-bold uppercase tracking-wide text-amber-200/70">Minha Comissão (18%)</p>
-        <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <span className="text-lg font-black text-amber-300 sm:text-xl lg:text-2xl xl:text-3xl">{formatBRL(comissao18)}</span>
-          <span className="text-sm font-black text-emerald-300 sm:text-base">{formatUSD(comissao18USD)} USD</span>
-        </div>
-        <p className="mt-1 truncate text-xs text-slate-500">18% de {formatBRL(faturamentoAte15)}</p>
-        <p className="mt-1 text-[11px] font-semibold text-amber-200/80">Válido só até 15/10/2026 — não soma vendas de 16/10 em diante</p>
-      </div>
       <div className="min-w-0 rounded-2xl border border-pink-400/25 bg-pink-400/[0.06] p-4 sm:p-5">
         <p className="truncate text-xs font-bold uppercase tracking-wide text-pink-200/70">Minha Comissão (13%)</p>
         <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -86,6 +77,15 @@ export function RecuperacaoComissaoCard({
         </div>
         <p className="mt-1 truncate text-xs text-slate-500">13% de {formatBRL(faturamentoDesde16)}</p>
         <p className="mt-1 text-[11px] font-semibold text-pink-200/80">Válido a partir de 16/10/2026 — não soma vendas anteriores</p>
+      </div>
+      <div className="min-w-0 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4 sm:p-5">
+        <p className="truncate text-xs font-bold uppercase tracking-wide text-amber-200/70">Minha Comissão (18%)</p>
+        <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="text-lg font-black text-amber-300 sm:text-xl lg:text-2xl xl:text-3xl">{formatBRL(comissao18)}</span>
+          <span className="text-sm font-black text-emerald-300 sm:text-base">{formatUSD(comissao18USD)} USD</span>
+        </div>
+        <p className="mt-1 truncate text-xs text-slate-500">18% de {formatBRL(faturamentoAte15)}</p>
+        <p className="mt-1 text-[11px] font-semibold text-amber-200/80">Válido só até 15/10/2026 — não soma vendas de 16/10 em diante</p>
       </div>
     </div>
   )
