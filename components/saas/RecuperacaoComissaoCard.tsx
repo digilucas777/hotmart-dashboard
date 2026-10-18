@@ -52,13 +52,23 @@ export function RecuperacaoComissaoCard({
     .filter(r => r.status === 'approved' && r.dia >= RATE_CUTOFF)
     .reduce((sum, r) => sum + toBRL(r), 0)
 
+  const faturamentoTotal = faturamentoAte15 + faturamentoDesde16
+  const faturamentoTotalUSD = exchangeRate > 0 ? faturamentoTotal / exchangeRate : 0
   const comissao18 = faturamentoAte15 * RATE_ATE_15
   const comissao18USD = exchangeRate > 0 ? comissao18 / exchangeRate : 0
   const comissao13 = faturamentoDesde16 * RATE_DESDE_16
   const comissao13USD = exchangeRate > 0 ? comissao13 / exchangeRate : 0
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="min-w-0 rounded-2xl border border-cyan-400/25 bg-cyan-400/[0.06] p-4 sm:p-5">
+        <p className="truncate text-xs font-bold uppercase tracking-wide text-cyan-200/70">Total Convertido (BRL)</p>
+        <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="text-lg font-black text-cyan-300 sm:text-xl lg:text-2xl xl:text-3xl">{formatBRL(faturamentoTotal)}</span>
+          <span className="text-sm font-black text-emerald-300 sm:text-base">{formatUSD(faturamentoTotalUSD)} USD</span>
+        </div>
+        <p className="mt-1 truncate text-xs text-slate-500">Taxa: R$ {exchangeRate.toFixed(2)}/USD</p>
+      </div>
       <div className="min-w-0 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4 sm:p-5">
         <p className="truncate text-xs font-bold uppercase tracking-wide text-amber-200/70">Minha Comissão (18%)</p>
         <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
