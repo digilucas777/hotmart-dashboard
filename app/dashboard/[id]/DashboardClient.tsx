@@ -2268,11 +2268,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           </div>
         ) : (
           <div ref={exportGridRef} className="relative">
-          {projectId === RECUPERACAO_GERAL_PROJECT_ID && (
-            <div className="mb-5">
-              <RecuperacaoComissaoCard summary={summaryCurrent} exchangeRate={exchangeRate} />
-            </div>
-          )}
+          {projectId === RECUPERACAO_GERAL_PROJECT_ID && (() => {
+            const { from: recFrom, to: recTo } = getPeriodRange(period, customDateRange)
+            return (
+              <div className="mb-5">
+                <RecuperacaoComissaoCard projectId={projectId} from={recFrom} to={recTo} exchangeRate={exchangeRate} />
+              </div>
+            )
+          })()}
           <DashboardGrid
             key={projectId}
             widgets={widgets}
