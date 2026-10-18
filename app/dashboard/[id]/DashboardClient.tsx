@@ -41,6 +41,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { DashboardGrid } from '@/components/dashboard/DashboardGrid'
+import { RecuperacaoComissaoCard } from '@/components/saas/RecuperacaoComissaoCard'
 import { supabase } from '@/lib/supabase'
 import { formatRelativeTime, getPeriodRange, getPreviousPeriodRange, getOfficialSaleAmount, parseOrigem } from '@/lib/utils'
 import { fetchVendasSummary, fetchDistinctOrigens, fetchDistinctAfiliados, fetchVendasPorDia, fetchHotmartIdsForProjetos, type SummaryRow } from '@/lib/vendas-aggregation'
@@ -394,6 +395,8 @@ function SortableDashboardOption({
     </div>
   )
 }
+
+const RECUPERACAO_GERAL_PROJECT_ID = 'c646c137-700f-47ba-bfb7-929f0a894b2f'
 
 export function DashboardClient({ projectId }: { projectId: string }) {
   const router = useRouter()
@@ -2265,6 +2268,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
           </div>
         ) : (
           <div ref={exportGridRef} className="relative">
+          {projectId === RECUPERACAO_GERAL_PROJECT_ID && (
+            <div className="mb-5">
+              <RecuperacaoComissaoCard summary={summaryCurrent} exchangeRate={exchangeRate} />
+            </div>
+          )}
           <DashboardGrid
             key={projectId}
             widgets={widgets}
