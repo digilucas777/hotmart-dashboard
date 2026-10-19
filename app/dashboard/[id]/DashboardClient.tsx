@@ -695,8 +695,15 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       const allowedOffers = allowedOffersByProduct[productId]
       if (!allowedOffers || allowedOffers.size === 0) return false
       const realCode = venda.oferta_codigo ?? ''
-      if (allowedOffers.has(realCode)) return true
-      return allowedOffers.has(realCode + virtualSuffix(venda.origem))
+      const suffix = virtualSuffix(venda.origem)
+      // Quando a origem indica recuperação/app (suffix não-vazio), a venda só conta pra
+      // esse projeto se o código SUFIXADO estiver liberado — não basta o código puro estar
+      // liberado, senão uma venda de recuperação aparece na tabela/gráficos do projeto de
+      // tráfego só porque o produto+oferta "crus" também pertencem a ele (caso real:
+      // vendas com origem "renov" de produtos ES splitados apareciam na tabela de
+      // transações do tráfego, mesmo não entrando no Faturamento — ver migrations 086/090).
+      if (suffix) return allowedOffers.has(realCode + suffix)
+      return allowedOffers.has(realCode)
     })
   }, [])
 

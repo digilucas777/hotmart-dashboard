@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft, Check, ChevronDown, LayoutGrid, Layers, Loader2, Pencil, RefreshCw, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getPeriodRange, formatBRL, formatUSD, formatRelativeTime, getOfficialSaleAmount } from '@/lib/utils'
-import { fetchVendasSummaryMulti, fetchHotmartIdsForProjetos, computeWidgetDataFromSummary, type SummaryRow, type SummaryRowMulti } from '@/lib/vendas-aggregation'
+import { fetchVendasSummaryMulti, fetchHotmartIdsForProjetos, fetchOfferAllowlistForProjetos, filterVendasByOfferAllowlist, computeWidgetDataFromSummary, type SummaryRow, type SummaryRowMulti } from '@/lib/vendas-aggregation'
 import type { DashboardCombo, Projeto, Venda, Period } from '@/lib/types'
 import { PeriodFilter } from '@/components/dashboard/PeriodFilter'
 import { SalesTable } from '@/components/dashboard/SalesTable'
@@ -234,7 +234,8 @@ export function ComboClient({ comboId }: { comboId: string }) {
 
     setLoadingVendas(true)
     try {
-      const hotmartIds = await fetchHotmartIdsForProjetos(combo.projeto_ids)
+      const allowlist = await fetchOfferAllowlistForProjetos(combo.projeto_ids)
+      const hotmartIds = Array.from(allowlist.productIdByHotmartId.keys())
       if (hotmartIds.length === 0) {
         setVendas([])
       } else {
@@ -254,7 +255,10 @@ export function ComboClient({ comboId }: { comboId: string }) {
           if (controller.signal.aborted) throw res.error
           if (attempt < 2) await new Promise(r => setTimeout(r, 400 * (attempt + 1)))
         }
-        setVendas(data ?? [])
+        // Antes mostrava qualquer venda de qualquer produto vinculado a algum projeto do
+        // combo, inclusive recuperação/app de produtos com split por origem (migrations
+        // 084/086/090) — essas nunca deveriam aparecer na tabela de tráfego do combinado.
+        setVendas(filterVendasByOfferAllowlist(data ?? [], allowlist))
       }
     } catch (err) {
       if (!controller.signal.aborted) console.error('[combo] falha ao carregar transações:', err)

@@ -292,3 +292,86 @@ export async function fetchHotmartIdsForProjetos(projetoIds: string[]): Promise<
 
   return (prods ?? []).map((r: { hotmart_id: string }) => r.hotmart_id)
 }
+
+export type OfferAllowlist = {
+  productIdByHotmartId: Map<string, string>
+  allOfferProducts: Set<string>
+  allowedOffersByProduct: Record<string, Set<string>>
+}
+
+// Mesma origem-vira-sufixo das migrations 084/086/090 ("Produtos com split por
+// origem gravam a oferta real + sufixo __app/__rec só no resumo pré-calculado,
+// vendas.oferta_codigo nunca tem o sufixo") — reconstrói o sufixo a partir de
+// vendas.origem pra poder comparar com os registros de projeto_produto_ofertas.
+function virtualOfferSuffix(origem: string | null | undefined): string {
+  const o = (origem ?? '').toLowerCase()
+  if (o.startsWith('rec') || o.startsWith('upsell') || o.startsWith('renov') || o.includes('recusada')) return '__rec'
+  if (o === 'app' || o.startsWith('bannerapp') || o === 'hotmart_site_app') return '__app'
+  return ''
+}
+
+// Busca a config de produtos/ofertas de um ou mais projetos (união, pra combinados:
+// um produto+oferta conta se QUALQUER projeto do grupo o liberar) e monta a allowlist
+// usada por filterVendasByOfferAllowlist. Extraída pra ser compartilhada entre o
+// dashboard individual e a tela de combinado — antes só o individual filtrava vendas
+// cruas (tabela/gráficos) por oferta/origem; o combinado mostrava qualquer venda de
+// qualquer produto vinculado, inclusive recuperação/app que não deveriam contar ali.
+export async function fetchOfferAllowlistForProjetos(projetoIds: string[]): Promise<OfferAllowlist> {
+  if (projetoIds.length === 0) {
+    return { productIdByHotmartId: new Map(), allOfferProducts: new Set(), allowedOffersByProduct: {} }
+  }
+  const { data: pp, error: ppError } = await supabase
+    .from('projeto_produtos')
+    .select('produto_id, todas_ofertas')
+    .in('projeto_id', projetoIds)
+  if (ppError) throw ppError
+  const productLinks = (pp ?? []) as { produto_id: string; todas_ofertas?: boolean | null }[]
+  const produtoIds = Array.from(new Set(productLinks.map(r => r.produto_id)))
+  if (produtoIds.length === 0) {
+    return { productIdByHotmartId: new Map(), allOfferProducts: new Set(), allowedOffersByProduct: {} }
+  }
+
+  const [prodsRes, offersRes] = await Promise.all([
+    supabase.from('produtos').select('id, hotmart_id').in('id', produtoIds),
+    supabase.from('projeto_produto_ofertas').select('produto_id, oferta_codigo').in('projeto_id', projetoIds),
+  ])
+  if (prodsRes.error) throw prodsRes.error
+  if (offersRes.error) throw offersRes.error
+
+  const products = (prodsRes.data ?? []) as { id: string; hotmart_id: string }[]
+  const offerLinks = (offersRes.data ?? []) as { produto_id: string; oferta_codigo: string }[]
+
+  const productIdByHotmartId = new Map(products.map(p => [p.hotmart_id, p.id]))
+  const allOfferProducts = new Set(
+    productLinks.filter(link => link.todas_ofertas !== false).map(link => link.produto_id),
+  )
+  const allowedOffersByProduct = offerLinks.reduce((acc, link) => {
+    if (!acc[link.produto_id]) acc[link.produto_id] = new Set<string>()
+    acc[link.produto_id]!.add(link.oferta_codigo)
+    return acc
+  }, {} as Record<string, Set<string>>)
+
+  return { productIdByHotmartId, allOfferProducts, allowedOffersByProduct }
+}
+
+// Mesma regra do filterRowsByOfferSelection do dashboard individual: quando a
+// origem indica recuperação/app, a venda só conta se o código SUFIXADO estiver
+// liberado — não basta o código puro estar liberado, senão uma venda de
+// recuperação aparece na tabela/gráfico de um projeto/combinado de tráfego só
+// porque o produto+oferta "crus" também pertencem a ele.
+export function filterVendasByOfferAllowlist<T extends { hotmart_produto_id?: string | null; oferta_codigo?: string | null; origem?: string | null }>(
+  rows: T[],
+  allowlist: OfferAllowlist,
+): T[] {
+  return rows.filter(venda => {
+    const productId = venda.hotmart_produto_id ? allowlist.productIdByHotmartId.get(venda.hotmart_produto_id) : undefined
+    if (!productId) return false
+    if (allowlist.allOfferProducts.has(productId)) return true
+    const allowedOffers = allowlist.allowedOffersByProduct[productId]
+    if (!allowedOffers || allowedOffers.size === 0) return false
+    const realCode = venda.oferta_codigo ?? ''
+    const suffix = virtualOfferSuffix(venda.origem)
+    if (suffix) return allowedOffers.has(realCode + suffix)
+    return allowedOffers.has(realCode)
+  })
+}
