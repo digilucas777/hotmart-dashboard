@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { formatBRL, formatUSD } from '@/lib/utils'
-import { fetchVendasPorDia, fetchVendasSummary, computeWidgetDataFromSummary, type SummaryRow } from '@/lib/vendas-aggregation'
+import { fetchVendasPorDia, fetchVendasSummaryMulti, computeWidgetDataFromSummary, type SummaryRow } from '@/lib/vendas-aggregation'
 import type { DiaRow } from '@/lib/types'
 
 /**
@@ -24,9 +24,12 @@ import type { DiaRow } from '@/lib/types'
  * linkados aqui (migrations 089/091); BR/US são os produtos originais, calculados por
  * diferença (total geral menos ES/FR/IT), já que não existe projeto separado pra eles.
  *
- * Bug corrigido: usava Promise.all pras 4 buscas (geral+ES+FR+IT) — se UMA falhasse
- * (timeout, rede), o catch zerava TODAS, inclusive o total geral que tinha dado certo.
- * Agora cada busca é independente (Promise.allSettled).
+ * Bug corrigido (20/10/2026): eram 4 chamadas pesadas em paralelo (geral+ES+FR+IT),
+ * cada uma disputando conexão/CPU com o resto da página — estourava statement_timeout
+ * no Postgres. Trocado ES+FR+IT por UMA chamada só (get_vendas_summary_multi_v2, o
+ * mesmo RPC já usado pelos combinados pra somar vários projetos de uma vez), reduzindo
+ * de 4 pra 2 idas ao banco. Também usa Promise.allSettled (não Promise.all) nessas 2,
+ * pra uma falha isolada não zerar a outra que deu certo.
  */
 const RATE_CUTOFF = '2026-10-16'
 const RATE_ATE_15 = 0.18
@@ -106,22 +109,21 @@ export function RecuperacaoComissaoCard({
     setLoading(true)
     Promise.allSettled([
       fetchVendasPorDia(projectId, from, to, controller.signal),
-      fetchVendasSummary(ES_RECUPERACAO_ID, from, to, controller.signal),
-      fetchVendasSummary(FR_RECUPERACAO_ID, from, to, controller.signal),
-      fetchVendasSummary(IT_RECUPERACAO_ID, from, to, controller.signal),
-    ]).then(([geral, es, fr, it]) => {
+      fetchVendasSummaryMulti([ES_RECUPERACAO_ID, FR_RECUPERACAO_ID, IT_RECUPERACAO_ID], from, to, controller.signal),
+    ]).then(([geral, origens]) => {
       if (cancelled) return
-      const labels = ['Total geral', 'Recuperação Espanhol', 'Recuperação Francês+App', 'Recuperação Italiano+App']
-      const results = [geral, es, fr, it]
+      const labels = ['Total geral', 'Recuperação Espanhol/Francês/Italiano']
+      const results = [geral, origens]
       const newErrors = results
         .map((r, i) => (r.status === 'rejected' ? `${labels[i]}: ${r.reason?.message ?? r.reason ?? 'falha ao carregar'}` : null))
         .filter((e): e is string => e !== null)
       if (newErrors.length > 0) console.error('[RecuperacaoComissaoCard] falha ao carregar:', newErrors)
       setErrors(newErrors)
       setGeralRows(geral.status === 'fulfilled' ? geral.value : [])
-      setEsSummary(es.status === 'fulfilled' ? es.value : [])
-      setFrSummary(fr.status === 'fulfilled' ? fr.value : [])
-      setItSummary(it.status === 'fulfilled' ? it.value : [])
+      const origensRows = origens.status === 'fulfilled' ? origens.value : []
+      setEsSummary(origensRows.filter(r => r.projeto_id === ES_RECUPERACAO_ID))
+      setFrSummary(origensRows.filter(r => r.projeto_id === FR_RECUPERACAO_ID))
+      setItSummary(origensRows.filter(r => r.projeto_id === IT_RECUPERACAO_ID))
       setLoading(false)
     })
     return () => { cancelled = true; controller.abort() }
@@ -219,8 +221,8 @@ export function RecuperacaoComissaoCard({
             <ProjetoFaturamentoCard nome="Recuperação Espanhol" icone="🟡" summary={esSummary} exchangeRate={exchangeRate} />
             <ProjetoFaturamentoCard nome="Recuperação Francês+App" icone="🔵" summary={frSummary} exchangeRate={exchangeRate} />
             <ProjetoFaturamentoCard nome="Recuperação Italiano+App" icone="🟢" summary={itSummary} exchangeRate={exchangeRate} />
-            <ProjetoFaturamentoCard nome="Recuperação BR (original)" icone="🇧🇷" summary={brSummary} exchangeRate={exchangeRate} />
-            <ProjetoFaturamentoCard nome="Recuperação US (original)" icone="🇺🇸" summary={usSummary} exchangeRate={exchangeRate} />
+            <ProjetoFaturamentoCard nome="Recuperação BR" icone="🇧🇷" summary={brSummary} exchangeRate={exchangeRate} />
+            <ProjetoFaturamentoCard nome="Recuperação US" icone="🇺🇸" summary={usSummary} exchangeRate={exchangeRate} />
           </div>
         </div>
       </div>
