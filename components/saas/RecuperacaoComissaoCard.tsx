@@ -57,14 +57,6 @@ function approvedByMoeda(summary: SummaryRow[], moeda: 'BRL' | 'USD') {
     .reduce((acc, r) => ({ cnt: acc.cnt + r.cnt, total: acc.total + r.total }), { cnt: 0, total: 0 })
 }
 
-async function safeSummary(projectId: string, from: Date, to: Date, signal: AbortSignal): Promise<SummaryRow[]> {
-  try {
-    return await fetchVendasSummary(projectId, from, to, signal)
-  } catch {
-    return []
-  }
-}
-
 function ProjetoFaturamentoCard({ nome, icone, summary, exchangeRate }: { nome: string; icone: string; summary: SummaryRow[]; exchangeRate: number }) {
   const faturamento = computeWidgetDataFromSummary(summary, 'total_converted', exchangeRate)
   const faturamentoBRL = computeWidgetDataFromSummary(summary, 'total_brl', exchangeRate)
@@ -106,6 +98,7 @@ export function RecuperacaoComissaoCard({
   const [frSummary, setFrSummary] = useState<SummaryRow[]>([])
   const [itSummary, setItSummary] = useState<SummaryRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [errors, setErrors] = useState<string[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -113,11 +106,18 @@ export function RecuperacaoComissaoCard({
     setLoading(true)
     Promise.allSettled([
       fetchVendasPorDia(projectId, from, to, controller.signal),
-      safeSummary(ES_RECUPERACAO_ID, from, to, controller.signal),
-      safeSummary(FR_RECUPERACAO_ID, from, to, controller.signal),
-      safeSummary(IT_RECUPERACAO_ID, from, to, controller.signal),
+      fetchVendasSummary(ES_RECUPERACAO_ID, from, to, controller.signal),
+      fetchVendasSummary(FR_RECUPERACAO_ID, from, to, controller.signal),
+      fetchVendasSummary(IT_RECUPERACAO_ID, from, to, controller.signal),
     ]).then(([geral, es, fr, it]) => {
       if (cancelled) return
+      const labels = ['Total geral', 'Recuperação Espanhol', 'Recuperação Francês+App', 'Recuperação Italiano+App']
+      const results = [geral, es, fr, it]
+      const newErrors = results
+        .map((r, i) => (r.status === 'rejected' ? `${labels[i]}: ${r.reason?.message ?? r.reason ?? 'falha ao carregar'}` : null))
+        .filter((e): e is string => e !== null)
+      if (newErrors.length > 0) console.error('[RecuperacaoComissaoCard] falha ao carregar:', newErrors)
+      setErrors(newErrors)
       setGeralRows(geral.status === 'fulfilled' ? geral.value : [])
       setEsSummary(es.status === 'fulfilled' ? es.value : [])
       setFrSummary(fr.status === 'fulfilled' ? fr.value : [])
@@ -176,6 +176,14 @@ export function RecuperacaoComissaoCard({
         </div>
       )}
       <div className="space-y-5">
+        {errors.length > 0 && (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
+            <p className="font-bold">Alguns dados não carregaram:</p>
+            <ul className="mt-1 list-disc pl-4">
+              {errors.map((e, i) => <li key={i}>{e}</li>)}
+            </ul>
+          </div>
+        )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="min-w-0 rounded-2xl border border-cyan-400/25 bg-cyan-400/[0.06] p-4 sm:p-5">
             <p className="truncate text-xs font-bold uppercase tracking-wide text-cyan-200/70">Total Convertido (BRL)</p>
