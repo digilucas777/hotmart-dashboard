@@ -28,8 +28,11 @@ import type { DiaRow } from '@/lib/types'
  * cada uma disputando conexão/CPU com o resto da página — estourava statement_timeout
  * no Postgres. Trocado ES+FR+IT por UMA chamada só (get_vendas_summary_multi_v2, o
  * mesmo RPC já usado pelos combinados pra somar vários projetos de uma vez), reduzindo
- * de 4 pra 2 idas ao banco. Também usa Promise.allSettled (não Promise.all) nessas 2,
- * pra uma falha isolada não zerar a outra que deu certo.
+ * de 4 pra 2 idas ao banco. Mesmo assim a chamada combinada (3 projetos, mais linhas)
+ * ainda dava timeout ocasional quando disparada JUNTO com a do total geral — por isso
+ * agora elas rodam em SEQUÊNCIA (não em paralelo): o total geral aparece primeiro,
+ * sem esperar a de origem, e a seção "Faturamento por Projeto" tem loading e retry
+ * próprios (3 tentativas com espera crescente), só pra ela.
  */
 const RATE_CUTOFF = '2026-10-16'
 const RATE_ATE_15 = 0.18
@@ -52,6 +55,23 @@ function toSummary(rows: DiaRow[]): SummaryRow[] {
     }
   }
   return Array.from(byKey.values())
+}
+
+// Retry próprio (além do que fetchVendasSummaryMulti já faz) pra absorver timeout
+// ocasional por contenção — 3 tentativas com espera crescente (0.8s, 2s).
+async function fetchOrigensComRetry(ids: string[], from: Date, to: Date, signal: AbortSignal) {
+  const delays = [0, 800, 2000]
+  let lastErr: unknown
+  for (const delay of delays) {
+    if (delay > 0) await new Promise(r => setTimeout(r, delay))
+    if (signal.aborted) throw new Error('aborted')
+    try {
+      return await fetchVendasSummaryMulti(ids, from, to, signal)
+    } catch (err) {
+      lastErr = err
+    }
+  }
+  throw lastErr
 }
 
 function approvedByMoeda(summary: SummaryRow[], moeda: 'BRL' | 'USD') {
@@ -101,31 +121,51 @@ export function RecuperacaoComissaoCard({
   const [frSummary, setFrSummary] = useState<SummaryRow[]>([])
   const [itSummary, setItSummary] = useState<SummaryRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingOrigens, setLoadingOrigens] = useState(true)
   const [errors, setErrors] = useState<string[]>([])
 
   useEffect(() => {
     let cancelled = false
     const controller = new AbortController()
     setLoading(true)
-    Promise.allSettled([
-      fetchVendasPorDia(projectId, from, to, controller.signal),
-      fetchVendasSummaryMulti([ES_RECUPERACAO_ID, FR_RECUPERACAO_ID, IT_RECUPERACAO_ID], from, to, controller.signal),
-    ]).then(([geral, origens]) => {
-      if (cancelled) return
-      const labels = ['Total geral', 'Recuperação Espanhol/Francês/Italiano']
-      const results = [geral, origens]
-      const newErrors = results
-        .map((r, i) => (r.status === 'rejected' ? `${labels[i]}: ${r.reason?.message ?? r.reason ?? 'falha ao carregar'}` : null))
-        .filter((e): e is string => e !== null)
-      if (newErrors.length > 0) console.error('[RecuperacaoComissaoCard] falha ao carregar:', newErrors)
-      setErrors(newErrors)
-      setGeralRows(geral.status === 'fulfilled' ? geral.value : [])
-      const origensRows = origens.status === 'fulfilled' ? origens.value : []
-      setEsSummary(origensRows.filter(r => r.projeto_id === ES_RECUPERACAO_ID))
-      setFrSummary(origensRows.filter(r => r.projeto_id === FR_RECUPERACAO_ID))
-      setItSummary(origensRows.filter(r => r.projeto_id === IT_RECUPERACAO_ID))
-      setLoading(false)
-    })
+    setLoadingOrigens(true)
+    setErrors([])
+
+    // Sequencial, não paralelo: o total geral aparece assim que chega, sem esperar
+    // a busca de origem (mais pesada, 3 projetos) — e as duas não disputam conexão
+    // com o banco ao mesmo tempo, o que era a causa do timeout ocasional.
+    fetchVendasPorDia(projectId, from, to, controller.signal)
+      .then(geral => {
+        if (cancelled) return
+        setGeralRows(geral)
+        setLoading(false)
+      })
+      .catch(err => {
+        if (cancelled) return
+        console.error('[RecuperacaoComissaoCard] falha ao carregar total geral:', err)
+        setErrors(prev => [...prev, `Total geral: ${err?.message ?? 'falha ao carregar'}`])
+        setGeralRows([])
+        setLoading(false)
+      })
+
+    fetchOrigensComRetry([ES_RECUPERACAO_ID, FR_RECUPERACAO_ID, IT_RECUPERACAO_ID], from, to, controller.signal)
+      .then(origens => {
+        if (cancelled) return
+        setEsSummary(origens.filter(r => r.projeto_id === ES_RECUPERACAO_ID))
+        setFrSummary(origens.filter(r => r.projeto_id === FR_RECUPERACAO_ID))
+        setItSummary(origens.filter(r => r.projeto_id === IT_RECUPERACAO_ID))
+        setLoadingOrigens(false)
+      })
+      .catch(err => {
+        if (cancelled) return
+        console.error('[RecuperacaoComissaoCard] falha ao carregar faturamento por projeto:', err)
+        setErrors(prev => [...prev, `Faturamento por Projeto (ES/FR/IT): ${err?.message ?? 'falha ao carregar'}`])
+        setEsSummary([])
+        setFrSummary([])
+        setItSummary([])
+        setLoadingOrigens(false)
+      })
+
     return () => { cancelled = true; controller.abort() }
   }, [projectId, from.getTime(), to.getTime(), refreshKey])
 
@@ -170,20 +210,20 @@ export function RecuperacaoComissaoCard({
   }]
 
   return (
-    <div className="relative">
-      {loading && (
-        <div className="pointer-events-none absolute inset-0 z-40 flex flex-col items-center justify-center gap-2 rounded-2xl bg-black/30 backdrop-blur-[1px]">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/15 border-t-white/50" />
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-white/60">Carregando…</span>
+    <div className="space-y-5">
+      {errors.length > 0 && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
+          <p className="font-bold">Alguns dados não carregaram:</p>
+          <ul className="mt-1 list-disc pl-4">
+            {errors.map((e, i) => <li key={i}>{e}</li>)}
+          </ul>
         </div>
       )}
-      <div className="space-y-5">
-        {errors.length > 0 && (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
-            <p className="font-bold">Alguns dados não carregaram:</p>
-            <ul className="mt-1 list-disc pl-4">
-              {errors.map((e, i) => <li key={i}>{e}</li>)}
-            </ul>
+      <div className="relative">
+        {loading && (
+          <div className="pointer-events-none absolute inset-0 z-40 flex flex-col items-center justify-center gap-2 rounded-2xl bg-black/30 backdrop-blur-[1px]">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/15 border-t-white/50" />
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-white/60">Carregando…</span>
           </div>
         )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -214,16 +254,22 @@ export function RecuperacaoComissaoCard({
             <p className="mt-1 text-[11px] font-semibold text-amber-200/80">Válido só até 15/10/2026 — não soma vendas de 16/10 em diante</p>
           </div>
         </div>
+      </div>
 
-        <div>
-          <p className="mb-3 text-sm font-black text-white">Faturamento por Projeto</p>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <ProjetoFaturamentoCard nome="Recuperação Espanhol" icone="🟡" summary={esSummary} exchangeRate={exchangeRate} />
-            <ProjetoFaturamentoCard nome="Recuperação Francês+App" icone="🔵" summary={frSummary} exchangeRate={exchangeRate} />
-            <ProjetoFaturamentoCard nome="Recuperação Italiano+App" icone="🟢" summary={itSummary} exchangeRate={exchangeRate} />
-            <ProjetoFaturamentoCard nome="Recuperação BR" icone="🇧🇷" summary={brSummary} exchangeRate={exchangeRate} />
-            <ProjetoFaturamentoCard nome="Recuperação US" icone="🇺🇸" summary={usSummary} exchangeRate={exchangeRate} />
+      <div className="relative">
+        {loadingOrigens && (
+          <div className="pointer-events-none absolute inset-0 z-40 flex flex-col items-center justify-center gap-2 rounded-2xl bg-black/30 backdrop-blur-[1px]">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/15 border-t-white/50" />
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-white/60">Carregando…</span>
           </div>
+        )}
+        <p className="mb-3 text-sm font-black text-white">Faturamento por Projeto</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <ProjetoFaturamentoCard nome="Recuperação Espanhol" icone="🟡" summary={esSummary} exchangeRate={exchangeRate} />
+          <ProjetoFaturamentoCard nome="Recuperação Francês+App" icone="🔵" summary={frSummary} exchangeRate={exchangeRate} />
+          <ProjetoFaturamentoCard nome="Recuperação Italiano+App" icone="🟢" summary={itSummary} exchangeRate={exchangeRate} />
+          <ProjetoFaturamentoCard nome="Recuperação BR" icone="🇧🇷" summary={brSummary} exchangeRate={exchangeRate} />
+          <ProjetoFaturamentoCard nome="Recuperação US" icone="🇺🇸" summary={usSummary} exchangeRate={exchangeRate} />
         </div>
       </div>
     </div>
