@@ -2279,7 +2279,13 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             const { from: recFrom, to: recTo } = getPeriodRange(period, customDateRange)
             return (
               <div className="mb-5">
-                <RecuperacaoComissaoCard projectId={projectId} from={recFrom} to={recTo} exchangeRate={exchangeRate} />
+                <RecuperacaoComissaoCard
+                  projectId={projectId}
+                  from={recFrom}
+                  to={recTo}
+                  exchangeRate={exchangeRate}
+                  refreshKey={lastUpdatedAt?.getTime()}
+                />
               </div>
             )
           })()}
