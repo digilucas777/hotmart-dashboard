@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { formatBRL, formatUSD } from '@/lib/utils'
-import { fetchVendasPorDia } from '@/lib/vendas-aggregation'
+import { fetchVendasPorDia, fetchVendasSummary, computeWidgetDataFromSummary, type SummaryRow } from '@/lib/vendas-aggregation'
 import type { DiaRow } from '@/lib/types'
 
 /**
@@ -17,11 +17,16 @@ import type { DiaRow } from '@/lib/types'
  * compartilhado com outros gestores) só nesse projeto — não mexe no data_source
  * compartilhado, que continua intacto pra quem mais usa esse tipo de widget.
  *
- * Em 20/10/2026 Lucas pediu: (1) esses cards também mostrarem "carregando" ao clicar
- * em Atualizar (antes ficavam parados sem nenhum feedback visual); (2) um card por
- * projeto de origem que é somado no total do Recuperação Geral (ES/FR/IT têm produtos
- * duplicados também linkados aqui — ver migrations 089/091 — então o total daqui é a
- * soma desses projetos de idioma + os produtos BR/US originais).
+ * Em 20/10/2026 Lucas pediu: (1) loading igual aos widgets personalizáveis (spinner +
+ * "Carregando…", não só opacidade); (2) seção "Faturamento por Projeto" com um card por
+ * projeto de origem, no mesmo estilo do "Por projeto" do combinado (BRL + USD + "BRL na
+ * moeda original"), sem misturar BR com US. ES/FR/IT têm produtos duplicados também
+ * linkados aqui (migrations 089/091); BR/US são os produtos originais, calculados por
+ * diferença (total geral menos ES/FR/IT), já que não existe projeto separado pra eles.
+ *
+ * Bug corrigido: usava Promise.all pras 4 buscas (geral+ES+FR+IT) — se UMA falhasse
+ * (timeout, rede), o catch zerava TODAS, inclusive o total geral que tinha dado certo.
+ * Agora cada busca é independente (Promise.allSettled).
  */
 const RATE_CUTOFF = '2026-10-16'
 const RATE_ATE_15 = 0.18
@@ -31,10 +36,56 @@ const ES_RECUPERACAO_ID = '540ef591-1601-4e22-84fc-46053f6758d7'
 const FR_RECUPERACAO_ID = '85c399cb-7afe-4866-97fb-435cff63495d'
 const IT_RECUPERACAO_ID = '5c1f9fb8-2924-45cb-8583-557cc8efe4a4'
 
-function sumApproved(rows: DiaRow[], exchangeRate: number, pred: (dia: string) => boolean) {
-  return rows
-    .filter(r => r.status === 'approved' && pred(r.dia))
-    .reduce((sum, r) => sum + (r.moeda === 'USD' ? r.total * exchangeRate : r.total), 0)
+function toSummary(rows: DiaRow[]): SummaryRow[] {
+  const byKey = new Map<string, SummaryRow>()
+  for (const r of rows) {
+    const key = `${r.status}|${r.moeda}`
+    const existing = byKey.get(key)
+    if (existing) {
+      existing.cnt += r.cnt
+      existing.total += r.total
+    } else {
+      byKey.set(key, { status: r.status, moeda: r.moeda, cnt: r.cnt, total: r.total })
+    }
+  }
+  return Array.from(byKey.values())
+}
+
+function approvedByMoeda(summary: SummaryRow[], moeda: 'BRL' | 'USD') {
+  return summary
+    .filter(r => r.status === 'approved' && r.moeda === moeda)
+    .reduce((acc, r) => ({ cnt: acc.cnt + r.cnt, total: acc.total + r.total }), { cnt: 0, total: 0 })
+}
+
+async function safeSummary(projectId: string, from: Date, to: Date, signal: AbortSignal): Promise<SummaryRow[]> {
+  try {
+    return await fetchVendasSummary(projectId, from, to, signal)
+  } catch {
+    return []
+  }
+}
+
+function ProjetoFaturamentoCard({ nome, icone, summary, exchangeRate }: { nome: string; icone: string; summary: SummaryRow[]; exchangeRate: number }) {
+  const faturamento = computeWidgetDataFromSummary(summary, 'total_converted', exchangeRate)
+  const faturamentoBRL = computeWidgetDataFromSummary(summary, 'total_brl', exchangeRate)
+  const faturamentoUSD = computeWidgetDataFromSummary(summary, 'total_usd', exchangeRate)
+  return (
+    <div className="min-w-0 rounded-2xl border border-white/10 bg-[#0b0d14] p-4">
+      <p className="truncate text-sm font-black text-white">{icone} {nome}</p>
+      <div className="mt-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Faturamento</p>
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="text-base font-black text-white">{faturamento?.kind === 'metric' ? faturamento.value : formatBRL(0)}</span>
+          <span className="text-sm font-black text-emerald-300">
+            {faturamentoUSD?.kind === 'metric' ? faturamentoUSD.value : formatUSD(0)} USD
+          </span>
+        </div>
+        <p className="mt-0.5 text-[11px] text-slate-500">
+          {faturamentoBRL?.kind === 'metric' ? faturamentoBRL.value : formatBRL(0)} BRL na moeda original
+        </p>
+      </div>
+    </div>
+  )
 }
 
 export function RecuperacaoComissaoCard({
@@ -50,41 +101,38 @@ export function RecuperacaoComissaoCard({
   exchangeRate: number
   refreshKey?: number
 }) {
-  const [rows, setRows] = useState<DiaRow[]>([])
-  const [origemRows, setOrigemRows] = useState<{ es: DiaRow[]; fr: DiaRow[]; it: DiaRow[] }>({ es: [], fr: [], it: [] })
+  const [geralRows, setGeralRows] = useState<DiaRow[]>([])
+  const [esSummary, setEsSummary] = useState<SummaryRow[]>([])
+  const [frSummary, setFrSummary] = useState<SummaryRow[]>([])
+  const [itSummary, setItSummary] = useState<SummaryRow[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
     const controller = new AbortController()
     setLoading(true)
-    Promise.all([
+    Promise.allSettled([
       fetchVendasPorDia(projectId, from, to, controller.signal),
-      fetchVendasPorDia(ES_RECUPERACAO_ID, from, to, controller.signal),
-      fetchVendasPorDia(FR_RECUPERACAO_ID, from, to, controller.signal),
-      fetchVendasPorDia(IT_RECUPERACAO_ID, from, to, controller.signal),
-    ])
-      .then(([geral, es, fr, it]) => {
-        if (cancelled) return
-        setRows(geral)
-        setOrigemRows({ es, fr, it })
-      })
-      .catch(() => {
-        if (cancelled) return
-        setRows([])
-        setOrigemRows({ es: [], fr: [], it: [] })
-      })
-      .finally(() => { if (!cancelled) setLoading(false) })
+      safeSummary(ES_RECUPERACAO_ID, from, to, controller.signal),
+      safeSummary(FR_RECUPERACAO_ID, from, to, controller.signal),
+      safeSummary(IT_RECUPERACAO_ID, from, to, controller.signal),
+    ]).then(([geral, es, fr, it]) => {
+      if (cancelled) return
+      setGeralRows(geral.status === 'fulfilled' ? geral.value : [])
+      setEsSummary(es.status === 'fulfilled' ? es.value : [])
+      setFrSummary(fr.status === 'fulfilled' ? fr.value : [])
+      setItSummary(it.status === 'fulfilled' ? it.value : [])
+      setLoading(false)
+    })
     return () => { cancelled = true; controller.abort() }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, from.getTime(), to.getTime(), refreshKey])
 
   const toBRL = (r: DiaRow) => (r.moeda === 'USD' ? r.total * exchangeRate : r.total)
 
-  const faturamentoAte15 = rows
+  const faturamentoAte15 = geralRows
     .filter(r => r.status === 'approved' && r.dia < RATE_CUTOFF)
     .reduce((sum, r) => sum + toBRL(r), 0)
-  const faturamentoDesde16 = rows
+  const faturamentoDesde16 = geralRows
     .filter(r => r.status === 'approved' && r.dia >= RATE_CUTOFF)
     .reduce((sum, r) => sum + toBRL(r), 0)
 
@@ -95,62 +143,76 @@ export function RecuperacaoComissaoCard({
   const comissao13 = faturamentoDesde16 * RATE_DESDE_16
   const comissao13USD = exchangeRate > 0 ? comissao13 / exchangeRate : 0
 
-  const faturamentoES = sumApproved(origemRows.es, exchangeRate, () => true)
-  const faturamentoFR = sumApproved(origemRows.fr, exchangeRate, () => true)
-  const faturamentoIT = sumApproved(origemRows.it, exchangeRate, () => true)
-  // "BR/US direto" = o resto do total que não veio de nenhum projeto de idioma acima
-  // (produtos originais do Recuperação Geral, sem duplicata em nenhum projeto ES/FR/IT).
-  const faturamentoBrUs = Math.max(0, faturamentoTotal - faturamentoES - faturamentoFR - faturamentoIT)
+  const geralSummary = toSummary(geralRows)
+  const geralBRL = approvedByMoeda(geralSummary, 'BRL')
+  const geralUSD = approvedByMoeda(geralSummary, 'USD')
+  const esBRL = approvedByMoeda(esSummary, 'BRL')
+  const esUSD = approvedByMoeda(esSummary, 'USD')
+  const frBRL = approvedByMoeda(frSummary, 'BRL')
+  const frUSD = approvedByMoeda(frSummary, 'USD')
+  const itBRL = approvedByMoeda(itSummary, 'BRL')
+  const itUSD = approvedByMoeda(itSummary, 'USD')
+
+  // BR e US "diretos" = produtos originais do Recuperação Geral, sem duplicata em
+  // nenhum projeto de idioma — calculados por diferença (total geral menos ES/FR/IT),
+  // já que não existe um projeto separado só pra eles. Nunca mistura moeda BRL com USD.
+  const brSummary: SummaryRow[] = [{
+    status: 'approved', moeda: 'BRL',
+    cnt: Math.max(0, geralBRL.cnt - esBRL.cnt - frBRL.cnt - itBRL.cnt),
+    total: Math.max(0, geralBRL.total - esBRL.total - frBRL.total - itBRL.total),
+  }]
+  const usSummary: SummaryRow[] = [{
+    status: 'approved', moeda: 'USD',
+    cnt: Math.max(0, geralUSD.cnt - esUSD.cnt - frUSD.cnt - itUSD.cnt),
+    total: Math.max(0, geralUSD.total - esUSD.total - frUSD.total - itUSD.total),
+  }]
 
   return (
-    <div className={`space-y-3 transition-opacity duration-300 ${loading ? 'pointer-events-none opacity-50' : ''}`}>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="min-w-0 rounded-2xl border border-cyan-400/25 bg-cyan-400/[0.06] p-4 sm:p-5">
-          <p className="truncate text-xs font-bold uppercase tracking-wide text-cyan-200/70">Total Convertido (BRL)</p>
-          <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <span className="text-lg font-black text-cyan-300 sm:text-xl lg:text-2xl xl:text-3xl">{formatBRL(faturamentoTotal)}</span>
-            <span className="text-sm font-black text-emerald-300 sm:text-base">{formatUSD(faturamentoTotalUSD)} USD</span>
-          </div>
-          <p className="mt-1 truncate text-xs text-slate-500">Taxa: R$ {exchangeRate.toFixed(2)}/USD</p>
+    <div className="relative">
+      {loading && (
+        <div className="pointer-events-none absolute inset-0 z-40 flex flex-col items-center justify-center gap-2 rounded-2xl bg-black/30 backdrop-blur-[1px]">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/15 border-t-white/50" />
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-white/60">Carregando…</span>
         </div>
-        <div className="min-w-0 rounded-2xl border border-pink-400/25 bg-pink-400/[0.06] p-4 sm:p-5">
-          <p className="truncate text-xs font-bold uppercase tracking-wide text-pink-200/70">Minha Comissão (13%)</p>
-          <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <span className="text-lg font-black text-pink-300 sm:text-xl lg:text-2xl xl:text-3xl">{formatBRL(comissao13)}</span>
-            <span className="text-sm font-black text-emerald-300 sm:text-base">{formatUSD(comissao13USD)} USD</span>
+      )}
+      <div className="space-y-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="min-w-0 rounded-2xl border border-cyan-400/25 bg-cyan-400/[0.06] p-4 sm:p-5">
+            <p className="truncate text-xs font-bold uppercase tracking-wide text-cyan-200/70">Total Convertido (BRL)</p>
+            <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="text-lg font-black text-cyan-300 sm:text-xl lg:text-2xl xl:text-3xl">{formatBRL(faturamentoTotal)}</span>
+              <span className="text-sm font-black text-emerald-300 sm:text-base">{formatUSD(faturamentoTotalUSD)} USD</span>
+            </div>
+            <p className="mt-1 truncate text-xs text-slate-500">Taxa: R$ {exchangeRate.toFixed(2)}/USD</p>
           </div>
-          <p className="mt-1 truncate text-xs text-slate-500">13% de {formatBRL(faturamentoDesde16)}</p>
-          <p className="mt-1 text-[11px] font-semibold text-pink-200/80">Válido a partir de 16/10/2026 — não soma vendas anteriores</p>
-        </div>
-        <div className="min-w-0 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4 sm:p-5">
-          <p className="truncate text-xs font-bold uppercase tracking-wide text-amber-200/70">Minha Comissão (18%)</p>
-          <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <span className="text-lg font-black text-amber-300 sm:text-xl lg:text-2xl xl:text-3xl">{formatBRL(comissao18)}</span>
-            <span className="text-sm font-black text-emerald-300 sm:text-base">{formatUSD(comissao18USD)} USD</span>
+          <div className="min-w-0 rounded-2xl border border-pink-400/25 bg-pink-400/[0.06] p-4 sm:p-5">
+            <p className="truncate text-xs font-bold uppercase tracking-wide text-pink-200/70">Minha Comissão (13%)</p>
+            <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="text-lg font-black text-pink-300 sm:text-xl lg:text-2xl xl:text-3xl">{formatBRL(comissao13)}</span>
+              <span className="text-sm font-black text-emerald-300 sm:text-base">{formatUSD(comissao13USD)} USD</span>
+            </div>
+            <p className="mt-1 truncate text-xs text-slate-500">13% de {formatBRL(faturamentoDesde16)}</p>
+            <p className="mt-1 text-[11px] font-semibold text-pink-200/80">Válido a partir de 16/10/2026 — não soma vendas anteriores</p>
           </div>
-          <p className="mt-1 truncate text-xs text-slate-500">18% de {formatBRL(faturamentoAte15)}</p>
-          <p className="mt-1 text-[11px] font-semibold text-amber-200/80">Válido só até 15/10/2026 — não soma vendas de 16/10 em diante</p>
+          <div className="min-w-0 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4 sm:p-5">
+            <p className="truncate text-xs font-bold uppercase tracking-wide text-amber-200/70">Minha Comissão (18%)</p>
+            <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="text-lg font-black text-amber-300 sm:text-xl lg:text-2xl xl:text-3xl">{formatBRL(comissao18)}</span>
+              <span className="text-sm font-black text-emerald-300 sm:text-base">{formatUSD(comissao18USD)} USD</span>
+            </div>
+            <p className="mt-1 truncate text-xs text-slate-500">18% de {formatBRL(faturamentoAte15)}</p>
+            <p className="mt-1 text-[11px] font-semibold text-amber-200/80">Válido só até 15/10/2026 — não soma vendas de 16/10 em diante</p>
+          </div>
         </div>
-      </div>
 
-      <div>
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">De onde vem o faturamento acima</p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="min-w-0 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-            <p className="truncate text-[11px] font-bold uppercase tracking-wide text-slate-400">🟡 Recuperação Espanhol</p>
-            <p className="mt-1 text-base font-black text-slate-100">{formatBRL(faturamentoES)}</p>
-          </div>
-          <div className="min-w-0 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-            <p className="truncate text-[11px] font-bold uppercase tracking-wide text-slate-400">🔵 Recuperação Francês+App</p>
-            <p className="mt-1 text-base font-black text-slate-100">{formatBRL(faturamentoFR)}</p>
-          </div>
-          <div className="min-w-0 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-            <p className="truncate text-[11px] font-bold uppercase tracking-wide text-slate-400">🟢 Recuperação Italiano+App</p>
-            <p className="mt-1 text-base font-black text-slate-100">{formatBRL(faturamentoIT)}</p>
-          </div>
-          <div className="min-w-0 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-            <p className="truncate text-[11px] font-bold uppercase tracking-wide text-slate-400">⭐ BR/US (produtos originais)</p>
-            <p className="mt-1 text-base font-black text-slate-100">{formatBRL(faturamentoBrUs)}</p>
+        <div>
+          <p className="mb-3 text-sm font-black text-white">Faturamento por Projeto</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <ProjetoFaturamentoCard nome="Recuperação Espanhol" icone="🟡" summary={esSummary} exchangeRate={exchangeRate} />
+            <ProjetoFaturamentoCard nome="Recuperação Francês+App" icone="🔵" summary={frSummary} exchangeRate={exchangeRate} />
+            <ProjetoFaturamentoCard nome="Recuperação Italiano+App" icone="🟢" summary={itSummary} exchangeRate={exchangeRate} />
+            <ProjetoFaturamentoCard nome="Recuperação BR (original)" icone="🇧🇷" summary={brSummary} exchangeRate={exchangeRate} />
+            <ProjetoFaturamentoCard nome="Recuperação US (original)" icone="🇺🇸" summary={usSummary} exchangeRate={exchangeRate} />
           </div>
         </div>
       </div>
