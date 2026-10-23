@@ -299,14 +299,54 @@ export type OfferAllowlist = {
   allowedOffersByProduct: Record<string, Set<string>>
 }
 
-// Mesma origem-vira-sufixo das migrations 084/086/090 ("Produtos com split por
-// origem gravam a oferta real + sufixo __app/__rec só no resumo pré-calculado,
+// Mesmos arrays/cutoff da função SQL refresh_vendas_resumo_diario_by_hotmart_id
+// (fonte de verdade) — replicados aqui pra reconstruir, em JS, o MESMO sufixo
+// virtual que o resumo pré-calculado grava, inclusive os dois casos que não
+// dependem de origem (conversão ®/full-rec e corte de assinatura por data).
+const BORDELESS_FULL_REC_IDS = new Set([
+  '8294393', '8291627', '8356204', '8356156', '8291970', '8292135', '8294223', '8293904', '8356130', '4855438',
+])
+const ASSINATURA_POS_IDS = new Set(['7468175', '8293571', '7360080', '8275411', '7313804'])
+const TRAFEGO_ES_IDS = new Set([
+  '4804098', '4804186', '4804654', '8294393', '5085309', '7311693', '7359983', '4802964', '8291627', '4803869',
+  '4821899', '8356204', '6101329', '7052581', '563191', '4804539', '4804737', '8356156', '5669621', '8291970',
+  '7010960', '4804439', '8292135', '7052625', '8293571', '7360080', '8294223', '4855438', '5608576', '8293904',
+  '6101509', '6101720', '6264821', '7312372', '8356130', '7222835',
+])
+const POS_CUTOFF = '2026-10-16'
+
+// Converte um timestamp de venda (UTC) pra data local de Brasília (UTC-3 fixo,
+// Brasil não observa DST desde 2019) — mesma conversão que o SQL faz com
+// `at time zone 'America/Sao_Paulo'`, necessária pra comparar com POS_CUTOFF.
+function dataVendaBrasilia(dataVenda: string | null | undefined): string | null {
+  if (!dataVenda) return null
+  const d = new Date(new Date(dataVenda).getTime() - 3 * 60 * 60 * 1000)
+  return d.toISOString().slice(0, 10)
+}
+
+// Mesma origem-vira-sufixo das migrations 084/086/090/090b ("Produtos com split
+// por origem, conversão ®/full-rec, ou corte de assinatura por data gravam a
+// oferta real + sufixo __app/__rec/__pos1016 só no resumo pré-calculado,
 // vendas.oferta_codigo nunca tem o sufixo") — reconstrói o sufixo a partir de
-// vendas.origem pra poder comparar com os registros de projeto_produto_ofertas.
-function virtualOfferSuffix(origem: string | null | undefined): string {
+// hotmart_produto_id/origem/data_venda pra poder comparar com os registros de
+// projeto_produto_ofertas. Precisa espelhar EXATAMENTE a ordem de checagem da
+// função SQL, senão um produto cai no ramo errado (ex: um bordeless ® também
+// está na lista de ES, mas o corte full-rec tem que vencer, incondicional).
+function virtualOfferSuffix(hotmartProdutoId: string | null | undefined, origem: string | null | undefined, dataVenda: string | null | undefined): string {
+  const produtoId = hotmartProdutoId ?? ''
   const o = (origem ?? '').toLowerCase()
-  if (o.startsWith('rec') || o.startsWith('upsell') || o.startsWith('renov') || o.includes('recusada')) return '__rec'
-  if (o === 'app' || o.startsWith('bannerapp') || o === 'hotmart_site_app') return '__app'
+  const dataLocal = dataVendaBrasilia(dataVenda)
+  const posVencido = dataLocal !== null && dataLocal >= POS_CUTOFF
+
+  if (produtoId === '7744143' && o === 'app') return '__app'
+  if (BORDELESS_FULL_REC_IDS.has(produtoId) && posVencido) return '__rec'
+  if (TRAFEGO_ES_IDS.has(produtoId)) {
+    if (o.startsWith('rec') || o.startsWith('upsell') || o.startsWith('renov') || o.includes('recusada')) return '__rec'
+    if (o === 'app' || o.startsWith('bannerapp') || o === 'hotmart_site_app') return '__app'
+    if (ASSINATURA_POS_IDS.has(produtoId) && posVencido) return '__pos1016'
+    return ''
+  }
+  if (ASSINATURA_POS_IDS.has(produtoId) && posVencido) return '__pos1016'
   return ''
 }
 
@@ -359,19 +399,27 @@ export async function fetchOfferAllowlistForProjetos(projetoIds: string[]): Prom
 // liberado — não basta o código puro estar liberado, senão uma venda de
 // recuperação aparece na tabela/gráfico de um projeto/combinado de tráfego só
 // porque o produto+oferta "crus" também pertencem a ele.
-export function filterVendasByOfferAllowlist<T extends { hotmart_produto_id?: string | null; oferta_codigo?: string | null; origem?: string | null }>(
+export function filterVendasByOfferAllowlist<T extends { hotmart_produto_id?: string | null; oferta_codigo?: string | null; origem?: string | null; data_venda?: string | null }>(
   rows: T[],
   allowlist: OfferAllowlist,
 ): T[] {
   return rows.filter(venda => {
     const productId = venda.hotmart_produto_id ? allowlist.productIdByHotmartId.get(venda.hotmart_produto_id) : undefined
     if (!productId) return false
+    const realCode = venda.oferta_codigo ?? ''
+    const suffix = virtualOfferSuffix(venda.hotmart_produto_id, venda.origem, venda.data_venda)
+    // Quando o produto cai num bucket virtual (recuperação/app/corte de assinatura), o
+    // atalho de todas_ofertas NÃO vale — senão um produto com todas_ofertas=true (ex: um
+    // bordeless ® ainda vinculado ao projeto de tráfego) continua aparecendo nas vendas
+    // cruas mesmo depois de convertido pra só-recuperação. Só o código SUFIXADO liberado
+    // explicitamente em projeto_produto_ofertas conta pra esse bucket.
+    if (suffix) {
+      const allowedOffers = allowlist.allowedOffersByProduct[productId]
+      return !!allowedOffers?.has(realCode + suffix)
+    }
     if (allowlist.allOfferProducts.has(productId)) return true
     const allowedOffers = allowlist.allowedOffersByProduct[productId]
     if (!allowedOffers || allowedOffers.size === 0) return false
-    const realCode = venda.oferta_codigo ?? ''
-    const suffix = virtualOfferSuffix(venda.origem)
-    if (suffix) return allowedOffers.has(realCode + suffix)
     return allowedOffers.has(realCode)
   })
 }

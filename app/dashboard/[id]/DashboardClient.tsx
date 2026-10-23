@@ -677,32 +677,56 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       return acc
     }, {} as Record<string, Set<string>>)
 
-    // Produtos com split por origem (ex: migrations 084/086) gravam a oferta real + sufixo
-    // (__app/__rec) só no resumo pré-calculado — vendas.oferta_codigo nunca tem o sufixo.
-    // Pra bater com esses registros aqui na tabela/gráfico de vendas cruas, reconstrói o
-    // mesmo sufixo a partir de vendas.origem antes de comparar.
-    const virtualSuffix = (origem: string | null | undefined) => {
+    // Produtos com split por origem, conversão ®/full-rec ou corte de assinatura por data
+    // (migrations 084/086/090/090b) gravam a oferta real + sufixo (__app/__rec/__pos1016)
+    // só no resumo pré-calculado — vendas.oferta_codigo nunca tem o sufixo. Pra bater com
+    // esses registros aqui na tabela/gráfico de vendas cruas, reconstrói o mesmo sufixo a
+    // partir de hotmart_produto_id/origem/data_venda antes de comparar — tem que espelhar
+    // EXATAMENTE a função SQL refresh_vendas_resumo_diario_by_hotmart_id (fonte de verdade).
+    const virtualSuffix = (hotmartProdutoId: string | null | undefined, origem: string | null | undefined, dataVenda: string | null | undefined) => {
+      const produtoId = hotmartProdutoId ?? ''
       const o = (origem ?? '').toLowerCase()
-      if (o.startsWith('rec') || o.startsWith('upsell') || o.startsWith('renov') || o.includes('recusada')) return '__rec'
-      if (o === 'app' || o.startsWith('bannerapp') || o === 'hotmart_site_app') return '__app'
+      const dataLocal = dataVenda ? new Date(new Date(dataVenda).getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10) : null
+      const posVencido = dataLocal !== null && dataLocal >= '2026-10-16'
+      const bordelessFullRecIds = new Set(['8294393', '8291627', '8356204', '8356156', '8291970', '8292135', '8294223', '8293904', '8356130', '4855438'])
+      const assinaturaPosIds = new Set(['7468175', '8293571', '7360080', '8275411', '7313804'])
+      const trafegoEsIds = new Set([
+        '4804098', '4804186', '4804654', '8294393', '5085309', '7311693', '7359983', '4802964', '8291627', '4803869',
+        '4821899', '8356204', '6101329', '7052581', '563191', '4804539', '4804737', '8356156', '5669621', '8291970',
+        '7010960', '4804439', '8292135', '7052625', '8293571', '7360080', '8294223', '4855438', '5608576', '8293904',
+        '6101509', '6101720', '6264821', '7312372', '8356130', '7222835',
+      ])
+
+      if (produtoId === '7744143' && o === 'app') return '__app'
+      if (bordelessFullRecIds.has(produtoId) && posVencido) return '__rec'
+      if (trafegoEsIds.has(produtoId)) {
+        if (o.startsWith('rec') || o.startsWith('upsell') || o.startsWith('renov') || o.includes('recusada')) return '__rec'
+        if (o === 'app' || o.startsWith('bannerapp') || o === 'hotmart_site_app') return '__app'
+        if (assinaturaPosIds.has(produtoId) && posVencido) return '__pos1016'
+        return ''
+      }
+      if (assinaturaPosIds.has(produtoId) && posVencido) return '__pos1016'
       return ''
     }
 
     return rows.filter(venda => {
       const productId = venda.hotmart_produto_id ? productIdByHotmartId.get(venda.hotmart_produto_id) : undefined
       if (!productId) return false
+      const realCode = venda.oferta_codigo ?? ''
+      const suffix = virtualSuffix(venda.hotmart_produto_id, venda.origem, venda.data_venda)
+      // Quando o produto cai num bucket virtual (suffix não-vazio), o atalho de
+      // todas_ofertas NÃO vale — senão um produto com todas_ofertas=true (ex: um bordeless
+      // ® ainda vinculado ao projeto de tráfego) continua aparecendo nas vendas cruas mesmo
+      // depois de convertido pra só-recuperação, ou uma assinatura aparece mesmo após o
+      // corte de data. Só o código SUFIXADO liberado explicitamente em
+      // projeto_produto_ofertas conta pra esse bucket.
+      if (suffix) {
+        const allowedOffers = allowedOffersByProduct[productId]
+        return !!allowedOffers?.has(realCode + suffix)
+      }
       if (allOfferProducts.has(productId)) return true
       const allowedOffers = allowedOffersByProduct[productId]
       if (!allowedOffers || allowedOffers.size === 0) return false
-      const realCode = venda.oferta_codigo ?? ''
-      const suffix = virtualSuffix(venda.origem)
-      // Quando a origem indica recuperação/app (suffix não-vazio), a venda só conta pra
-      // esse projeto se o código SUFIXADO estiver liberado — não basta o código puro estar
-      // liberado, senão uma venda de recuperação aparece na tabela/gráficos do projeto de
-      // tráfego só porque o produto+oferta "crus" também pertencem a ele (caso real:
-      // vendas com origem "renov" de produtos ES splitados apareciam na tabela de
-      // transações do tráfego, mesmo não entrando no Faturamento — ver migrations 086/090).
-      if (suffix) return allowedOffers.has(realCode + suffix)
       return allowedOffers.has(realCode)
     })
   }, [])
