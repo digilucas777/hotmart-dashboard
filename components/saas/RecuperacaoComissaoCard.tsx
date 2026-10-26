@@ -266,7 +266,7 @@ export function RecuperacaoComissaoCard({
         <p className="mb-3 text-sm font-black text-white">Faturamento por Projeto</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <ProjetoFaturamentoCard nome="Recuperação Espanhol" icone="🟡" summary={esSummary} exchangeRate={exchangeRate} />
-          <ProjetoFaturamentoCard nome="Recuperação Francês+App" icone="🔵" summary={frSummary} exchangeRate={exchangeRate} />
+          <ProjetoFaturamentoCard nome="Recuperação Francês" icone="🔵" summary={frSummary} exchangeRate={exchangeRate} />
           <ProjetoFaturamentoCard nome="Recuperação Italiano+App" icone="🟢" summary={itSummary} exchangeRate={exchangeRate} />
           <ProjetoFaturamentoCard nome="Recuperação BR" icone="🇧🇷" summary={brSummary} exchangeRate={exchangeRate} />
           <ProjetoFaturamentoCard nome="Recuperação US" icone="🇺🇸" summary={usSummary} exchangeRate={exchangeRate} />
