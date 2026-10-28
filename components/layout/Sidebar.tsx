@@ -185,9 +185,26 @@ export function Sidebar() {
     || semPastaProjetos.length > 0
   )
 
+  // Ao tirar o mouse da barra (ela encolhe pra ícones via CSS :hover), a árvore de
+  // pastas fecha junto — sem isso ela ficava "aberta" reservando espaço vazio no
+  // menu recolhido sempre que o usuário navegava pra dentro de um projeto (/dashboard/[id]
+  // ainda conta como "dentro de Dashboards" pro efeito que fecha ao trocar de seção).
+  function handleSidebarMouseLeave() {
+    if (!dashboardsTreeOpen && openFolderIds.size === 0) return
+    setDashboardsTreeOpen(false)
+    setOpenFolderIds(new Set())
+    try {
+      localStorage.setItem('sidebar_dashboards_tree_open', 'false')
+      localStorage.removeItem('sidebar_open_folder_ids')
+    } catch {
+      // localStorage indisponível — sem problema, já fechou em memória
+    }
+  }
+
   return (
     <aside
       className="app-sidebar flex flex-shrink-0 flex-col overflow-hidden"
+      onMouseLeave={handleSidebarMouseLeave}
       style={{
         position: 'fixed',
         top: 0,
