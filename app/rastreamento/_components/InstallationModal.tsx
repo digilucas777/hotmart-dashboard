@@ -598,7 +598,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
               data-bwignore="true"
             />
             <p className="mt-1 text-[11px] text-slate-600">
-              Com o hottok salvo, o robô só aceita venda que venha mesmo da Hotmart. Sem ele, quem descobrir a URL do webhook conseguiria mandar venda falsa. Depois de salvar, faça o deploy de novo.
+              Com o hottok salvo, o robô só aceita venda que venha mesmo da Hotmart. Sem ele, quem descobrir a URL do webhook conseguiria mandar venda falsa. Produtos em mais de uma conta Hotmart: cole os hottoks separados por vírgula. Depois de salvar, faça o deploy de novo.
             </p>
           </div>
           <div>

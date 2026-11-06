@@ -84,10 +84,11 @@ export async function POST(request: Request) {
   }
   if (body.hotmart_hottok && body.hotmart_hottok.trim()) {
     const hottok = body.hotmart_hottok.trim()
-    if (hottok.length < 10 || hottok.length > 200) {
+    const partes = hottok.split(',').map(h => h.trim()).filter(Boolean)
+    if (partes.length === 0 || partes.length > 5 || partes.some(h => h.length < 10 || h.length > 200)) {
       return NextResponse.json({ error: 'o hottok da Hotmart colado não parece válido' }, { status: 400 })
     }
-    installationFields.hotmart_hottok_encrypted = encryptSecret(hottok)
+    installationFields.hotmart_hottok_encrypted = encryptSecret(partes.join(','))
   }
 
   let installationId = body.id

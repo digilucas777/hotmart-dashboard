@@ -2,7 +2,7 @@ import { sha256Hex } from './hash.js'
 import { buildSnippet } from './snippet.js'
 import { normalizePhone } from './phone.js'
 
-const WORKER_VERSION = '1.3.0'
+const WORKER_VERSION = '1.3.1'
 
 function json(data, status = 200, extraHeaders) {
   return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...extraHeaders } })
@@ -382,7 +382,13 @@ async function handleHotmartWebhook(request, env, ctx) {
   // Segundo fator: o "hottok" que a Hotmart manda no cabeçalho de todo
   // webhook. Quando o cliente cadastrou o dele, sem ele a venda é recusada,
   // mesmo que alguém tenha descoberto a URL.
-  if (env.HOTMART_HOTTOK && !(await safeEqual(request.headers.get('X-HOTMART-HOTTOK') || '', env.HOTMART_HOTTOK))) {
+  // Aceita mais de um hottok separado por vírgula: um mesmo funil pode ter
+  // produtos em contas Hotmart diferentes (cada conta tem o seu hottok).
+  const hottoks = String(env.HOTMART_HOTTOK || '').split(',').map(h => h.trim()).filter(Boolean)
+  const sentHottok = request.headers.get('X-HOTMART-HOTTOK') || ''
+  let hottokOk = hottoks.length === 0
+  for (const h of hottoks) if (await safeEqual(sentHottok, h)) hottokOk = true
+  if (!hottokOk) {
     return json({ error: 'unauthorized' }, 401)
   }
 

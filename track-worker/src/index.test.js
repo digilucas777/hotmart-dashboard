@@ -1408,3 +1408,21 @@ test('ataque: webhook com segredo certo mas sem o hottok da Hotmart é recusado 
   const res = await worker.fetch(req, makeEnv({ WEBHOOK_SECRET: 'segredo', HOTMART_HOTTOK: 'hottok-real' }))
   assert.equal(res.status, 401)
 })
+
+test('hottok: com 2 contas Hotmart cadastradas, o hottok da segunda conta é aceito', async () => {
+  const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-HOTMART-HOTTOK': 'hottok-conta-b' },
+    body: JSON.stringify({ event: 'PURCHASE_APPROVED', data: {} }),
+  })
+  const res = await worker.fetch(req, makeEnv({ WEBHOOK_SECRET: 'segredo', HOTMART_HOTTOK: 'hottok-conta-a, hottok-conta-b' }))
+  assert.notEqual(res.status, 401)
+})
+
+test('ataque: com 2 hottoks cadastrados, um hottok inventado continua recusado', async () => {
+  const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-HOTMART-HOTTOK': 'hottok-conta' },
+    body: JSON.stringify({ event: 'PURCHASE_APPROVED', data: {} }),
+  })
+  const res = await worker.fetch(req, makeEnv({ WEBHOOK_SECRET: 'segredo', HOTMART_HOTTOK: 'hottok-conta-a,hottok-conta-b' }))
+  assert.equal(res.status, 401)
+})
