@@ -2,7 +2,7 @@ export function buildUtmPassthroughSnippet(lpDomains: string[], checkoutDomains:
   const targets = Array.from(
     new Set([...checkoutDomains, ...lpDomains, 'pay.hotmart.com', 'go.hotmart.com'].filter(Boolean))
   )
-  const targetsJs = targets.map(d => `    '${d}'`).join(',\n')
+  const targetsJs = targets.map(d => `    ${JSON.stringify(d)}`).join(',\n')
   return `<script>
 (function () {
   // Repassa fbclid/utm_* (e sck/src/xcod da Hotmart) de página em página do
@@ -65,11 +65,20 @@ ${targetsJs}
     return merged;
   }
 
+  // Segurança: encodeURIComponent deixa passar ' ( ) ! *, e o link é
+  // reescrito dentro de onclick="...". Sem isso, um link com
+  // ?utm_source=x'-alert(1)-' rodaria código na página do cliente.
+  function strictEncode(value) {
+    return encodeURIComponent(String(value)).replace(/[!'()*]/g, function (c) {
+      return '%' + c.charCodeAt(0).toString(16).toUpperCase();
+    });
+  }
+
   function buildQueryString(params) {
     var parts = [];
     Object.keys(params).forEach(function (key) {
       if (params[key]) {
-        parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(params[key]));
+        parts.push(strictEncode(key) + '=' + strictEncode(params[key]));
       }
     });
     return parts.join('&');

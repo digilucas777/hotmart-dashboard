@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { getAuthenticatedUser } from '@/app/api/meta/_utils'
 import { canManageTracking } from '@/app/api/track/_utils'
 import { encryptSecret } from '@/lib/crypto'
+import { isValidHostname } from '@/lib/security/safeFetch'
 import { mapInstallationRow, type InstallationRow } from '@/lib/track/mapRow'
 import type {
   TrackDomainInput,
@@ -35,6 +36,18 @@ export async function POST(request: Request) {
     if (!VALID_DOMAIN_TIPOS.includes(d.tipo)) {
       return NextResponse.json({ error: `tipo de domínio inválido: ${d.tipo}` }, { status: 400 })
     }
+    const cleaned = String(d.domain ?? '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+    if (!isValidHostname(cleaned)) {
+      return NextResponse.json({ error: `domínio inválido: ${String(d.domain ?? '').slice(0, 80)} (use só o domínio, ex: minhaloja.com.br)` }, { status: 400 })
+    }
+    d.domain = cleaned
+  }
+  const workerSub = body.worker_subdomain?.trim().toLowerCase()
+  if (workerSub && !isValidHostname(workerSub)) {
+    return NextResponse.json({ error: 'subdomínio do Worker inválido (ex: track.minhaloja.com.br)' }, { status: 400 })
+  }
+  if ((body.nome ?? '').length > 120) {
+    return NextResponse.json({ error: 'nome muito longo' }, { status: 400 })
   }
   for (const t of body.triggers ?? []) {
     if (!VALID_TRIGGER_TIPOS.includes(t.tipo)) {
@@ -44,7 +57,7 @@ export async function POST(request: Request) {
 
   const installationFields: Record<string, unknown> = {
     nome: body.nome.trim(),
-    worker_subdomain: body.worker_subdomain?.trim() || null,
+    worker_subdomain: workerSub || null,
     webhook_meta_event: body.webhook_meta_event?.trim() || 'Purchase',
     session_enrichment_enabled: !!body.session_enrichment_enabled,
     session_ttl_days: body.session_ttl_days ?? 7,

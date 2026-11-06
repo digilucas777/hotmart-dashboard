@@ -41,11 +41,58 @@ function handleSnippet(request, env) {
   })
 }
 
+export function hostFromOrigin(value) {
+  try { return new URL(value).hostname.toLowerCase() } catch { return '' }
+}
+
+// Segurança: antes era "a origem contém o domínio", o que deixava passar
+// cliente.com.site-do-atacante.net. Agora o host tem que ser exatamente o
+// domínio cadastrado ou um subdomínio dele. Sem domínio cadastrado, nega.
+export function isHostAllowed(host, domains) {
+  if (!host || !Array.isArray(domains) || domains.length === 0) return false
+  return domains.some(raw => {
+    const d = String(raw || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '')
+    if (!d) return false
+    return host === d || host.endsWith('.' + d)
+  })
+}
+
 function isOriginAllowed(request, env) {
   const domains = parseEnvJson(env.DOMAINS_JSON, [])
-  if (domains.length === 0) return true
   const origin = request.headers.get('Origin') || request.headers.get('Referer') || ''
-  return domains.some(domain => origin.includes(domain))
+  return isHostAllowed(hostFromOrigin(origin), domains)
+}
+
+// Eventos que o navegador pode mandar: os padrão do script + os que o próprio
+// cliente configurou nos gatilhos. Qualquer outro nome (ex: um Purchase
+// forjado via curl) é recusado, a venda de verdade vem só pelo webhook.
+const BASE_BROWSER_EVENTS = ['PageView', 'ViewContent', 'InitiateCheckout', 'AddToCart', 'Lead']
+export function allowedBrowserEvents(env) {
+  const triggers = parseEnvJson(env.TRIGGERS_JSON, [])
+  return new Set([...BASE_BROWSER_EVENTS, ...triggers.map(t => t && t.meta_event).filter(Boolean)])
+}
+
+const MAX_BODY_BYTES = 16 * 1024
+async function readJsonCapped(request) {
+  const len = Number(request.headers.get('Content-Length') || 0)
+  if (len > MAX_BODY_BYTES) return null
+  const text = await request.text().catch(() => '')
+  if (!text || text.length > MAX_BODY_BYTES) return null
+  try { return JSON.parse(text) } catch { return null }
+}
+
+// Comparação que não vaza, pelo tempo de resposta, quantos caracteres batem.
+export async function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) return false
+  const enc = new TextEncoder()
+  const [ha, hb] = await Promise.all([
+    crypto.subtle.digest('SHA-256', enc.encode(a)),
+    crypto.subtle.digest('SHA-256', enc.encode(b)),
+  ])
+  const x = new Uint8Array(ha), y = new Uint8Array(hb)
+  let diff = 0
+  for (let i = 0; i < x.length; i++) diff |= x[i] ^ y[i]
+  return diff === 0
 }
 
 // Cloudflare já entrega a geolocalização do visitante de graça em toda
@@ -149,8 +196,12 @@ async function handleCollect(request, env, ctx) {
   const cors = corsHeaders(request, env)
   if (!isOriginAllowed(request, env)) return json({ error: 'origin not allowed' }, 403, cors)
 
-  const body = await request.json().catch(() => null)
+  const body = await readJsonCapped(request)
   if (!body || !body.event_name || !body.session_id) return json({ error: 'invalid payload' }, 400, cors)
+  if (typeof body.event_name !== 'string' || !allowedBrowserEvents(env).has(body.event_name)) {
+    return json({ error: 'event not allowed' }, 400, cors)
+  }
+  if (typeof body.session_id !== 'string' || body.session_id.length > 128) return json({ error: 'invalid payload' }, 400, cors)
 
   const pixels = parseEnvJson(env.PIXELS_JSON, [])
   if (pixels.length === 0) return json({ error: 'no pixels configured' }, 500, cors)
@@ -203,9 +254,13 @@ async function handleCollect(request, env, ctx) {
       }
 
       const email = body.params && body.params.email
-      if (email) {
+      if (email && typeof email === 'string' && email.length <= 254) {
         const emailHash = await sha256Hex(email)
-        await env.SESSIONS.put(`email:${emailHash}`, JSON.stringify(sessionData), { expirationTtl: ttlSeconds })
+        const emailKey = `email:${emailHash}`
+        // Grava só se ainda não existe: senão bastaria mandar o e-mail de
+        // outra pessoa com o seu fbc pra roubar a atribuição da compra dela.
+        const already = await env.SESSIONS.get(emailKey)
+        if (!already) await env.SESSIONS.put(emailKey, JSON.stringify(sessionData), { expirationTtl: ttlSeconds })
       }
     } catch (err) {
       if (env.DIAGNOSTICO_ATIVO === 'true') {
@@ -297,8 +352,9 @@ async function handleMonitor(request, env, ctx) {
   const cors = corsHeaders(request, env)
   if (!isOriginAllowed(request, env)) return json({ error: 'origin not allowed' }, 403, cors)
 
-  const body = await request.json().catch(() => null)
+  const body = await readJsonCapped(request)
   if (!body || !body.event_name || !body.session_id) return json({ error: 'invalid payload' }, 400, cors)
+  if (typeof body.event_name !== 'string' || body.event_name.length > 64) return json({ error: 'invalid payload' }, 400, cors)
 
   const ip = request.headers.get('CF-Connecting-IP') || ''
   const geo = extractGeo(request)
@@ -320,10 +376,17 @@ async function handleMonitor(request, env, ctx) {
 }
 
 async function handleHotmartWebhook(request, env, ctx) {
+  if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405)
   const url = new URL(request.url)
-  if (url.searchParams.get('secret') !== env.WEBHOOK_SECRET) return json({ error: 'unauthorized' }, 401)
+  if (!(await safeEqual(url.searchParams.get('secret') || '', env.WEBHOOK_SECRET || ''))) return json({ error: 'unauthorized' }, 401)
+  // Segundo fator: o "hottok" que a Hotmart manda no cabeçalho de todo
+  // webhook. Quando o cliente cadastrou o dele, sem ele a venda é recusada,
+  // mesmo que alguém tenha descoberto a URL.
+  if (env.HOTMART_HOTTOK && !(await safeEqual(request.headers.get('X-HOTMART-HOTTOK') || '', env.HOTMART_HOTTOK))) {
+    return json({ error: 'unauthorized' }, 401)
+  }
 
-  const body = await request.json().catch(() => null)
+  const body = await readJsonCapped(request)
   if (!body || body.event !== 'PURCHASE_APPROVED') return json({ ok: true, ignored: true })
 
   const buyer = body.data?.buyer || {}

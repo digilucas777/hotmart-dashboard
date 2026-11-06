@@ -129,7 +129,7 @@ test('POST /monitor avisa o dashboard (source: pixel) e NUNCA chama a Meta', asy
     assert.equal(res.status, 200)
     await Promise.all(ctx._tasks)
 
-    assert.equal(calls.length, 1, 'só devia ter UMA chamada de fetch (o ingest) — nenhuma pra graph.facebook.com')
+    assert.equal(calls.length, 1, 'só devia ter UMA chamada de fetch (o ingest), nenhuma pra graph.facebook.com')
     assert.doesNotMatch(calls[0].url, /graph\.facebook\.com/)
     const ingestBody = JSON.parse(calls[0].init.body)
     assert.equal(ingestBody.event_name, 'InitiateCheckout')
@@ -339,7 +339,7 @@ test('POST /collect mantém outros campos de params (não relacionados a identid
     return new Response('{}', { status: 200 })
   }
   try {
-    const env = makeEnv()
+    const env = makeEnv({ TRIGGERS_JSON: JSON.stringify([{ tipo: 'video', meta_event: 'VideoProgress', config: {} }]) })
     const req = new Request('https://sinal.teste.com/collect', {
       method: 'POST',
       headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json' },
@@ -410,7 +410,7 @@ test('webhook da Hotmart prioriza o cruzamento pelo sck (link de checkout) sobre
   try {
     const env = makeEnv()
     // Sessão salva pelo sid (via decorador do link de checkout) tem um fbp
-    // diferente da sessão salva por e-mail — o teste confirma que o sck vence.
+    // diferente da sessão salva por e-mail, o teste confirma que o sck vence.
     await env.SESSIONS.put('sid:sess-abc', JSON.stringify({ fbp: 'fb.1.333', fbc: null, ip: '9.9.9.9', userAgent: 'ua-sck', geo: { city: 'Paris', country: 'FR' } }))
     const emailHash = await sha256Hex('joao@exemplo.com')
     await env.SESSIONS.put('email:' + emailHash, JSON.stringify({ fbp: 'fb.1.222', fbc: null, ip: '1.2.3.4', userAgent: 'ua-email' }))
@@ -444,7 +444,7 @@ test('webhook da Hotmart usa fbp/fbc que vieram direto no link de checkout quand
   }
   try {
     const env = makeEnv()
-    // propositalmente NÃO grava nada em env.SESSIONS pro sck "sess-orfao" —
+    // propositalmente NÃO grava nada em env.SESSIONS pro sck "sess-orfao" -
     // simula o bloqueador de rede que impediu a chamada /collect de salvar.
     const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo123', {
       method: 'POST',
@@ -1008,7 +1008,7 @@ test('webhook da Hotmart MANDA pra Meta quando REQUIRE_TRACKER_SRC está ligado 
   }
 })
 
-test('webhook da Hotmart MANDA pra Meta quando REQUIRE_TRACKER_SRC está ligado, o src veio vazio, mas a sessão bateu pelo sck (venda real de anúncio — achado em produção: Francês perdeu vendas rastreadas porque origin.src às vezes vem vazio mesmo com sck e fbp/fbc reais)', async () => {
+test('webhook da Hotmart MANDA pra Meta quando REQUIRE_TRACKER_SRC está ligado, o src veio vazio, mas a sessão bateu pelo sck (venda real de anúncio, achado em produção: Francês perdeu vendas rastreadas porque origin.src às vezes vem vazio mesmo com sck e fbp/fbc reais)', async () => {
   const originalFetch = globalThis.fetch
   const calls = []
   globalThis.fetch = async (url, init) => {
@@ -1025,7 +1025,7 @@ test('webhook da Hotmart MANDA pra Meta quando REQUIRE_TRACKER_SRC está ligado,
         event: 'PURCHASE_APPROVED',
         data: {
           buyer: { name: 'Sessao Sem Src', email: 'semsrc@exemplo.com' },
-          // origin.src ausente (não null explícito, o campo nem existe) — exatamente o
+          // origin.src ausente (não null explícito, o campo nem existe), exatamente o
           // formato real que a Hotmart manda quando o checkout daquela página não tinha
           // um "src" prévio pro nosso decorador colar o sufixo "-tracker".
           purchase: { transaction: 'HP-SEM-SRC', price: { value: 97, currency_value: 'BRL' }, origin: { sck: 'sess-sem-src' } },
@@ -1100,7 +1100,7 @@ test('webhook da Hotmart NÃO manda pra Meta quando PURCHASE_PRODUCT_IDS_JSON te
     assert.equal(res.status, 200)
     await Promise.all(ctx._tasks)
 
-    assert.equal(calls.filter(c => c.url.includes('graph.facebook.com')).length, 0, 'não devia mandar pra Meta — produto fora da lista')
+    assert.equal(calls.filter(c => c.url.includes('graph.facebook.com')).length, 0, 'não devia mandar pra Meta, produto fora da lista')
     const ingestCall = calls.find(c => c.url === env.INGEST_URL)
     assert.ok(ingestCall, 'ainda devia aparecer no nosso painel')
     const ingestBody = JSON.parse(ingestCall.init.body)
@@ -1135,7 +1135,7 @@ test('webhook da Hotmart MANDA pra Meta quando PURCHASE_PRODUCT_IDS_JSON tem pro
     assert.equal(res.status, 200)
     await Promise.all(ctx._tasks)
 
-    assert.equal(calls.filter(c => c.url.includes('graph.facebook.com')).length, 1, 'devia mandar pra Meta — produto principal')
+    assert.equal(calls.filter(c => c.url.includes('graph.facebook.com')).length, 1, 'devia mandar pra Meta, produto principal')
     const ingestCall = calls.find(c => c.url === env.INGEST_URL)
     const ingestBody = JSON.parse(ingestCall.init.body)
     assert.equal(ingestBody.source, 'capi')
@@ -1203,7 +1203,7 @@ test('sendToMeta tenta de novo quando a Meta responde erro 5xx (instabilidade pa
   }
 })
 
-test('webhook da Hotmart marca capi_send_ok:false no ingest quando a Meta rejeita definitivamente (ex: token inválido) — hoje isso ficava invisível, sempre marcado como enviado', async () => {
+test('webhook da Hotmart marca capi_send_ok:false no ingest quando a Meta rejeita definitivamente (ex: token inválido), hoje isso ficava invisível, sempre marcado como enviado', async () => {
   const originalFetch = globalThis.fetch
   const calls = []
   globalThis.fetch = async (url, init) => {
@@ -1264,7 +1264,7 @@ test('webhook da Hotmart marca capi_send_ok:true no ingest quando a Meta aceita,
   }
 })
 
-test('webhook da Hotmart não marca capi_send_ok (fica null/ausente) quando a venda nem foi enviada por causa do REQUIRE_TRACKER_SRC — capi_send_ok só faz sentido pra quem foi de fato tentado', async () => {
+test('webhook da Hotmart não marca capi_send_ok (fica null/ausente) quando a venda nem foi enviada por causa do REQUIRE_TRACKER_SRC, capi_send_ok só faz sentido pra quem foi de fato tentado', async () => {
   const originalFetch = globalThis.fetch
   const calls = []
   globalThis.fetch = async (url, init) => {
@@ -1348,4 +1348,63 @@ test('POST /collect marca capi_send_ok:false quando a Meta rejeita o PageView (h
   } finally {
     globalThis.fetch = originalFetch
   }
+})
+
+
+// ---------- testes de segurança (ataques simulados) ----------
+function collectReq(origin, body) {
+  return new Request('https://sinal.teste.com/collect', {
+    method: 'POST',
+    headers: { Origin: origin, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+test('ataque: origem falsa que só CONTÉM o domínio do cliente é recusada', async () => {
+  const res = await worker.fetch(collectReq('https://minhalp.com.br.site-do-atacante.net', { event_name: 'PageView', session_id: 's1' }), makeEnv())
+  assert.equal(res.status, 403)
+})
+
+test('subdomínio de verdade do cliente continua aceito', async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response('{}', { status: 200 })
+  try {
+    const res = await worker.fetch(collectReq('https://www.minhalp.com.br', { event_name: 'PageView', session_id: 's1' }), makeEnv())
+    assert.notEqual(res.status, 403)
+  } finally { globalThis.fetch = originalFetch }
+})
+
+test('ataque: sem domínio cadastrado, ninguém consegue mandar evento', async () => {
+  const res = await worker.fetch(collectReq('https://qualquer.com', { event_name: 'PageView', session_id: 's1' }), makeEnv({ DOMAINS_JSON: '[]' }))
+  assert.equal(res.status, 403)
+})
+
+test('ataque: Purchase forjado pelo /collect é recusado (venda só vem pelo webhook)', async () => {
+  let called = false
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => { called = true; return new Response('{}', { status: 200 }) }
+  try {
+    const res = await worker.fetch(collectReq('https://minhalp.com.br', { event_name: 'Purchase', session_id: 's1', params: { value: 99999, currency: 'BRL' } }), makeEnv())
+    assert.equal(res.status, 400)
+    assert.equal(called, false)
+  } finally { globalThis.fetch = originalFetch }
+})
+
+test('ataque: corpo gigante (tentativa de encher o banco) é recusado', async () => {
+  const res = await worker.fetch(collectReq('https://minhalp.com.br', { event_name: 'PageView', session_id: 's1', lixo: 'x'.repeat(20000) }), makeEnv())
+  assert.equal(res.status, 400)
+})
+
+test('ataque: webhook com GET é recusado', async () => {
+  const res = await worker.fetch(new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo'), makeEnv({ WEBHOOK_SECRET: 'segredo' }))
+  assert.equal(res.status, 405)
+})
+
+test('ataque: webhook com segredo certo mas sem o hottok da Hotmart é recusado quando o hottok está configurado', async () => {
+  const req = new Request('https://sinal.teste.com/webhook/hotmart?secret=segredo', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event: 'PURCHASE_APPROVED', data: {} }),
+  })
+  const res = await worker.fetch(req, makeEnv({ WEBHOOK_SECRET: 'segredo', HOTMART_HOTTOK: 'hottok-real' }))
+  assert.equal(res.status, 401)
 })
