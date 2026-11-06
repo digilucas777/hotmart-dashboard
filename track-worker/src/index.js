@@ -2,7 +2,7 @@ import { sha256Hex } from './hash.js'
 import { buildSnippet } from './snippet.js'
 import { normalizePhone } from './phone.js'
 
-const WORKER_VERSION = '1.2.0'
+const WORKER_VERSION = '1.3.0'
 
 function json(data, status = 200, extraHeaders) {
   return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...extraHeaders } })
