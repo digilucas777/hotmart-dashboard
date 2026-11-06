@@ -119,6 +119,9 @@ export async function POST(request: Request) {
         }))),
       },
       { type: 'secret_text', name: 'WEBHOOK_SECRET', text: installation.webhook_secret },
+      ...(installation.hotmart_hottok_encrypted
+        ? [{ type: 'secret_text' as const, name: 'HOTMART_HOTTOK', text: decryptSecret(installation.hotmart_hottok_encrypted).trim() }]
+        : []),
       { type: 'plain_text', name: 'DOMAINS_JSON', text: JSON.stringify(lpDomains) },
       { type: 'plain_text', name: 'CHECKOUT_DOMAINS_JSON', text: JSON.stringify(checkoutDomains) },
       { type: 'plain_text', name: 'TRIGGERS_JSON', text: JSON.stringify(installation.track_triggers ?? []) },

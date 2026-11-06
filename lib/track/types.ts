@@ -35,6 +35,7 @@ export type TrackInstallation = {
   nome: string
   worker_subdomain: string | null
   cloudflare_api_token_masked: string | null
+  hotmart_hottok_masked: string | null
   webhook_platform: string
   webhook_meta_event: string
   webhook_secret: string
@@ -78,6 +79,7 @@ export type TrackInstallationSaveInput = {
   nome: string
   worker_subdomain?: string | null
   cloudflare_api_token?: string
+  hotmart_hottok?: string
   webhook_meta_event?: string
   session_enrichment_enabled?: boolean
   session_ttl_days?: number

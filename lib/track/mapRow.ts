@@ -27,6 +27,7 @@ export type InstallationRow = {
   nome: string
   worker_subdomain: string | null
   cloudflare_api_token_encrypted: string | null
+  hotmart_hottok_encrypted?: string | null
   webhook_platform: string
   webhook_meta_event: string
   webhook_secret: string
@@ -74,6 +75,7 @@ export function mapInstallationRow(row: InstallationRow): TrackInstallation {
     nome: row.nome,
     worker_subdomain: row.worker_subdomain,
     cloudflare_api_token_masked: maskEncrypted(row.cloudflare_api_token_encrypted),
+    hotmart_hottok_masked: maskEncrypted(row.hotmart_hottok_encrypted),
     webhook_platform: row.webhook_platform,
     webhook_meta_event: row.webhook_meta_event,
     webhook_secret: row.webhook_secret,

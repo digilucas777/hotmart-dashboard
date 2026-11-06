@@ -133,6 +133,8 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
   const [cloudflareToken, setCloudflareToken] = useState('')
   const [hasCloudflareToken, setHasCloudflareToken] = useState(false)
   const [showCloudflareToken, setShowCloudflareToken] = useState(false)
+  const [hottok, setHottok] = useState('')
+  const [hasHottok, setHasHottok] = useState(false)
   const [pixels, setPixels] = useState<PixelForm[]>([emptyPixel()])
   const [lpDomains, setLpDomains] = useState<DomainForm[]>([emptyDomain('lp')])
   const [checkoutDomains, setCheckoutDomains] = useState<DomainForm[]>([])
@@ -169,6 +171,8 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
       setWorkerSubdomain(installation.worker_subdomain ?? '')
       setCloudflareToken('')
       setHasCloudflareToken(!!installation.cloudflare_api_token_masked)
+      setHasHottok(!!installation.hotmart_hottok_masked)
+      setHottok('')
       setPixels(installation.pixels.length > 0
         ? installation.pixels.map(p => ({
             _key: nextKey(), id: p.id, pixel_id: p.pixel_id, capi_token: '',
@@ -193,6 +197,8 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
       setWorkerSubdomain('')
       setCloudflareToken('')
       setHasCloudflareToken(false)
+      setHasHottok(false)
+      setHottok('')
       setPixels([emptyPixel()])
       setLpDomains([emptyDomain('lp')])
       setCheckoutDomains([])
@@ -230,6 +236,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
         nome: nome.trim(),
         worker_subdomain: workerSubdomain.trim() || null,
         cloudflare_api_token: cloudflareToken.trim() || undefined,
+        hotmart_hottok: hottok.trim() || undefined,
         webhook_meta_event: webhookMetaEvent,
         session_enrichment_enabled: sessionEnrichment,
         session_ttl_days: sessionTtlDays,
@@ -575,6 +582,24 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
           <div>
             <label className={labelClass}>Plataforma</label>
             <input type="text" value="Hotmart" disabled className={`${inputClass} opacity-60`} style={inputStyle} />
+          </div>
+          <div>
+            <label className={labelClass}>Hottok da Hotmart (recomendado, aumenta a segurança)</label>
+            <input
+              type="password"
+              value={hottok}
+              onChange={e => setHottok(e.target.value)}
+              placeholder={hasHottok ? '•••• já salvo, deixe em branco pra manter' : 'Hotmart → Ferramentas → Webhook → copie o hottok'}
+              className={inputClass}
+              style={inputStyle}
+              autoComplete="new-password"
+              data-lpignore="true"
+              data-1p-ignore="true"
+              data-bwignore="true"
+            />
+            <p className="mt-1 text-[11px] text-slate-600">
+              Com o hottok salvo, o robô só aceita venda que venha mesmo da Hotmart. Sem ele, quem descobrir a URL do webhook conseguiria mandar venda falsa. Depois de salvar, faça o deploy de novo.
+            </p>
           </div>
           <div>
             <label className={labelClass}>Evento Meta a disparar</label>

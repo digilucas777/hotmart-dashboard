@@ -82,6 +82,13 @@ export async function POST(request: Request) {
     }
     installationFields.cloudflare_api_token_encrypted = encryptSecret(cloudflareToken)
   }
+  if (body.hotmart_hottok && body.hotmart_hottok.trim()) {
+    const hottok = body.hotmart_hottok.trim()
+    if (hottok.length < 10 || hottok.length > 200) {
+      return NextResponse.json({ error: 'o hottok da Hotmart colado não parece válido' }, { status: 400 })
+    }
+    installationFields.hotmart_hottok_encrypted = encryptSecret(hottok)
+  }
 
   let installationId = body.id
 
