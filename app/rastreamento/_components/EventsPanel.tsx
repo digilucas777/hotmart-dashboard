@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ChevronDown, ChevronRight, ListTree } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
 
 type RecentEvent = {
@@ -26,19 +26,6 @@ type RecentEvent = {
   src: string | null
 }
 
-type Summary = {
-  counts_today: Record<string, number>
-  resumido?: boolean
-  coverage_today: {
-    total: number
-    with_fbp_pct: number | null
-    with_fbc_pct: number | null
-    purchase_session_matched_pct: number | null
-  }
-  vendas_trackeadas: number
-  vendas_nao_trackeadas: number
-}
-
 type EventName = 'PageView' | 'ViewContent' | 'AddToCart' | 'InitiateCheckout' | 'Purchase'
 
 type SectionState = {
@@ -56,6 +43,14 @@ type SectionState = {
 const EVENT_TYPES: EventName[] = ['Purchase', 'InitiateCheckout', 'AddToCart', 'ViewContent', 'PageView']
 const PAGE_SIZE = 50
 
+const EVENT_LABEL: Record<string, string> = {
+  PageView: 'Visitas',
+  ViewContent: 'Rolaram a página',
+  AddToCart: 'Clicaram em comprar',
+  InitiateCheckout: 'Foram pro checkout',
+  Purchase: 'Vendas',
+}
+
 const EVENT_ICON: Record<string, string> = {
   PageView: '👁️',
   ViewContent: '📄',
@@ -63,8 +58,6 @@ const EVENT_ICON: Record<string, string> = {
   InitiateCheckout: '🛒',
   Purchase: '💰',
 }
-
-const REFRESH_INTERVAL_MS = 10_000
 
 function relativeTime(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime()
@@ -86,38 +79,6 @@ function exactTime(iso: string): string {
     day: '2-digit', month: '2-digit', year: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit',
   })
-}
-
-function toLocalDateKey(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-// Últimos 14 dias (mesmo período de retenção) — o usuário escolhe qual dia
-// carregar em vez de um limite fixo de linhas.
-function dateOptions(): { value: string; label: string }[] {
-  const now = new Date()
-  const opts: { value: string; label: string }[] = []
-  for (let i = 0; i < 14; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
-    const value = toLocalDateKey(d)
-    const label = i === 0
-      ? 'Hoje'
-      : i === 1
-        ? 'Ontem'
-        : d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })
-    opts.push({ value, label })
-  }
-  return opts
-}
-
-function dayRangeToISO(dateKey: string): { start: string; end: string } {
-  const [y, m, d] = dateKey.split('-').map(Number)
-  const start = new Date(y, m - 1, d, 0, 0, 0, 0)
-  const end = new Date(y, m - 1, d + 1, 0, 0, 0, 0)
-  return { start: start.toISOString(), end: end.toISOString() }
 }
 
 // A Meta manda "NOME_DO_ANUNCIO|ID_DO_ANUNCIO" em utm_content (mesmo padrão de
@@ -153,23 +114,6 @@ function originLabel(e: RecentEvent): { label: string; className: string } {
   // "Direto/Orgânico" só porque faltou fbc/utm.
   if (e.src) return { label: `🏷️ ${e.src}`, className: 'text-teal-300' }
   return { label: '🌐 Direto/Orgânico', className: 'text-slate-400' }
-}
-
-function CoverageBar({ label, pct }: { label: string; pct: number | null }) {
-  return (
-    <div>
-      <div className="flex items-center justify-between text-[11px] text-slate-500">
-        <span>{label}</span>
-        <span className="font-semibold text-slate-300">{pct === null ? '—' : `${pct}%`}</span>
-      </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/10">
-        <div
-          className="h-full rounded-full bg-indigo-500"
-          style={{ width: `${pct ?? 0}%` }}
-        />
-      </div>
-    </div>
-  )
 }
 
 function EventRow({ e }: { e: RecentEvent }) {
@@ -248,7 +192,8 @@ function EventTypeSection({
       <button onClick={onToggle} className="flex w-full items-center justify-between px-3 py-2.5 text-left">
         <span className="flex items-center gap-2 text-sm font-medium text-slate-200">
           <span>{EVENT_ICON[eventName]}</span>
-          {eventName}
+          {EVENT_LABEL[eventName] ?? eventName}
+          <span className="text-[10.5px] font-normal text-slate-600">{eventName}</span>
           <span className="text-xs font-normal text-slate-500">({countBadge})</span>
           {section.loading && <Spinner size={12} />}
         </span>
@@ -264,7 +209,7 @@ function EventTypeSection({
             {section.error ? (
               <p className="text-xs text-red-300">{section.error}</p>
             ) : section.events === null ? null : section.events.length === 0 ? (
-              <p className="text-xs text-slate-600">Nenhum evento nesse dia.</p>
+              <p className="text-xs text-slate-600">Nenhum evento nesse período.</p>
             ) : (
               section.events.map((e, i) => <EventRow key={i} e={e} />)
             )}
@@ -298,57 +243,35 @@ function makeInitialSections(): Record<EventName, SectionState> {
   }
 }
 
-export function EventsPanel({ installationId }: { installationId: string }) {
-  const [summary, setSummary] = useState<Summary | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [selectedDate, setSelectedDate] = useState<string>(() => toLocalDateKey(new Date()))
+// Lista de eventos um por um, no período escolhido no topo do painel. Cada
+// tipo abre numa seção com rolagem própria e "carregar mais".
+export function EventExplorer({ installationId, start, end, counts, refreshTick }: {
+  installationId: string
+  start: string
+  end: string
+  counts: Record<string, number>
+  refreshTick: number
+}) {
   const [sections, setSections] = useState<Record<EventName, SectionState>>(makeInitialSections)
-  const [manualRefreshing, setManualRefreshing] = useState(false)
-  const isMountedRef = useRef(true)
-  const selectedDateRef = useRef(selectedDate)
   const sectionsRef = useRef(sections)
+  const aliveRef = useRef(true)
 
   useEffect(() => { sectionsRef.current = sections }, [sections])
+  useEffect(() => {
+    aliveRef.current = true
+    return () => { aliveRef.current = false }
+  }, [])
 
-  async function load(showSpinner: boolean, dateKey: string = selectedDateRef.current) {
-    if (showSpinner) setLoading(true)
-    setError(null)
-    const { start, end } = dayRangeToISO(dateKey)
-    const params = new URLSearchParams({ installation_id: installationId, start, end })
-    const res = await fetch(`/api/track/events/summary?${params.toString()}`)
-    const json = await res.json().catch(() => ({}))
-    if (!isMountedRef.current) return
-    // Mesma proteção do fetchSection: se a data já mudou de novo enquanto
-    // essa resposta estava a caminho, descarta.
-    if (dateKey !== selectedDateRef.current) return
-    if (!res.ok) {
-      setError(json?.error || 'Não foi possível carregar os eventos.')
-      setLoading(false)
-      return
-    }
-    setSummary(json)
-    setLoading(false)
-  }
-
-  // append=false busca a 1ª página (troca a lista); append=true busca a
-  // próxima e acrescenta ("carregar mais"). limit é sobrescrito só no
-  // refresh automático, pra atualizar exatamente o que já tava carregado
-  // sem resetar o "carregar mais" que o usuário já tinha clicado.
-  async function fetchSection(eventName: EventName, dateKey: string, offset: number, append: boolean, limit: number = PAGE_SIZE) {
-    setSections(prev => ({ ...prev, [eventName]: { ...prev[eventName], loading: !append, loadingMore: append, error: null } }))
-    const { start, end } = dayRangeToISO(dateKey)
+  // silent = atualização automática: não mostra carregando, só troca a lista.
+  const fetchSection = useCallback(async (eventName: EventName, offset: number, append: boolean, limit: number = PAGE_SIZE, silent = false) => {
+    if (!silent) setSections(prev => ({ ...prev, [eventName]: { ...prev[eventName], loading: !append, loadingMore: append, error: null } }))
     const params = new URLSearchParams({
       installation_id: installationId, event_name: eventName, start, end,
       limit: String(limit), offset: String(offset),
     })
     const res = await fetch(`/api/track/events/list?${params.toString()}`)
     const json = await res.json().catch(() => ({}))
-    if (!isMountedRef.current) return
-    // Se a data já mudou de novo enquanto essa resposta estava a caminho,
-    // descarta — senão uma resposta lenta do dia anterior pode sobrescrever
-    // a seção com dados do dia errado.
-    if (dateKey !== selectedDateRef.current) return
+    if (!aliveRef.current) return
     if (!res.ok) {
       setSections(prev => ({ ...prev, [eventName]: { ...prev[eventName], loading: false, loadingMore: false, error: json?.error || 'Não foi possível carregar os eventos.' } }))
       return
@@ -366,173 +289,49 @@ export function EventsPanel({ installationId }: { installationId: string }) {
         hasMore: Boolean(json.hasMore),
       },
     }))
-  }
+  }, [installationId, start, end])
+
+  // Painel ao vivo: a cada atualização do topo, refaz as seções abertas
+  // mantendo o tanto que já estava carregado.
+  useEffect(() => {
+    if (refreshTick === 0) return
+    EVENT_TYPES.forEach(ev => {
+      const sec = sectionsRef.current[ev]
+      if (sec.open) void fetchSection(ev, 0, false, sec.events?.length || PAGE_SIZE, true)
+    })
+  }, [refreshTick, fetchSection])
 
   function toggleSection(eventName: EventName) {
     const current = sections[eventName]
     const willOpen = !current.open
     setSections(prev => ({ ...prev, [eventName]: { ...prev[eventName], open: willOpen } }))
-    if (willOpen && current.events === null) void fetchSection(eventName, selectedDate, 0, false)
+    if (willOpen && current.events === null) void fetchSection(eventName, 0, false)
   }
 
   function loadMore(eventName: EventName) {
     const current = sections[eventName]
     if (current.loadingMore || !current.hasMore) return
-    void fetchSection(eventName, selectedDate, current.offset, true)
+    void fetchSection(eventName, current.offset, true)
   }
-
-  function handleDateChange(newDate: string) {
-    setSelectedDate(newDate)
-    selectedDateRef.current = newDate
-    void load(true, newDate)
-    EVENT_TYPES.forEach(ev => {
-      if (sections[ev].open) void fetchSection(ev, newDate, 0, false)
-    })
-  }
-
-  // Botão "Atualizar": antes só recarregava os contadores do topo — agora
-  // também refaz toda seção já aberta (mantendo o tanto que já tava
-  // carregado), num clique só, em vez de precisar fechar/reabrir a setinha
-  // pra ver dado novo ali.
-  async function handleManualRefresh() {
-    setManualRefreshing(true)
-    try {
-      await Promise.all([
-        load(true),
-        ...EVENT_TYPES
-          .filter(ev => sections[ev].open)
-          .map(ev => fetchSection(ev, selectedDate, 0, false, sections[ev].events?.length || PAGE_SIZE)),
-      ])
-    } finally {
-      setManualRefreshing(false)
-    }
-  }
-
-  useEffect(() => {
-    isMountedRef.current = true
-    void load(true)
-    // Painel "ao vivo": atualiza sozinho enquanto estiver aberto, sem precisar
-    // clicar em Atualizar toda hora — só quando a data selecionada é hoje,
-    // já que um dia passado é histórico e não muda mais. O refresh mantém o
-    // tamanho da página que já tava carregada (não desfaz o "carregar mais").
-    const interval = setInterval(() => {
-      const today = toLocalDateKey(new Date())
-      if (selectedDateRef.current !== today) return
-      void load(false)
-      EVENT_TYPES.forEach(ev => {
-        const sec = sectionsRef.current[ev]
-        if (sec.open) void fetchSection(ev, selectedDateRef.current, 0, false, sec.events?.length || PAGE_SIZE)
-      })
-    }, REFRESH_INTERVAL_MS)
-    return () => {
-      isMountedRef.current = false
-      clearInterval(interval)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [installationId])
-
-  if (loading) return <div className="flex justify-center py-6"><Spinner size={18} /></div>
-  if (error) return <p className="py-3 text-xs text-red-300">{error}</p>
-  if (!summary) return null
-
-  const isToday = selectedDate === toLocalDateKey(new Date())
-  const selectedDateLabel = dateOptions().find(o => o.value === selectedDate)?.label ?? selectedDate
 
   return (
-    <div className="space-y-4 border-t border-white/10 pt-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          {isToday ? (
-            <>
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
-              </span>
-              Ao vivo — hoje
-            </>
-          ) : (
-            <>
-              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-slate-600" />
-              Resumo — {selectedDateLabel}
-            </>
-          )}
-        </p>
-        <div className="flex items-center gap-2">
-          <select
-            value={selectedDate}
-            onChange={e => handleDateChange(e.target.value)}
-            className="rounded-md border border-white/10 px-2 py-1 text-xs text-slate-300"
-            style={{ background: '#111120' }}
-          >
-            {dateOptions().map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => void handleManualRefresh()}
-            disabled={manualRefreshing}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-indigo-300 ring-1 ring-indigo-500/30 transition-colors hover:bg-indigo-500/15 hover:text-indigo-100 disabled:opacity-60"
-            style={{ background: 'rgba(99,102,241,0.1)' }}
-          >
-            {manualRefreshing ? <Spinner size={13} /> : <RefreshCw size={13} />}
-            {manualRefreshing ? 'Atualizando...' : 'Atualizar'}
-          </button>
-        </div>
+    <div className="rounded-2xl border p-4 sm:p-5" style={{ background: '#151524', borderColor: 'rgba(255,255,255,0.07)' }}>
+      <div className="mb-4 flex items-center gap-2">
+        <ListTree size={14} className="text-indigo-400" />
+        <h3 className="text-[13px] font-semibold text-slate-200">Eventos um por um</h3>
+        <span className="text-[11px] text-slate-600">abra um tipo pra ver cada visita, clique e venda com origem, página e cidade</span>
       </div>
-
-      {summary.resumido && (
-        <div className="rounded-xl px-3 py-2 text-[11px] text-amber-200 ring-1 ring-amber-500/25" style={{ background: 'rgba(245,158,11,0.08)' }}>
-          Dia com mais de 45 dias: os totais continuam guardados, mas o detalhe de cada visita e clique já foi apagado pra não pesar o banco. As vendas ficam sempre.
-        </div>
-      )}
-
-      <div className="grid grid-cols-3 gap-2">
-        {EVENT_TYPES.map(ev => (
-          <div key={ev} className="rounded-xl p-3 text-center ring-1 ring-white/10" style={{ background: '#111120' }}>
-            <div className="text-lg">{EVENT_ICON[ev]}</div>
-            <div className="text-lg font-bold text-slate-100">{summary.counts_today[ev] ?? 0}</div>
-            <div className="text-[10px] text-slate-500">{ev}</div>
-          </div>
-        ))}
-      </div>
-
-      {(summary.vendas_trackeadas > 0 || summary.vendas_nao_trackeadas > 0) && (
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-xl p-3 text-center ring-1 ring-green-500/20" style={{ background: 'rgba(34,197,94,0.08)' }}>
-            <div className="text-lg font-bold text-green-400">{summary.vendas_trackeadas}</div>
-            <div className="text-[10px] text-green-300/70">Vendas trackeadas</div>
-          </div>
-          <div className="rounded-xl p-3 text-center ring-1 ring-amber-500/20" style={{ background: 'rgba(245,158,11,0.08)' }}>
-            <div className="text-lg font-bold text-amber-400">{summary.vendas_nao_trackeadas}</div>
-            <div className="text-[10px] text-amber-300/70" title="Venda registrada mas não enviada à Meta — filtrada pelo 'exigir -tracker no src' ou pela lista de produtos">
-              Vendas não trackeadas
-            </div>
-          </div>
-        </div>
-      )}
-
-      {summary.coverage_today.total > 0 && (
-        <div className="space-y-2.5 rounded-xl p-3 ring-1 ring-white/10" style={{ background: '#111120' }}>
-          <CoverageBar label="Eventos com fbp" pct={summary.coverage_today.with_fbp_pct} />
-          <CoverageBar label="Eventos com fbc" pct={summary.coverage_today.with_fbc_pct} />
-          <CoverageBar label="Purchase cruzado com sessão" pct={summary.coverage_today.purchase_session_matched_pct} />
-        </div>
-      )}
-
       <div className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Eventos</p>
-        <div className="space-y-2">
-          {EVENT_TYPES.map(eventName => (
-            <EventTypeSection
-              key={eventName}
-              eventName={eventName}
-              countBadge={summary.counts_today[eventName] ?? 0}
-              section={sections[eventName]}
-              onToggle={() => toggleSection(eventName)}
-              onLoadMore={() => loadMore(eventName)}
-            />
-          ))}
-        </div>
+        {EVENT_TYPES.map(eventName => (
+          <EventTypeSection
+            key={eventName}
+            eventName={eventName}
+            countBadge={counts[eventName] ?? 0}
+            section={sections[eventName]}
+            onToggle={() => toggleSection(eventName)}
+            onLoadMore={() => loadMore(eventName)}
+          />
+        ))}
       </div>
     </div>
   )
