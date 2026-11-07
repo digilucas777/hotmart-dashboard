@@ -27,6 +27,7 @@ type Lead = {
   produto: string | null
   valor: string | null
   moeda: string | null
+  dados_abandono?: boolean
 }
 type Status = 'comprou' | 'checkout' | 'abandonou' | 'carrinho' | 'engajou' | 'visitou'
 type Resposta = { contagem: Partial<Record<Status, number>> | null; total: number; leads: Lead[] }
@@ -298,6 +299,11 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
                     {l.nome || l.email ? (
                       <div className="min-w-0 space-y-0.5">
                         <p className="truncate font-semibold text-slate-100" title={l.nome ?? ''}>{l.nome ?? 'Sem nome'}</p>
+                        {l.dados_abandono && (
+                          <span className="inline-block rounded px-1.5 py-px text-[9.5px] font-semibold text-amber-300" style={{ background: 'rgba(245,158,11,0.12)' }} title="Dados do aviso de abandono de carrinho da Hotmart (chega 30 a 60 min depois), ligado a esta visita pelo produto, país e horário">
+                            dados do abandono (Hotmart)
+                          </span>
+                        )}
                         {l.email && <Copiavel texto={l.email} className="text-[11px] text-slate-400" />}
                         {l.telefone && <Copiavel texto={l.telefone} className="text-[11px] tabular-nums text-slate-400" />}
                       </div>
@@ -361,7 +367,7 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
         </div>
       )}
       <p className="border-t px-4 py-2.5 text-[10.5px] leading-snug text-slate-600 sm:px-5" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-        Nome, e-mail e telefone aparecem quando o lead compra (vêm do webhook da venda). O abandono que a Hotmart manda não traz o código da visita, então não dá pra ligar o nome dele a esta lista.
+        Nome, e-mail e telefone vêm da venda aprovada ou do aviso de abandono de carrinho da Hotmart, que chega 30 a 60 minutos depois. Como a Hotmart não manda o código da visita, o abandono é ligado pelo produto, país e horário, e só quando não há dúvida.
       </p>
     </div>
   )
