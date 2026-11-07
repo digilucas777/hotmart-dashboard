@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
-import { RefreshCw, ShoppingBag, Wallet, Receipt, Percent, SendHorizontal, Info, CalendarDays, Unlink } from 'lucide-react'
+import { RefreshCw, ShoppingBag, Wallet, Receipt, Percent, Info, CalendarDays, Unlink } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
 import { EventExplorer } from './EventsPanel'
 import { LeadsTable } from './LeadsTable'
@@ -484,7 +484,7 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
       )}
 
       {/* ---------- indicadores ---------- */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         <Kpi icon={<Wallet size={14} />} label="Faturamento" destaque rodape={calc.antMoedas.length > 0 && calc.moedas.length > 0
           ? <Variacao atual={calc.moedas[0].total} anterior={calc.antMoedas.find(m => m.moeda === calc.moedas[0].moeda)?.total ?? 0} />
           : undefined}>
@@ -503,17 +503,14 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
         <Kpi icon={<ShoppingBag size={14} />} label="Vendas" rodape={<Variacao atual={calc.nVendas} anterior={calc.antVendas} />}>
           <p className="text-3xl font-bold tabular-nums text-slate-50">{inteiro(calc.nVendas)}</p>
         </Kpi>
-        <Kpi icon={<Unlink size={14} />} label="Não rastreadas / sem UTM" alerta={calc.semUtm > 0} rodape={
-          <span className="text-[11px] text-slate-500">{inteiro(calc.semVisita)} sem achar a visita do anúncio</span>
+        <Kpi icon={<Unlink size={14} />} label="Vendas sem rastreio" alerta={calc.semUtm > 0 || calc.naoEnviadas > 0} rodape={
+          <span className="text-[11px] text-slate-500">
+            sem UTM do anúncio · {calc.naoEnviadas > 0 ? <b className="font-semibold text-amber-300">{inteiro(calc.naoEnviadas)} não enviada(s) ao Facebook</b> : 'todas enviadas ao Facebook'}
+          </span>
         }>
           <p className="text-3xl font-bold tabular-nums text-slate-50">
             {inteiro(calc.semUtm)}<span className="text-base font-medium text-slate-500"> / {inteiro(calc.nVendas)}</span>
           </p>
-        </Kpi>
-        <Kpi icon={<SendHorizontal size={14} />} label="Não enviadas ao Facebook" alerta={calc.naoEnviadas > 0} rodape={
-          <span className="text-[11px] text-slate-500">{inteiro(calc.nVendas - calc.naoEnviadas)} de {inteiro(calc.nVendas)} chegaram no Facebook</span>
-        }>
-          <p className="text-3xl font-bold tabular-nums text-slate-50">{inteiro(calc.naoEnviadas)}</p>
         </Kpi>
         <Kpi icon={<Receipt size={14} />} label="Ticket médio">
           {ticket.length === 0 ? (
