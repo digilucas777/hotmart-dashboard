@@ -4,9 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
-import { RefreshCw, ShoppingBag, Wallet, Receipt, Percent, Send, Info, CalendarDays } from 'lucide-react'
+import { RefreshCw, ShoppingBag, Wallet, Receipt, Percent, SendHorizontal, Info, CalendarDays, Unlink } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
 import { EventExplorer } from './EventsPanel'
+import { LeadsTable } from './LeadsTable'
+import type { TrackTrigger } from '@/lib/track/types'
 
 // ---------- tipos que vêm da função track_dashboard (migration 099) ----------
 type Venda = {
@@ -47,14 +49,46 @@ const PERIODOS: { id: PeriodoId; label: string }[] = [
   { id: '30d', label: '30 dias' },
 ]
 
-const FUNIL: { ev: string; label: string; dica: string }[] = [
-  { ev: 'PageView', label: 'Visitas', dica: 'PageView: abriram a página' },
-  { ev: 'ViewContent', label: 'Rolaram a página', dica: 'ViewContent: ficaram e rolaram a página' },
-  { ev: 'AddToCart', label: 'Clicaram em comprar', dica: 'AddToCart: clicaram no botão de compra' },
-  { ev: 'InitiateCheckout', label: 'Foram pro checkout', dica: 'InitiateCheckout: chegaram no checkout' },
-  { ev: 'Purchase', label: 'Compraram', dica: 'Purchase: venda aprovada' },
-]
-const FUNIL_COR = ['#6366f1', '#7c6cf3', '#8b5cf6', '#a855f7', '#22c55e']
+// Ordem padrão do funil de cima pra baixo. Evento configurado que não está
+// aqui entra antes do Purchase.
+const ORDEM_FUNIL = ['PageView', 'ViewContent', 'Lead', 'CompleteRegistration', 'AddToCart', 'InitiateCheckout', 'AddPaymentInfo', 'Purchase']
+const FUNIL_COR = ['#6366f1', '#7c6cf3', '#8b5cf6', '#a855f7', '#c084fc', '#d8b4fe']
+
+function descreverGatilho(t: TrackTrigger): string {
+  const c = t.config ?? {}
+  const v = (k: string) => (c[k] === undefined || c[k] === null ? '' : String(c[k]))
+  switch (t.tipo) {
+    case 'time_on_page': return `${v('segundos') || '?'}s na página`
+    case 'click_link': return v('filtro') ? `clique em link ${v('filtro')}` : 'clique em link'
+    case 'click_element': return 'clique em elemento'
+    case 'scroll': return v('percentual') || v('porcentagem') ? `rolou ${v('percentual') || v('porcentagem')}% da página` : 'rolou a página'
+    case 'form_submit': return 'enviou formulário'
+    case 'url_visited': return v('url') ? `visitou ${v('url')}` : 'visitou URL'
+    case 'video_progress': return v('percentual') ? `assistiu ${v('percentual')}% do vídeo` : 'progresso do vídeo'
+    default: return t.tipo
+  }
+}
+
+// PageView no topo, os eventos dos gatilhos ativos no meio, Purchase embaixo.
+function montarFunil(triggers: TrackTrigger[]): { ev: string; dica: string }[] {
+  const porEvento = new Map<string, string[]>()
+  for (const t of triggers) {
+    if (!t.ativo || !t.meta_event) continue
+    const lista = porEvento.get(t.meta_event) ?? []
+    lista.push(descreverGatilho(t))
+    porEvento.set(t.meta_event, lista)
+  }
+  const meio = [...porEvento.keys()].filter(e => e !== 'PageView' && e !== 'Purchase')
+  meio.sort((x, y) => {
+    const ix = ORDEM_FUNIL.indexOf(x), iy = ORDEM_FUNIL.indexOf(y)
+    return (ix < 0 ? 6.5 : ix) - (iy < 0 ? 6.5 : iy)
+  })
+  return [
+    { ev: 'PageView', dica: 'abriu a página' },
+    ...meio.map(ev => ({ ev, dica: [...new Set(porEvento.get(ev))].join(' · ') })),
+    { ev: 'Purchase', dica: 'venda aprovada (webhook)' },
+  ]
+}
 
 const RETENCAO_MS = 45 * 86400000
 const LIVE_MS = 30_000
@@ -188,19 +222,20 @@ function Variacao({ atual, anterior }: { atual: number; anterior: number | null 
   )
 }
 
-function Kpi({ icon, label, children, rodape, destaque }: {
-  icon: React.ReactNode; label: string; children: React.ReactNode; rodape?: React.ReactNode; destaque?: boolean
+function Kpi({ icon, label, children, rodape, destaque, alerta }: {
+  icon: React.ReactNode; label: string; children: React.ReactNode; rodape?: React.ReactNode; destaque?: boolean; alerta?: boolean
 }) {
   return (
     <div
       className="flex min-w-0 flex-col gap-2 rounded-2xl border p-4"
       style={{
-        background: destaque ? 'linear-gradient(160deg, rgba(34,197,94,0.12), rgba(21,21,36,1) 60%)' : '#151524',
-        borderColor: destaque ? 'rgba(34,197,94,0.25)' : 'rgba(255,255,255,0.07)',
+        background: destaque ? 'linear-gradient(160deg, rgba(34,197,94,0.12), rgba(21,21,36,1) 60%)'
+          : alerta ? 'linear-gradient(160deg, rgba(245,158,11,0.10), rgba(21,21,36,1) 60%)' : '#151524',
+        borderColor: destaque ? 'rgba(34,197,94,0.25)' : alerta ? 'rgba(245,158,11,0.25)' : 'rgba(255,255,255,0.07)',
       }}
     >
       <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-slate-500">
-        <span className={destaque ? 'text-emerald-400' : 'text-indigo-400'}>{icon}</span>
+        <span className={destaque ? 'text-emerald-400' : alerta ? 'text-amber-400' : 'text-indigo-400'}>{icon}</span>
         {label}
       </div>
       <div className="min-w-0">{children}</div>
@@ -250,7 +285,7 @@ function TooltipGrafico({ active, payload, label }: { active?: boolean; payload?
 type AbaOrigem = 'campanha' | 'anuncio' | 'produto' | 'pais'
 
 // ---------- painel ----------
-export function TrackDashboard({ installationId }: { installationId: string }) {
+export function TrackDashboard({ installationId, triggers }: { installationId: string; triggers: TrackTrigger[] }) {
   const [periodo, setPeriodo] = useState<PeriodoId>('hoje')
   const [dia, setDia] = useState(() => dataKey(new Date()))
   const [dados, setDados] = useState<Resposta | null>(null)
@@ -329,6 +364,10 @@ export function TrackDashboard({ installationId }: { installationId: string }) {
       fbc: q ? pct(q.com_fbc, q.capi) : null,
       fbp: q ? pct(q.com_fbp, q.capi) : null,
       sessao: q ? pct(q.vendas_sessao, q.vendas_meta) : null,
+      // sem UTM = venda sem campanha e sem src; sem visita = o robô não achou a sessão
+      semUtm: vendas.filter(v => !v.utm_campaign && !v.src).length,
+      semVisita: vendas.filter(v => !v.session_hit).length,
+      naoEnviadas: vendas.filter(v => v.source !== 'capi' || v.capi_send_ok === false).length,
       serie: montarSerie(a.serie, r.s, r.e, r.hourly),
     }
   }, [a, ant, r])
@@ -424,12 +463,12 @@ export function TrackDashboard({ installationId }: { installationId: string }) {
   }
   if (!a || !calc) return null
 
-  const maxFunil = Math.max(...FUNIL.map(f => a.funil[f.ev] ?? 0), 1)
+  const funil = montarFunil(triggers)
+  const maxFunil = Math.max(...funil.map(f => a.funil[f.ev] ?? 0), 1)
   const maxPais = Math.max(...a.paises.map(p => p.n), 1)
   const maxOrigem = Math.max(...origem.map(o => o.n), 1)
   const ticket = calc.moedas.map(m => ({ moeda: m.moeda, v: m.n > 0 ? m.total / m.n : 0 }))
   const q = a.qualidade
-  const enviadas = q?.vendas_meta ?? 0
   const semVenda = calc.nVendas === 0
 
   return (
@@ -444,11 +483,8 @@ export function TrackDashboard({ installationId }: { installationId: string }) {
       )}
 
       {/* ---------- indicadores ---------- */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Kpi icon={<ShoppingBag size={14} />} label="Vendas" destaque rodape={<Variacao atual={calc.nVendas} anterior={calc.antVendas} />}>
-          <p className="text-3xl font-bold tabular-nums text-slate-50">{inteiro(calc.nVendas)}</p>
-        </Kpi>
-        <Kpi icon={<Wallet size={14} />} label="Faturamento" rodape={calc.antMoedas.length > 0 && calc.moedas.length > 0
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        <Kpi icon={<Wallet size={14} />} label="Faturamento" destaque rodape={calc.antMoedas.length > 0 && calc.moedas.length > 0
           ? <Variacao atual={calc.moedas[0].total} anterior={calc.antMoedas.find(m => m.moeda === calc.moedas[0].moeda)?.total ?? 0} />
           : undefined}>
           {calc.moedas.length === 0 ? (
@@ -463,6 +499,21 @@ export function TrackDashboard({ installationId }: { installationId: string }) {
             </div>
           )}
         </Kpi>
+        <Kpi icon={<ShoppingBag size={14} />} label="Vendas" rodape={<Variacao atual={calc.nVendas} anterior={calc.antVendas} />}>
+          <p className="text-3xl font-bold tabular-nums text-slate-50">{inteiro(calc.nVendas)}</p>
+        </Kpi>
+        <Kpi icon={<Unlink size={14} />} label="Não rastreadas / sem UTM" alerta={calc.semUtm > 0} rodape={
+          <span className="text-[11px] text-slate-500">{inteiro(calc.semVisita)} sem achar a visita do anúncio</span>
+        }>
+          <p className="text-3xl font-bold tabular-nums text-slate-50">
+            {inteiro(calc.semUtm)}<span className="text-base font-medium text-slate-500"> / {inteiro(calc.nVendas)}</span>
+          </p>
+        </Kpi>
+        <Kpi icon={<SendHorizontal size={14} />} label="Não enviadas ao Facebook" alerta={calc.naoEnviadas > 0} rodape={
+          <span className="text-[11px] text-slate-500">{inteiro(calc.nVendas - calc.naoEnviadas)} de {inteiro(calc.nVendas)} chegaram no Facebook</span>
+        }>
+          <p className="text-3xl font-bold tabular-nums text-slate-50">{inteiro(calc.naoEnviadas)}</p>
+        </Kpi>
         <Kpi icon={<Receipt size={14} />} label="Ticket médio">
           {ticket.length === 0 ? (
             <p className="text-2xl font-bold text-slate-600">-</p>
@@ -475,27 +526,23 @@ export function TrackDashboard({ installationId }: { installationId: string }) {
           )}
         </Kpi>
         <Kpi icon={<Percent size={14} />} label="Conversão" rodape={
-          <span className="text-[11px] text-slate-500">{inteiro(calc.visitas)} visitas · checkout→venda {pctTxt(calc.checkoutConv)}</span>
+          <span className="text-[11px] text-slate-500">{inteiro(calc.visitas)} PageView · checkout→venda {pctTxt(calc.checkoutConv)}</span>
         }>
           <p className="text-3xl font-bold tabular-nums text-slate-50">{pctTxt(calc.conv, 2)}</p>
         </Kpi>
-        <Kpi icon={<Send size={14} />} label="Enviadas ao Facebook" rodape={
-          <span className="text-[11px] text-slate-500">{pctTxt(calc.sessao, 0)} com a origem do anúncio</span>
-        }>
-          <p className="text-3xl font-bold tabular-nums text-slate-50">
-            {inteiro(enviadas)}<span className="text-base font-medium text-slate-500"> / {inteiro(calc.nVendas)}</span>
-          </p>
-        </Kpi>
       </div>
+
+      {/* ---------- leads ---------- */}
+      <LeadsTable installationId={installationId} start={r.start} end={r.end} refreshTick={tick} />
 
       {/* ---------- gráfico + funil ---------- */}
       <div className="grid gap-3 lg:grid-cols-5">
         <Card className="lg:col-span-3">
           <Titulo extra={
             <div className="flex items-center gap-3 text-[11px] text-slate-500">
-              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-indigo-500/60" />Visitas</span>
-              <span className="flex items-center gap-1"><span className="h-0.5 w-3 rounded bg-violet-400" />Checkouts</span>
-              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-400" />Vendas</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-indigo-500/60" />PageView</span>
+              <span className="flex items-center gap-1"><span className="h-0.5 w-3 rounded bg-violet-400" />InitiateCheckout</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-400" />Purchase</span>
             </div>
           }>
             {r.hourly ? 'Hora a hora' : 'Dia a dia'}
@@ -508,9 +555,9 @@ export function TrackDashboard({ installationId }: { installationId: string }) {
                 <YAxis yAxisId="v" tick={{ fill: '#475569', fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
                 <YAxis yAxisId="s" orientation="right" hide allowDecimals={false} domain={[0, (max: number) => Math.max(max * 1.4, 2)]} />
                 <Tooltip content={<TooltipGrafico />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                <Bar yAxisId="v" dataKey="visitas" name="Visitas" fill="rgba(99,102,241,0.55)" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                <Line yAxisId="v" type="monotone" dataKey="checkouts" name="Checkouts" stroke="#a78bfa" strokeWidth={2} dot={false} />
-                <Line yAxisId="s" type="monotone" dataKey="vendas" name="Vendas" stroke="#34d399" strokeWidth={0} dot={(p: { cx?: number; cy?: number; value?: number; index?: number }) => (
+                <Bar yAxisId="v" dataKey="visitas" name="PageView" fill="rgba(99,102,241,0.55)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                <Line yAxisId="v" type="monotone" dataKey="checkouts" name="InitiateCheckout" stroke="#a78bfa" strokeWidth={2} dot={false} />
+                <Line yAxisId="s" type="monotone" dataKey="vendas" name="Purchase" stroke="#34d399" strokeWidth={0} dot={(p: { cx?: number; cy?: number; value?: number; index?: number }) => (
                   p.value ? <circle key={p.index} cx={p.cx} cy={p.cy} r={5} fill="#34d399" stroke="#0b0b14" strokeWidth={2} /> : <g key={p.index} />
                 )} activeDot={false} />
               </ComposedChart>
@@ -521,22 +568,24 @@ export function TrackDashboard({ installationId }: { installationId: string }) {
         <Card className="lg:col-span-2">
           <Titulo extra={<span className="text-[11px] text-slate-600">% de quem passou da etapa anterior</span>}>Funil de eventos</Titulo>
           <div className="space-y-3.5">
-            {FUNIL.map((f, i) => {
+            {funil.map((f, i) => {
               const n = a.funil[f.ev] ?? 0
-              const anterior = i > 0 ? a.funil[FUNIL[i - 1].ev] ?? 0 : null
+              const anterior = i > 0 ? a.funil[funil[i - 1].ev] ?? 0 : null
               const passo = anterior !== null ? pct(n, anterior) : null
+              const cor = f.ev === 'Purchase' ? '#22c55e' : FUNIL_COR[Math.min(i, FUNIL_COR.length - 1)]
               return (
-                <div key={f.ev} title={f.dica}>
+                <div key={f.ev}>
                   <div className="mb-1.5 flex items-baseline justify-between gap-2">
-                    <span className="truncate text-xs text-slate-300">
-                      {f.label} <span className="text-[10px] text-slate-600">{f.ev}</span>
+                    <span className="min-w-0 truncate">
+                      <span className="text-xs font-semibold text-slate-200">{f.ev}</span>
+                      <span className="ml-1.5 text-[10.5px] text-slate-600">{f.dica}</span>
                     </span>
                     <span className="flex shrink-0 items-baseline gap-2">
                       {passo !== null && <span className="text-[11px] text-slate-500">{pctTxt(passo)}</span>}
                       <b className="text-sm tabular-nums text-slate-100">{inteiro(n)}</b>
                     </span>
                   </div>
-                  <Barra valor={n} max={maxFunil} cor={FUNIL_COR[i]} />
+                  <Barra valor={n} max={maxFunil} cor={cor} />
                 </div>
               )
             })}

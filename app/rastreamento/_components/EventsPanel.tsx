@@ -43,14 +43,6 @@ type SectionState = {
 const EVENT_TYPES: EventName[] = ['Purchase', 'InitiateCheckout', 'AddToCart', 'ViewContent', 'PageView']
 const PAGE_SIZE = 50
 
-const EVENT_LABEL: Record<string, string> = {
-  PageView: 'Visitas',
-  ViewContent: 'Rolaram a página',
-  AddToCart: 'Clicaram em comprar',
-  InitiateCheckout: 'Foram pro checkout',
-  Purchase: 'Vendas',
-}
-
 const EVENT_ICON: Record<string, string> = {
   PageView: '👁️',
   ViewContent: '📄',
@@ -192,8 +184,7 @@ function EventTypeSection({
       <button onClick={onToggle} className="flex w-full items-center justify-between px-3 py-2.5 text-left">
         <span className="flex items-center gap-2 text-sm font-medium text-slate-200">
           <span>{EVENT_ICON[eventName]}</span>
-          {EVENT_LABEL[eventName] ?? eventName}
-          <span className="text-[10.5px] font-normal text-slate-600">{eventName}</span>
+          {eventName}
           <span className="text-xs font-normal text-slate-500">({countBadge})</span>
           {section.loading && <Spinner size={12} />}
         </span>

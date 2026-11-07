@@ -118,7 +118,7 @@ export default function RastreamentoPage() {
   return (
     <div className="min-h-screen" style={{ background: '#0b0b14' }}>
       <header className="sticky top-0 z-30 border-b backdrop-blur" style={{ borderColor: 'rgba(255,255,255,0.07)', background: 'rgba(11,11,20,0.9)' }}>
-        <div className="mx-auto flex min-h-14 max-w-[1280px] flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2 sm:px-6">
+        <div className="mx-auto flex min-h-14 max-w-[1600px] flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex items-center gap-2.5">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20">
@@ -189,7 +189,7 @@ export default function RastreamentoPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1280px] px-4 py-6 sm:px-6">
+      <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6">
         {checkingAccess ? (
           <div className="flex justify-center py-16"><Spinner size={24} /></div>
         ) : !isAdmin ? (
@@ -262,7 +262,7 @@ export default function RastreamentoPage() {
             </div>
 
             {selected.status === 'deployed' ? (
-              <TrackDashboard key={selected.id} installationId={selected.id} />
+              <TrackDashboard key={selected.id} installationId={selected.id} triggers={selected.triggers} />
             ) : (
               <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed py-14 text-center" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
                 <Rocket size={28} className="text-indigo-400" />
