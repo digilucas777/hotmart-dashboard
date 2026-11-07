@@ -262,7 +262,7 @@ export default function RastreamentoPage() {
 
             {selected.status === 'deployed' ? (
               <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_250px]">
-                <TrackDashboard key={selected.id} installationId={selected.id} triggers={selected.triggers} />
+                <TrackDashboard key={selected.id} installationId={selected.id} triggers={selected.triggers} nome={selected.nome} />
                 {/* coluna "Ao vivo" fixa na direita, igual à da dashboard */}
                 <div className="hidden xl:block xl:sticky xl:top-20">
                   <LiveSidebar key={selected.id} installationId={selected.id} />

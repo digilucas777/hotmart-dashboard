@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
-import { RefreshCw, ShoppingBag, Wallet, Receipt, Percent, CalendarDays, Unlink, SendHorizontal } from 'lucide-react'
+import { RefreshCw, ShoppingBag, Wallet, Receipt, Percent, CalendarDays, Unlink, SendHorizontal, Banknote, TrendingUp, PiggyBank, Undo2, PlusCircle, MessageCircle } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
 import { getPeriodRange } from '@/lib/utils'
 import type { Period } from '@/lib/types'
 import { UsageBar } from './CloudflareUsage'
+import { CustosModal, type Custo } from './CustosModal'
+import { RelatorioModal } from './RelatorioModal'
 import { LeadsTable } from './LeadsTable'
 import type { TrackTrigger } from '@/lib/track/types'
 
@@ -31,6 +33,7 @@ type Venda = {
   produto: string | null
   transacao: string | null
   pais_comprador: string | null
+  status_venda?: string | null
 }
 type Bloco = {
   funil: Record<string, number>
@@ -192,6 +195,18 @@ function vendasUnicas(vs: Venda[]) {
     return true
   })
 }
+const REEMBOLSO = ['refunded', 'chargeback']
+const reembolsada = (v: Venda) => REEMBOLSO.includes(String(v.status_venda ?? '').toLowerCase())
+
+// Converte entre BRL e USD pela cotação média do período (a mesma da dashboard).
+function converter(valor: number, de: string, para: string, usdBrl: number | null): number | null {
+  if (de === para) return valor
+  if (!usdBrl) return null
+  if (de === 'USD' && para === 'BRL') return valor * usdBrl
+  if (de === 'BRL' && para === 'USD') return valor / usdBrl
+  return null
+}
+
 function porMoeda(vs: Venda[]) {
   const m = new Map<string, { total: number; n: number }>()
   for (const v of vs) {
@@ -301,7 +316,7 @@ function TooltipGrafico({ active, payload, label }: { active?: boolean; payload?
 type AbaOrigem = 'campanha' | 'conjunto' | 'anuncio' | 'pais'
 
 // ---------- painel ----------
-export function TrackDashboard({ installationId, triggers }: { installationId: string; triggers: TrackTrigger[] }) {
+export function TrackDashboard({ installationId, triggers, nome }: { installationId: string; triggers: TrackTrigger[]; nome: string }) {
   const [periodo, setPeriodo] = useState<PeriodoId>('hoje')
   const [de, setDe] = useState(() => dataKey(new Date(Date.now() - 6 * 86400000)))
   const [ate, setAte] = useState(() => dataKey(new Date()))
@@ -316,6 +331,10 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
   const [atualizadoEm, setAtualizadoEm] = useState<Date | null>(null)
   const [tick, setTick] = useState(0)
   const [aba, setAba] = useState<AbaOrigem>('campanha')
+  const [custos, setCustos] = useState<Custo[]>([])
+  const [usdBrl, setUsdBrl] = useState<number | null>(null)
+  const [verCustos, setVerCustos] = useState(false)
+  const [verRelatorio, setVerRelatorio] = useState(false)
   const pedido = useRef(0)
 
   const r = useMemo(() => intervalo(periodo, de, ate), [periodo, de, ate])
@@ -363,9 +382,27 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
     return () => clearInterval(t)
   }, [aoVivo, carregar])
 
+  // custos do período (dias locais, inclusivo) e cotação média do dólar no período
+  const diaIni = dataKey(r.s)
+  const diaFim = dataKey(new Date(r.e.getTime() - 86400000))
+  const carregarCustos = useCallback(async () => {
+    const q = new URLSearchParams({ installation_id: installationId, de: diaIni, ate: diaFim })
+    const j = await fetch(`/api/track/custos?${q}`).then(x => (x.ok ? x.json() : null)).catch(() => null)
+    if (j?.custos) setCustos(j.custos as Custo[])
+  }, [installationId, diaIni, diaFim])
+  useEffect(() => {
+    // só mexe no estado depois da resposta
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void carregarCustos()
+    let vivo = true
+    fetch(`/api/exchange-rate?from=${diaIni}&to=${diaFim}`).then(x => x.json()).then((d: { rate?: number }) => { if (vivo && d?.rate) setUsdBrl(d.rate) }).catch(() => {})
+    return () => { vivo = false }
+  }, [carregarCustos, diaIni, diaFim])
+
   function atualizarAgora() {
     setAtualizando(true)
     void carregar()
+    void carregarCustos()
     setTick(x => x + 1)
   }
 
@@ -375,15 +412,27 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
   const calc = useMemo(() => {
     if (!a) return null
     const vendas = vendasUnicas(a.vendas)
-    const moedas = porMoeda(vendas)
+    const aprovadas = vendas.filter(v => !reembolsada(v))
+    const reemb = vendas.filter(reembolsada)
+    const moedas = porMoeda(aprovadas)
+    const moedaPrincipal = moedas[0]?.moeda ?? 'USD'
+    const fat = moedas.find(m => m.moeda === moedaPrincipal)?.total ?? 0
+    const gasto = custos.reduce((t, c) => t + (converter(Number(c.valor), c.moeda, moedaPrincipal, usdBrl) ?? 0), 0)
+    const gastoSemCotacao = custos.some(c => converter(Number(c.valor), c.moeda, moedaPrincipal, usdBrl) === null)
+    const valorReemb = reemb.reduce((t, v) => t + (converter(Number(v.valor) || 0, v.moeda || moedaPrincipal, moedaPrincipal, usdBrl) ?? 0), 0)
     const visitas = a.funil.PageView ?? 0
     const nVendas = a.funil.Purchase ?? 0
     const q = a.qualidade
     const antVisitas = ant?.funil.PageView ?? 0
     const antVendas = ant?.funil.Purchase ?? 0
-    const antMoedas = ant ? porMoeda(vendasUnicas(ant.vendas)) : []
+    const antMoedas = ant ? porMoeda(vendasUnicas(ant.vendas).filter(v => !reembolsada(v))) : []
     return {
       vendas, moedas, visitas, nVendas,
+      aprovadas: aprovadas.length, moedaPrincipal, fat, gasto, gastoSemCotacao,
+      lucro: fat - gasto,
+      roas: gasto > 0 ? fat / gasto : null,
+      reembolsos: reemb.length, valorReemb,
+      taxaReemb: pct(reemb.length, vendas.length),
       conv: pct(nVendas, visitas),
       antConv: ant ? pct(antVendas, antVisitas) : null,
       antVisitas: ant ? antVisitas : null,
@@ -399,7 +448,7 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
       naoEnviadas: vendas.filter(v => v.source !== 'capi' || v.capi_send_ok === false).length,
       serie: montarSerie(a.serie, r.s, r.e, r.hourly),
     }
-  }, [a, ant, r])
+  }, [a, ant, r, custos, usdBrl])
 
   const origem = useMemo(() => {
     if (!calc) return []
@@ -432,6 +481,44 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
     return [...m.values()].sort((x, y) => y.n - x.n).slice(0, 8)
   }, [calc, aba])
 
+  const relatorio = useMemo(() => {
+    if (!a || !calc) return ''
+    const m = calc.moedaPrincipal
+    const brl = (v: number) => (m === 'USD' && usdBrl ? ` (≈ ${dinheiro(v * usdBrl, 'BRL')})` : '')
+    const linhas: string[] = []
+    linhas.push(`Rastreamento ${nome}`)
+    linhas.push(`Período: ${rotuloPeriodo}`)
+    linhas.push('')
+    linhas.push(`Faturamento: ${dinheiro(calc.fat, m)}${brl(calc.fat)}`)
+    if (calc.gasto > 0) {
+      linhas.push(`Gasto: ${dinheiro(calc.gasto, m)}${brl(calc.gasto)}`)
+      linhas.push(`Lucro: ${dinheiro(calc.lucro, m)}${brl(calc.lucro)}`)
+      linhas.push(`ROAS: ${calc.roas?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
+    }
+    linhas.push(`Vendas: ${inteiro(calc.aprovadas)}`)
+    const tk = calc.aprovadas > 0 ? calc.fat / calc.aprovadas : 0
+    if (calc.aprovadas > 0) linhas.push(`Ticket médio: ${dinheiro(tk, m)}`)
+    linhas.push(`Reembolsos: ${inteiro(calc.reembolsos)} (${pctTxt(calc.taxaReemb, 1)})`)
+    linhas.push(`Enviadas à Meta: ${inteiro(calc.nVendas - calc.naoEnviadas)} de ${inteiro(calc.nVendas)}`)
+    linhas.push('')
+    linhas.push('Funil')
+    for (const f of montarFunil(triggers)) linhas.push(`${f.ev}: ${inteiro(a.funil[f.ev] ?? 0)}`)
+    linhas.push(`Conversão: ${pctTxt(calc.conv, 2)}`)
+    const porCamp = new Map<string, number>()
+    for (const v of calc.vendas) {
+      if (reembolsada(v)) continue
+      const c = semId(v.utm_campaign) ?? (v.src ? `src ${v.src}` : 'Sem campanha')
+      porCamp.set(c, (porCamp.get(c) ?? 0) + 1)
+    }
+    const top = [...porCamp.entries()].sort((x, y) => y[1] - x[1]).slice(0, 5)
+    if (top.length) {
+      linhas.push('')
+      linhas.push('Campanhas que mais venderam')
+      top.forEach(([c, n], i) => linhas.push(`${i + 1}. ${c}: ${n} venda${n === 1 ? '' : 's'}`))
+    }
+    return linhas.join('\n')
+  }, [a, calc, usdBrl, nome, rotuloPeriodo, triggers])
+
   // ---------- topo: período ----------
   const barraPeriodo = (
     <div className="flex flex-wrap items-center gap-3">
@@ -460,6 +547,12 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
       >
         {atualizando || carregando ? <Spinner size={14} /> : <RefreshCw size={15} />}
         {atualizando || carregando ? 'Atualizando...' : 'Atualizar'}
+      </button>
+      <button onClick={() => setVerCustos(true)} className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-200 ring-1 ring-white/15 hover:bg-white/5">
+        <PlusCircle size={14} /> Inserir custo
+      </button>
+      <button onClick={() => setVerRelatorio(true)} disabled={!dados} className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/30 hover:bg-emerald-500/10 disabled:opacity-50">
+        <MessageCircle size={14} /> Relatório WhatsApp
       </button>
 
       {escolhendo ? (
@@ -538,8 +631,42 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
             </div>
           )}
         </Kpi>
+        <Kpi icon={<Banknote size={14} />} label="Gasto total" rodape={
+          <span className="text-[11px] text-slate-500">
+            {custos.length ? `${custos.length} lançamento(s)` : 'nenhum custo lançado'}
+            {calc.moedaPrincipal === 'USD' && usdBrl && calc.gasto > 0 ? ` · ≈ ${dinheiro(calc.gasto * usdBrl, 'BRL')}` : ''}
+          </span>
+        }>
+          <p className="truncate text-2xl font-bold tabular-nums text-slate-50">{dinheiro(calc.gasto, calc.moedaPrincipal)}</p>
+          {calc.gastoSemCotacao && <p className="text-[10.5px] text-amber-300">sem cotação do dólar agora, parte do gasto ficou de fora</p>}
+        </Kpi>
+        <Kpi icon={<PiggyBank size={14} />} label="Lucro" destaque={calc.gasto > 0 && calc.lucro >= 0} alerta={calc.gasto > 0 && calc.lucro < 0} rodape={
+          <span className="text-[11px] text-slate-500">faturamento menos gasto{calc.moedaPrincipal === 'USD' && usdBrl && calc.gasto > 0 ? ` · ≈ ${dinheiro(calc.lucro * usdBrl, 'BRL')}` : ''}</span>
+        }>
+          <p className={`truncate text-2xl font-bold tabular-nums ${calc.lucro < 0 ? 'text-rose-300' : 'text-slate-50'}`}>{calc.gasto > 0 ? dinheiro(calc.lucro, calc.moedaPrincipal) : '-'}</p>
+        </Kpi>
+        <Kpi icon={<TrendingUp size={14} />} label="ROAS" rodape={<span className="text-[11px] text-slate-500">{calc.roas === null ? 'lance um custo pra calcular' : 'faturamento ÷ gasto'}</span>}>
+          <p className={`text-3xl font-bold tabular-nums ${calc.roas !== null && calc.roas < 1 ? 'text-rose-300' : 'text-slate-50'}`}>{calc.roas === null ? '-' : calc.roas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+        </Kpi>
         <Kpi icon={<ShoppingBag size={14} />} label="Vendas" rodape={<Variacao atual={calc.nVendas} anterior={calc.antVendas} />}>
-          <p className="text-3xl font-bold tabular-nums text-slate-50">{inteiro(calc.nVendas)}</p>
+          <p className="text-3xl font-bold tabular-nums text-slate-50">{inteiro(calc.aprovadas)}</p>
+        </Kpi>
+        <Kpi icon={<Receipt size={14} />} label="Ticket médio">
+          {ticket.length === 0 ? (
+            <p className="text-2xl font-bold text-slate-600">-</p>
+          ) : (
+            <div className="space-y-0.5">
+              {ticket.map((t, i) => (
+                <p key={t.moeda} className={`truncate font-bold tabular-nums ${i === 0 ? 'text-2xl text-slate-50' : 'text-sm text-slate-300'}`}>{dinheiro(t.v, t.moeda)}</p>
+              ))}
+            </div>
+          )}
+        </Kpi>
+        <Kpi icon={<Undo2 size={14} />} label="Reembolso" alerta={calc.reembolsos > 0} rodape={<span className="text-[11px] text-slate-500">{inteiro(calc.reembolsos)} venda(s) reembolsada(s) ou chargeback</span>}>
+          <p className="truncate text-2xl font-bold tabular-nums text-slate-50">{dinheiro(calc.valorReemb, calc.moedaPrincipal)}</p>
+        </Kpi>
+        <Kpi icon={<Percent size={14} />} label="Taxa de reembolso" alerta={(calc.taxaReemb ?? 0) >= 5} rodape={<span className="text-[11px] text-slate-500">{inteiro(calc.reembolsos)} de {inteiro(calc.vendas.length)} vendas</span>}>
+          <p className="text-3xl font-bold tabular-nums text-slate-50">{pctTxt(calc.taxaReemb, 1)}</p>
         </Kpi>
         <Kpi icon={<SendHorizontal size={14} />} label="Enviadas à Meta" rodape={
           <span className="text-[11px] text-slate-500">{pctTxt(calc.sessao, 0)} com a origem do anúncio</span>
@@ -556,17 +683,6 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
           <p className="text-3xl font-bold tabular-nums text-slate-50">
             {inteiro(calc.semUtm)}<span className="text-base font-medium text-slate-500"> / {inteiro(calc.nVendas)}</span>
           </p>
-        </Kpi>
-        <Kpi icon={<Receipt size={14} />} label="Ticket médio">
-          {ticket.length === 0 ? (
-            <p className="text-2xl font-bold text-slate-600">-</p>
-          ) : (
-            <div className="space-y-0.5">
-              {ticket.map((t, i) => (
-                <p key={t.moeda} className={`truncate font-bold tabular-nums ${i === 0 ? 'text-2xl text-slate-50' : 'text-sm text-slate-300'}`}>{dinheiro(t.v, t.moeda)}</p>
-              ))}
-            </div>
-          )}
         </Kpi>
         <Kpi icon={<Percent size={14} />} label="Conversão" rodape={
           <span className="text-[11px] text-slate-500">{inteiro(calc.visitas)} PageView · checkout→venda {pctTxt(calc.checkoutConv)}</span>
@@ -777,6 +893,8 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
         </Card>
       </div>
 
+      <CustosModal open={verCustos} onClose={() => setVerCustos(false)} installationId={installationId} custos={custos} periodoLabel={rotuloPeriodo} onMudou={() => void carregarCustos()} />
+      <RelatorioModal open={verRelatorio} onClose={() => setVerRelatorio(false)} texto={relatorio} />
     </div>
   )
 }
