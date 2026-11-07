@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { ChevronDown } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import '../cfusage.css'
 
@@ -83,6 +84,16 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
 }) {
   const [u, setU] = useState<Usage | null>(null)
   const [info, setInfo] = useState(false)
+  // Aberto/fechado fica guardado no navegador.
+  const [aberto, setAberto] = useState(() => {
+    try { return typeof window === 'undefined' || localStorage.getItem('rastreamento:plano-aberto') !== '0' } catch { return true }
+  })
+  function alternar() {
+    setAberto(a => {
+      try { localStorage.setItem('rastreamento:plano-aberto', a ? '0' : '1') } catch { /* sem armazenamento */ }
+      return !a
+    })
+  }
 
   useEffect(() => {
     let alive = true
@@ -120,13 +131,21 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
       background: '#151524',
       borderColor: nivel === 'bad' ? 'rgba(244,63,94,0.45)' : nivel === 'warn' ? 'rgba(245,158,11,0.4)' : 'rgba(255,255,255,0.07)',
     }}>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className={`flex flex-wrap items-center justify-between gap-3 ${aberto ? 'mb-4' : ''}`}>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h3 className="text-[13px] font-semibold text-slate-200">Plano da Cloudflare</h3>
+          <button type="button" onClick={alternar} aria-expanded={aberto} className="flex items-center gap-1.5 text-[13px] font-semibold text-slate-200 hover:text-white" title={aberto ? 'Esconder' : 'Mostrar'}>
+            <ChevronDown size={15} className={`text-slate-400 transition-transform ${aberto ? '' : '-rotate-90'}`} />
+            Plano da Cloudflare
+          </button>
           <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${paid ? 'bg-emerald-500/15 text-emerald-300' : 'bg-white/[0.06] text-slate-300'}`}>
             {paid ? 'Workers Paid' : 'plano gratuito · 1.000 visitantes por dia'}
           </span>
           <span className="text-[11px] text-slate-500">{periodoLabel}</span>
+          {!aberto && u.available && per && (
+            <span className={`text-[11px] font-semibold ${!paid && acima ? 'text-rose-300' : 'text-slate-400'}`}>
+              · {paid ? `uso do mês ${Math.round(pctMes)}%` : `hoje ${n(hoje)} de ${n(limiteDia)}${acima ? ` · ${acima} dia(s) acima do limite` : ''}`}
+            </span>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" className="text-[11px] font-semibold text-amber-300 hover:underline" onClick={() => setInfo(true)}>por que isso importa?</button>
@@ -134,7 +153,7 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
         </div>
       </div>
 
-      {!u.available || !per ? (
+      {!aberto ? null : !u.available || !per ? (
         <p className="text-xs text-slate-500">O uso aparece aqui depois que o robô começar a receber visitas.</p>
       ) : (
         <>
