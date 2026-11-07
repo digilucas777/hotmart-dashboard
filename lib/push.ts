@@ -353,13 +353,16 @@ export async function notifyCloudflareUsageWarning(params: {
   metricKey: string
   count: number
   limit: number
+  pago?: boolean
 }) {
   try {
     if (!ensureVapidConfigured()) return
     const percent = Math.round((params.count / params.limit) * 100)
     await sendPushToUser(params.userId, {
       title: `⚠️ Rastreamento "${params.installationNome}" perto do limite`,
-      body: `${params.count.toLocaleString('pt-BR')} de ${params.limit.toLocaleString('pt-BR')} ${params.metricLabel} hoje (${percent}%) no plano gratuito da Cloudflare.`,
+      body: params.pago
+        ? `${params.count.toLocaleString('pt-BR')} de ${params.limit.toLocaleString('pt-BR')} ${params.metricLabel} este mês (${percent}%) no Workers Paid da Cloudflare.`
+        : `${params.count.toLocaleString('pt-BR')} de ${params.limit.toLocaleString('pt-BR')} ${params.metricLabel} hoje (${percent}%) no plano gratuito da Cloudflare. Acima do limite as vendas perdem a origem do anúncio: vale fazer o upgrade (US$ 5/mês).`,
       url: '/rastreamento',
       tag: `track-usage-${params.installationNome}-${params.metricKey}`,
     })

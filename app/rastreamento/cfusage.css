@@ -1,0 +1,32 @@
+/* Barra de uso da Cloudflare (rastreamento) */
+.cf-usage { margin-top: 12px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); display: flex; flex-direction: column; gap: 7px; }
+.cf-usage .cf-u-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 11.5px; color: #94a3b8; }
+.cf-usage .cf-u-head b { font-size: 14px; color: #e2e8f0; font-family: ui-monospace, monospace; }
+.cf-usage .cf-u-head small { font-size: 11px; color: #64748b; font-weight: 500; }
+.cf-usage .cf-u-name { color: #e2e8f0; margin-right: 6px; }
+.cf-usage .cf-bar { height: 8px; border-radius: 5px; background: rgba(255,255,255,0.07); overflow: hidden; }
+.cf-usage .cf-bar i { display: block; height: 100%; border-radius: 5px; background: #2bd576; transition: width .4s ease; }
+.cf-usage.warn .cf-bar i { background: #f0b429; }
+.cf-usage.bad .cf-bar i { background: #f0544f; }
+.cf-usage.bad { border-color: rgba(240,84,79,0.45); background: rgba(240,84,79,0.06); }
+.cf-usage.warn { border-color: rgba(240,180,41,0.35); }
+.cf-usage .cf-u-note { font-size: 11.5px; color: #94a3b8; line-height: 1.5; }
+.cf-usage .cf-u-note b { color: #fca5a5; }
+.cf-usage .cf-u-act { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cf-usage .cf-up, .cf-modal .cf-up { display: inline-flex; align-self: flex-start; padding: 6px 10px; border-radius: 7px; background: #2bd576; color: #06140c; font-size: 11.5px; font-weight: 700; text-decoration: none; }
+.cf-usage .cf-link { background: none; border: 0; padding: 0; color: #fbad41; font-size: 11.5px; cursor: pointer; }
+.cf-usage .cf-chk { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #94a3b8; cursor: pointer; margin-left: auto; }
+.cf-usage .cf-chk input { accent-color: #f6821f; }
+.cf-modal { display: flex; flex-direction: column; gap: 6px; padding: 4px 2px; }
+.cf-modal .cf-p { font-size: 13px; color: #cbd5e1; line-height: 1.6; margin: 0 0 10px; }
+.cf-modal .cf-p b { color: #fff; }
+.cf-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 6px 0 12px; }
+.cf-col { border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 12px 14px; background: rgba(255,255,255,0.03); display: flex; flex-direction: column; gap: 4px; }
+.cf-col.rec { border-color: #2bd576; background: rgba(43,213,118,0.08); }
+.cf-col > b { font-size: 13.5px; color: #fff; }
+.cf-col > b em { font-style: normal; font-size: 10px; color: #2bd576; margin-left: 6px; text-transform: uppercase; letter-spacing: .06em; }
+.cf-price { font-size: 20px; font-weight: 700; color: #fff; font-family: ui-monospace, monospace; }
+.cf-price small { font-size: 12px; color: #64748b; }
+.cf-col ul { margin: 4px 0 0; padding-left: 16px; font-size: 12.5px; color: #94a3b8; line-height: 1.55; list-style: disc; }
+.cf-col ul b { color: #e2e8f0; }
+@media (max-width: 640px) { .cf-compare { grid-template-columns: 1fr; } }

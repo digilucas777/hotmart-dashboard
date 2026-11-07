@@ -10,6 +10,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { InstallationModal } from './_components/InstallationModal'
 import { HelpGuideModal } from './_components/HelpGuideModal'
 import { EventsPanel } from './_components/EventsPanel'
+import { UsageBar } from './_components/CloudflareUsage'
 import type { TrackInstallation } from '@/lib/track/types'
 import { buildFullHeadSnippet } from '@/lib/track/utmSnippet'
 
@@ -236,6 +237,7 @@ export default function RastreamentoPage() {
                   </div>
                 </div>
 
+                {inst.status === 'deployed' && <UsageBar installationId={inst.id} />}
                 {inst.status === 'deployed' && (
                   <div className="mt-3 flex items-center gap-4 border-t pt-2.5" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
                     {inst.worker_subdomain && (
