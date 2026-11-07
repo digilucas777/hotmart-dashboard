@@ -97,7 +97,9 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
 
   useEffect(() => {
     let alive = true
-    const q = new URLSearchParams({ id: installationId, start, end })
+    // dias do calendário local do período (início e último dia)
+    const local = (ms: number) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+    const q = new URLSearchParams({ id: installationId, start, end, de: local(Date.parse(start)), ate: local(Date.parse(end) - 1) })
     const load = () => fetch(`/api/track/installations/usage?${q}`).then(r => (r.ok ? r.json() : null)).then(j => { if (alive && j) setU(j) }).catch(() => {})
     load()
     const t = setInterval(load, 5 * 60 * 1000)

@@ -30,9 +30,15 @@ export async function GET(request: Request) {
   // Dias UTC que o período toca (a Cloudflare zera o limite diário à meia-noite UTC).
   // A Cloudflare só guarda 90 dias: um período maior começa no dia mais antigo que ela tem.
   const maisAntigo = new Date(Date.now() - CF_HISTORICO_DIAS * 86400000).toISOString().slice(0, 10)
-  const sincePedido = comPeriodo ? new Date(startMs).toISOString().slice(0, 10) : ''
+  // Dias do calendário de quem está olhando (de/ate), senão os dias UTC do período.
+  // Sem isso, "outubro" em horário de Brasília virava 32 dias (01/10 a 01/11 em UTC).
+  const dia = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null)
+  const de = dia(sp.get('de')), ate = dia(sp.get('ate'))
+  const hojeUtc = new Date().toISOString().slice(0, 10)
+  const sincePedido = comPeriodo ? (de ?? new Date(startMs).toISOString().slice(0, 10)) : ''
   const since = sincePedido && sincePedido < maisAntigo ? maisAntigo : sincePedido
-  const until = comPeriodo ? new Date(Math.min(endMs, Date.now()) - 1).toISOString().slice(0, 10) : ''
+  const untilBase = ate ?? new Date(Math.min(endMs, Date.now()) - 1).toISOString().slice(0, 10)
+  const until = comPeriodo ? (untilBase > hojeUtc ? hojeUtc : untilBase) : ''
   const contar = (filtro: (q: ReturnType<typeof base>) => ReturnType<typeof base>) => filtro(base())
   function base() {
     return supabase.from('track_events').select('*', { count: 'exact', head: true })
