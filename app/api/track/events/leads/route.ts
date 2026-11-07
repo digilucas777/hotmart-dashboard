@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/app/api/meta/_utils'
 import { canManageTracking } from '@/app/api/track/_utils'
 
-const STATUS = ['comprou', 'abandonou', 'carrinho', 'engajou', 'visitou']
+const STATUS = ['comprou', 'checkout', 'abandonou', 'carrinho', 'engajou', 'visitou']
 
 // Lista de leads do painel (uma linha por visita), via função track_leads (migration 100).
 export async function GET(request: Request) {

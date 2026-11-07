@@ -28,13 +28,15 @@ type Lead = {
   valor: string | null
   moeda: string | null
 }
-type Status = 'comprou' | 'abandonou' | 'carrinho' | 'engajou' | 'visitou'
+type Status = 'comprou' | 'checkout' | 'abandonou' | 'carrinho' | 'engajou' | 'visitou'
 type Resposta = { contagem: Partial<Record<Status, number>> | null; total: number; leads: Lead[] }
 
-// Status do lead = a etapa mais avançada que ele chegou.
+// Status do lead = a etapa mais avançada que ele chegou. Checkout sem compra
+// vira abandono de carrinho depois de 10 minutos (calculado no banco).
 const STATUS: { id: Status; label: string; ev: string; cor: string; fundo: string; borda: string }[] = [
   { id: 'comprou', label: 'Compra aprovada', ev: 'Purchase', cor: '#4ade80', fundo: 'rgba(34,197,94,0.12)', borda: 'rgba(34,197,94,0.35)' },
-  { id: 'abandonou', label: 'Abandono de checkout', ev: 'InitiateCheckout', cor: '#fbbf24', fundo: 'rgba(245,158,11,0.12)', borda: 'rgba(245,158,11,0.35)' },
+  { id: 'checkout', label: 'InitiateCheckout', ev: 'no checkout agora (menos de 10 min)', cor: '#c084fc', fundo: 'rgba(168,85,247,0.12)', borda: 'rgba(168,85,247,0.35)' },
+  { id: 'abandonou', label: 'Abandono de carrinho', ev: 'InitiateCheckout sem compra em 10 min', cor: '#fbbf24', fundo: 'rgba(245,158,11,0.12)', borda: 'rgba(245,158,11,0.35)' },
   { id: 'carrinho', label: 'Adicionou ao carrinho', ev: 'AddToCart', cor: '#fb923c', fundo: 'rgba(249,115,22,0.12)', borda: 'rgba(249,115,22,0.35)' },
   { id: 'engajou', label: 'Viu a página', ev: 'ViewContent', cor: '#60a5fa', fundo: 'rgba(59,130,246,0.12)', borda: 'rgba(59,130,246,0.3)' },
   { id: 'visitou', label: 'Só visitou', ev: 'PageView', cor: '#94a3b8', fundo: 'rgba(148,163,184,0.10)', borda: 'rgba(148,163,184,0.25)' },
@@ -271,7 +273,7 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
             ) : leads.length === 0 ? (
               <tr><td colSpan={9} className="py-14 text-center text-sm text-slate-600">Nenhum lead {status ? 'com esse status ' : ''}nesse período.</td></tr>
             ) : leads.map(l => {
-              const st = STATUS_MAP.get(l.status) ?? STATUS[4]
+              const st = STATUS_MAP.get(l.status) ?? STATUS[STATUS.length - 1]
               const pl = plataforma(l)
               const dh = dataHora(l.ultimo)
               const camp = semId(l.utm_campaign)
