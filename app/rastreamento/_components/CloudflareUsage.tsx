@@ -101,7 +101,7 @@ export function UsageBar({ installationId, compact = false, label }: { installat
         <Modal open onClose={() => setInfo(false)} title="Plano da Cloudflare" maxWidth="max-w-lg">
           <div className="cf-modal"><CloudflarePlanText /><CloudflarePlanCompare />
             <a href={CF_PLANS_URL} target="_blank" rel="noopener noreferrer" className="cf-up">abrir os planos na Cloudflare →</a>
-            {u.detected === null && <p className="cf-p" style={{ marginTop: 10 }}>Fez o upgrade? Marque “minha conta já está no Workers Paid” e a barra passa a contar o limite do mês. Pra o sistema reconhecer sozinho, adicione a permissão “Faturamento: Ler” no seu token da Cloudflare.</p>}
+            {u.detected === null && <p className="cf-p" style={{ marginTop: 10 }}>Fez o upgrade? Marque “minha conta já está no Workers Paid” e a barra passa a contar o limite do mês. Pra o sistema reconhecer sozinho, edite o seu token na Cloudflare e, em “Conta e faturamento”, marque “Lido” na linha “Cobrança”.</p>}
           </div>
         </Modal>
       )}
