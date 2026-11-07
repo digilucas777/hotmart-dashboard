@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
-import { RefreshCw, ShoppingBag, Wallet, Receipt, Percent, Info, CalendarDays, Unlink } from 'lucide-react'
+import { RefreshCw, ShoppingBag, Wallet, Receipt, Percent, CalendarDays, Unlink } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
 import { UsageBar } from './CloudflareUsage'
 import { LeadsTable } from './LeadsTable'
@@ -21,6 +21,8 @@ type Venda = {
   utm_source: string | null
   utm_campaign: string | null
   utm_content: string | null
+  utm_medium?: string | null
+  utm_term?: string | null
   src: string | null
   valor: string | number | null
   moeda: string | null
@@ -296,7 +298,7 @@ function TooltipGrafico({ active, payload, label }: { active?: boolean; payload?
   )
 }
 
-type AbaOrigem = 'campanha' | 'anuncio' | 'produto' | 'pais'
+type AbaOrigem = 'campanha' | 'conjunto' | 'anuncio' | 'pais'
 
 // ---------- painel ----------
 export function TrackDashboard({ installationId, triggers, criadaEm }: { installationId: string; triggers: TrackTrigger[]; criadaEm?: string | null }) {
@@ -404,12 +406,14 @@ export function TrackDashboard({ installationId, triggers, criadaEm }: { install
         k = c ?? (v.src ? `src:${v.src}` : '-')
         nome = c ?? (v.src ? v.src : 'Sem campanha')
         sub = c ? (v.utm_source ?? undefined) : v.src ? 'código src (sem UTM)' : 'direto, orgânico ou sem UTM'
+      } else if (aba === 'conjunto') {
+        const cj = semId(v.utm_medium ?? null)
+        k = cj ?? '-'; nome = cj ?? 'Sem conjunto identificado'
+        sub = cj ? semId(v.utm_campaign) ?? undefined : 'venda sem utm_medium'
       } else if (aba === 'anuncio') {
         const ad = semId(v.utm_content)
         k = ad ?? '-'; nome = ad ?? 'Sem anúncio identificado'
         sub = ad ? semId(v.utm_campaign) ?? undefined : 'venda sem utm_content'
-      } else if (aba === 'produto') {
-        k = v.produto ?? '-'; nome = v.produto ?? 'Produto não informado'
       } else {
         const iso = v.pais_comprador || v.geo_country
         k = iso ?? '-'; nome = nomePais(iso)
@@ -495,12 +499,6 @@ export function TrackDashboard({ installationId, triggers, criadaEm }: { install
 
       <UsageBar key={installationId} installationId={installationId} start={r.start} end={r.end} periodoLabel={rotuloPeriodo} />
 
-      {a.resumido && (
-        <div className="flex gap-2 rounded-xl px-3 py-2.5 text-xs text-amber-200 ring-1 ring-amber-500/25" style={{ background: 'rgba(245,158,11,0.08)' }}>
-          <Info size={14} className="mt-0.5 shrink-0" />
-          Parte desse período tem mais de 45 dias: os totais de visitas e cliques continuam guardados, mas o detalhe de cada um já foi apagado pra não pesar o banco. As vendas ficam sempre completas.
-        </div>
-      )}
 
       {/* ---------- indicadores ---------- */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
@@ -620,7 +618,7 @@ export function TrackDashboard({ installationId, triggers, criadaEm }: { install
         <Card className="lg:col-span-2">
           <Titulo extra={
             <div className="flex flex-wrap rounded-lg p-0.5" style={{ background: 'rgba(255,255,255,0.04)' }}>
-              {([['campanha', 'Campanha'], ['anuncio', 'Anúncio'], ['produto', 'Produto'], ['pais', 'País']] as [AbaOrigem, string][]).map(([id, l]) => (
+              {([['campanha', 'Campanha'], ['conjunto', 'Conjunto'], ['anuncio', 'Anúncio'], ['pais', 'País']] as [AbaOrigem, string][]).map(([id, l]) => (
                 <button key={id} onClick={() => setAba(id)}
                   className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${aba === id ? 'bg-white/10 text-slate-100' : 'text-slate-500 hover:text-slate-300'}`}>
                   {l}
