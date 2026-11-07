@@ -44,12 +44,14 @@ type Bloco = {
 }
 type Resposta = { atual: Bloco; anterior: Bloco | null }
 
-type PeriodoId = 'hoje' | 'ontem' | '7d' | '30d' | 'total' | 'custom'
+type PeriodoId = 'hoje' | 'ontem' | '7d' | '30d' | 'mes' | '3m' | 'total' | 'custom'
 const PERIODOS: { id: PeriodoId; label: string }[] = [
   { id: 'hoje', label: 'Hoje' },
   { id: 'ontem', label: 'Ontem' },
   { id: '7d', label: '7 dias' },
   { id: '30d', label: '30 dias' },
+  { id: 'mes', label: 'Último mês' },
+  { id: '3m', label: 'Últimos 3 meses' },
   { id: 'total', label: 'Total' },
   { id: 'custom', label: 'Personalizado' },
 ]
@@ -146,6 +148,9 @@ function intervalo(p: PeriodoId, de: string, ate: string, criadaEm: string | nul
   else if (p === 'ontem') { s = add(d0, -1); e = d0 }
   else if (p === '7d') { s = add(d0, -6); e = add(d0, 1) }
   else if (p === '30d') { s = add(d0, -29); e = add(d0, 1) }
+  // mês passado inteiro (do dia 1 ao último dia)
+  else if (p === 'mes') { s = new Date(d0.getFullYear(), d0.getMonth() - 1, 1); e = new Date(d0.getFullYear(), d0.getMonth(), 1) }
+  else if (p === '3m') { s = new Date(d0.getFullYear(), d0.getMonth() - 3, d0.getDate() + 1); e = add(d0, 1) }
   else if (p === 'total') {
     // desde o dia em que a instalação foi criada (máx. 400 dias, o limite da consulta)
     const c = criadaEm ? new Date(criadaEm) : add(d0, -89)
@@ -305,6 +310,10 @@ export function TrackDashboard({ installationId, triggers, criadaEm }: { install
   const [periodo, setPeriodo] = useState<PeriodoId>('hoje')
   const [de, setDe] = useState(() => dataKey(new Date(Date.now() - 6 * 86400000)))
   const [ate, setAte] = useState(() => dataKey(new Date()))
+  // rascunho do Personalizado: o painel só muda quando clica em Aplicar
+  const [escolhendo, setEscolhendo] = useState(false)
+  const [deRasc, setDeRasc] = useState(de)
+  const [ateRasc, setAteRasc] = useState(ate)
   const [dados, setDados] = useState<Resposta | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [carregadoChave, setCarregadoChave] = useState<string | null>(null)
@@ -315,13 +324,15 @@ export function TrackDashboard({ installationId, triggers, criadaEm }: { install
   const pedido = useRef(0)
 
   const r = useMemo(() => intervalo(periodo, de, ate, criadaEm ?? null), [periodo, de, ate, criadaEm])
-  const curto = (k: string) => `${k.slice(8, 10)}/${k.slice(5, 7)}`
-  const rotuloPeriodo = periodo === 'hoje' ? 'hoje'
-    : periodo === 'ontem' ? 'ontem'
-    : periodo === '7d' ? 'últimos 7 dias'
-    : periodo === '30d' ? 'últimos 30 dias'
-    : periodo === 'total' ? `desde ${curto(dataKey(r.s))} (total)`
-    : de === ate ? `em ${curto(de)}` : `de ${curto(de < ate ? de : ate)} a ${curto(de < ate ? ate : de)}`
+  const comAno = (k: string) => `${k.slice(8, 10)}/${k.slice(5, 7)}/${k.slice(0, 4)}`
+  const ultimoDia = dataKey(new Date(r.e.getTime() - 86400000))
+  const intervaloTxt = `${comAno(dataKey(r.s))} a ${comAno(ultimoDia)}`
+  const rotuloPeriodo = periodo === 'hoje' ? `hoje, ${comAno(dataKey(r.s))}`
+    : periodo === 'ontem' ? `ontem, ${comAno(dataKey(r.s))}`
+    : periodo === 'mes' ? `${r.s.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })} (${intervaloTxt})`
+    : periodo === 'total' ? `desde ${comAno(dataKey(r.s))} (total)`
+    : dataKey(r.s) === ultimoDia ? `em ${comAno(ultimoDia)}`
+    : intervaloTxt
   const aoVivo = periodo === 'hoje'
   const chave = `${installationId}|${r.start}|${r.end}`
   // carregando = ainda não chegou a resposta do período escolhido agora
@@ -429,31 +440,49 @@ export function TrackDashboard({ installationId, triggers, criadaEm }: { install
 
   // ---------- topo: período ----------
   const barraPeriodo = (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex rounded-xl p-1" style={{ background: '#151524', border: '1px solid rgba(255,255,255,0.07)' }}>
-          {PERIODOS.map(p => (
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap rounded-xl p-1" style={{ background: '#151524', border: '1px solid rgba(255,255,255,0.07)' }}>
+        {PERIODOS.map(p => {
+          const ativo = p.id === 'custom' ? (periodo === 'custom' || escolhendo) : periodo === p.id && !escolhendo
+          return (
             <button
               key={p.id}
-              onClick={() => setPeriodo(p.id)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${periodo === p.id ? 'bg-indigo-500 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+              onClick={() => {
+                if (p.id === 'custom') { setDeRasc(de); setAteRasc(ate); setEscolhendo(true) }
+                else { setEscolhendo(false); setPeriodo(p.id) }
+              }}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${ativo ? 'bg-indigo-500 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
             >
               {p.label}
             </button>
-          ))}
-        </div>
-        {periodo === 'custom' && (
-          <div className="flex flex-wrap items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs text-indigo-200 ring-1 ring-indigo-500/50" style={{ background: '#151524' }}>
-            <CalendarDays size={13} />
-            <span className="text-slate-500">de</span>
-            <input type="date" value={de} max={dataKey(new Date())} onChange={e => { if (e.target.value) setDe(e.target.value) }} className="bg-transparent text-xs outline-none [color-scheme:dark]" aria-label="data inicial" />
-            <span className="text-slate-500">até</span>
-            <input type="date" value={ate} max={dataKey(new Date())} onChange={e => { if (e.target.value) setAte(e.target.value) }} className="bg-transparent text-xs outline-none [color-scheme:dark]" aria-label="data final" />
-          </div>
-        )}
-        {periodo !== 'custom' && <span className="text-[11px] text-slate-500">{rotuloPeriodo}</span>}
+          )
+        })}
       </div>
-      <div className="flex items-center gap-3">
+
+      <button
+        onClick={atualizarAgora}
+        disabled={atualizando || carregando}
+        className="flex items-center gap-2 rounded-xl bg-indigo-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/20 transition-colors hover:bg-indigo-400 disabled:opacity-60"
+      >
+        {atualizando || carregando ? <Spinner size={14} /> : <RefreshCw size={15} />}
+        {atualizando || carregando ? 'Atualizando...' : 'Atualizar'}
+      </button>
+
+      {escolhendo ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl px-3 py-1.5 text-xs text-indigo-100 ring-1 ring-indigo-500/60" style={{ background: '#151524' }}>
+          <CalendarDays size={14} />
+          <span className="text-slate-400">de</span>
+          <input type="date" value={deRasc} max={dataKey(new Date())} onChange={e => { if (e.target.value) setDeRasc(e.target.value) }} className="bg-transparent text-xs outline-none [color-scheme:dark]" aria-label="data inicial" />
+          <span className="text-slate-400">até</span>
+          <input type="date" value={ateRasc} max={dataKey(new Date())} onChange={e => { if (e.target.value) setAteRasc(e.target.value) }} className="bg-transparent text-xs outline-none [color-scheme:dark]" aria-label="data final" />
+          <button type="button" onClick={() => { setDe(deRasc); setAte(ateRasc); setPeriodo('custom'); setEscolhendo(false) }} className="rounded-lg bg-indigo-500 px-3 py-1 text-xs font-bold text-white hover:bg-indigo-400">Aplicar</button>
+          <button type="button" onClick={() => setEscolhendo(false)} className="text-xs text-slate-400 hover:text-slate-200">cancelar</button>
+        </div>
+      ) : (
+        <span className="text-xs text-slate-400">{rotuloPeriodo}</span>
+      )}
+
+      <div className="ml-auto flex items-center gap-3">
         {aoVivo ? (
           <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-400">
             <span className="relative flex h-2 w-2">
@@ -463,16 +492,8 @@ export function TrackDashboard({ installationId, triggers, criadaEm }: { install
             Ao vivo
           </span>
         ) : atualizadoEm && (
-          <span className="text-[11px] text-slate-600">atualizado às {atualizadoEm.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+          <span className="text-[11px] text-slate-500">atualizado às {atualizadoEm.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
         )}
-        <button
-          onClick={atualizarAgora}
-          disabled={atualizando || carregando}
-          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-indigo-300 ring-1 ring-indigo-500/30 transition-colors hover:bg-indigo-500/15 disabled:opacity-60"
-        >
-          {atualizando ? <Spinner size={12} /> : <RefreshCw size={12} />}
-          Atualizar
-        </button>
       </div>
     </div>
   )
@@ -496,6 +517,12 @@ export function TrackDashboard({ installationId, triggers, criadaEm }: { install
   return (
     <div className={`space-y-5 transition-opacity ${carregando ? 'opacity-60' : ''}`}>
       {barraPeriodo}
+
+      {erro && (
+        <p className="rounded-xl px-3 py-2 text-xs text-rose-200 ring-1 ring-rose-500/30" style={{ background: 'rgba(244,63,94,0.08)' }}>
+          Não deu pra atualizar agora ({erro}). Os números abaixo são da última atualização. Tente de novo em instantes.
+        </p>
+      )}
 
       <UsageBar key={installationId} installationId={installationId} start={r.start} end={r.end} periodoLabel={rotuloPeriodo} />
 
