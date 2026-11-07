@@ -181,7 +181,11 @@ export async function GET(request: Request) {
         continue
       }
 
-      if (requests / requestLimit >= WARNING_THRESHOLD) {
+      const periodo = pago ? new Date().toISOString().slice(0, 7) : new Date().toISOString().slice(0, 10)
+      const jaAvisou = requests / requestLimit >= WARNING_THRESHOLD
+        ? !!(await admin.from('track_usage_alerts').insert({ account_id: inst.cloudflare_account_id, metric: `requests-${inst.id}`, period: periodo })).error
+        : true
+      if (!jaAvisou) {
         await notifyCloudflareUsageWarning({
           userId: inst.user_id,
           installationNome: inst.nome,
@@ -230,6 +234,9 @@ export async function GET(request: Request) {
           resultadosKv.push({ accountId, actionType, status: 'ok', count })
           continue
         }
+        const periodoKv = pago ? new Date().toISOString().slice(0, 7) : new Date().toISOString().slice(0, 10)
+        const { error: dup } = await admin.from('track_usage_alerts').insert({ account_id: accountId, metric: `kv-${actionType}`, period: periodoKv })
+        if (dup) { resultadosKv.push({ accountId, actionType, status: 'ja_avisado', count }); continue }
 
         const porUsuario = new Map<string, string[]>()
         for (const inst of insts) {

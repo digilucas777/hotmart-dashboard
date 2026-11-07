@@ -39,7 +39,7 @@ export function CloudflarePlanText() {
         O rastreamento roda na sua conta Cloudflare. A cada visitante novo, o robô guarda de qual anúncio ele veio (o clique, as UTMs, a cidade). É isso que liga a venda ao anúncio e faz o Facebook otimizar pro público certo.
       </p>
       <p className="cf-p">
-        No plano gratuito da Cloudflare cabem <b>1.000 visitantes novos por dia</b>. No Workers Paid, por US$ 5 por mês, cabem cerca de 33 mil por dia, e nenhuma venda perde a origem. <b>Recomendamos o upgrade</b>: é barato e evita perder dado quando o tráfego cresce.
+        No plano gratuito da Cloudflare cabem <b>1.000 visitantes novos por dia</b>. No Workers Paid, por US$ 5 por mês, cabem cerca de 33 mil por dia, e nenhuma venda perde a origem. <b>Recomendamos o upgrade</b>: é barato e evita perder dados quando o tráfego cresce.
       </p>
     </>
   )
@@ -72,7 +72,7 @@ export function UsageBar({ installationId, compact = false, label }: { installat
   const pct = Math.min(100, (used / limit) * 100)
   const peakPct = paid ? 0 : Math.min(100, ((u.peak7 ?? 0) / limit) * 100)
   const worst = Math.max(pct, peakPct)
-  const level = worst >= 85 ? 'bad' : worst >= 60 ? 'warn' : 'ok'
+  const level = worst >= 80 ? 'bad' : worst >= 60 ? 'warn' : 'ok'
 
   return (
     <div className={`cf-usage ${level}${compact ? ' compact' : ''}`}>

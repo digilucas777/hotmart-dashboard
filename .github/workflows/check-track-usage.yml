@@ -2,7 +2,7 @@ name: Checar uso da Cloudflare no Rastreamento
 
 on:
   schedule:
-    - cron: '0 */4 * * *'
+    - cron: '7 * * * *'
   workflow_dispatch: {}
 
 jobs:
