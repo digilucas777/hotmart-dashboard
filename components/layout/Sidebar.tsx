@@ -18,6 +18,7 @@ import {
   ChevronRight,
   Folder,
 } from 'lucide-react'
+import { WORKER_VERSION } from '@/track-worker/src/version.js'
 import { supabase } from '@/lib/supabase'
 import { fetchFolders, fetchFolderProjetoIds } from '@/lib/dashboard-folders'
 import type { DashboardFolder } from '@/lib/dashboard-folders'
@@ -220,8 +221,12 @@ export function Sidebar() {
         className="app-sidebar-logo flex h-14 flex-shrink-0 items-center gap-3 px-[18px]"
         style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
       >
-        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-violet-500 shadow-lg shadow-cyan-500/20">
-          <LayoutDashboard size={15} className="text-white" />
+        <div className="flex flex-shrink-0 flex-col items-center gap-0.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-violet-500 shadow-lg shadow-cyan-500/20">
+            <LayoutDashboard size={15} className="text-white" />
+          </div>
+          {/* versão do robô de rastreamento (track-worker/src/version.js) */}
+          <span className="font-mono text-[8.5px] leading-none text-slate-500" title={`Robô de rastreamento versão ${WORKER_VERSION}`}>v{WORKER_VERSION}</span>
         </div>
         <span className="app-sidebar-label text-sm font-bold text-slate-100">
           {companyName || 'Dash Speed'}

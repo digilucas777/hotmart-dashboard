@@ -1,9 +1,9 @@
 import { sha256Hex } from './hash.js'
+import { WORKER_VERSION } from './version.js'
 import { buildSnippet } from './snippet.js'
 import { normalizePhone } from './phone.js'
 import { isBotUserAgent } from './bots.js'
 
-const WORKER_VERSION = '1.4.0'
 
 function json(data, status = 200, extraHeaders) {
   return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...extraHeaders } })

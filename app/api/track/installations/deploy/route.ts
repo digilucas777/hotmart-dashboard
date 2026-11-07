@@ -25,6 +25,7 @@ function readWorkerModules() {
     { filename: 'snippet.js', content: readFileSync(path.join(dir, 'snippet.js'), 'utf8') },
     { filename: 'phone.js', content: readFileSync(path.join(dir, 'phone.js'), 'utf8') },
     { filename: 'bots.js', content: readFileSync(path.join(dir, 'bots.js'), 'utf8') },
+    { filename: 'version.js', content: readFileSync(path.join(dir, 'version.js'), 'utf8') },
   ]
 }
 

@@ -11,7 +11,7 @@ import path from 'path'
 const PUBLICAR = process.argv.includes('--publicar')
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 const CF = 'https://api.cloudflare.com/client/v4'
-const MODULOS = ['index.js', 'hash.js', 'snippet.js', 'phone.js', 'bots.js']
+const MODULOS = ['index.js', 'hash.js', 'snippet.js', 'phone.js', 'bots.js', 'version.js']
 
 function decryptSecret(payload) {
   const [ivB64, tagB64, dataB64] = payload.split('.')
