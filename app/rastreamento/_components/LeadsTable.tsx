@@ -69,21 +69,35 @@ function pagina(url: string | null) {
   try { const u = new URL(url); return `${u.hostname.replace(/^www\./, '')}${u.pathname === '/' ? '' : u.pathname}` } catch { return null }
 }
 
-// Plataforma pelo posicionamento que a Meta manda no utm_term
-// (Facebook_Mobile_Reels, Instagram_Stories, an = Audience Network...).
-function plataforma(l: Lead): { tipo: 'fb' | 'ig' | 'outro' | 'direto'; label: string } {
-  const t = (l.utm_term ?? '').toLowerCase()
-  const s = (l.utm_source ?? '').toLowerCase()
-  const pos = l.utm_term
-    ? l.utm_term === 'an' ? 'Audience Network' : l.utm_term === 'Others' ? 'Outros posicionamentos' : l.utm_term.replace(/_/g, ' ').trim()
-    : null
-  if (t.startsWith('instagram') || s === 'ig' || s === 'instagram') return { tipo: 'ig', label: pos ?? 'Instagram' }
-  if (t.startsWith('facebook') || t.startsWith('messenger') || t === 'an' || t === 'others' || s === 'facebook' || s === 'fb' || l.com_fbc) {
-    return { tipo: 'fb', label: pos ?? 'Facebook' }
+// utm_term = {{placement}} da Meta: onde o anúncio apareceu quando a pessoa
+// clicou (Instagram_Stories, Facebook_Mobile_Reels, an = Audience Network...).
+function posicionamento(term: string | null, source: string | null): { tipo: 'fb' | 'ig' | 'outro' | 'direto'; label: string } | null {
+  const t = (term ?? '').trim()
+  const s = (source ?? '').toLowerCase()
+  if (!t) {
+    if (s === 'ig' || s === 'instagram') return { tipo: 'ig', label: 'Instagram' }
+    if (s === 'fb' || s === 'facebook') return null
+    return null
   }
-  if (l.utm_source) return { tipo: 'outro', label: l.utm_source }
-  if (l.src) return { tipo: 'outro', label: `src: ${l.src}` }
-  return { tipo: 'direto', label: 'Direto / sem UTM' }
+  const low = t.toLowerCase()
+  const label = low === 'an' ? 'Audience Network' : low === 'others' ? 'Outros posicionamentos' : t.replace(/_/g, ' ').replace(/\s+/g, ' ').trim()
+  if (low.startsWith('instagram') || low === 'ig') return { tipo: 'ig', label: low === 'ig' ? 'Instagram' : label }
+  if (low.startsWith('facebook') || low.startsWith('messenger') || low === 'an' || low === 'others' || low === 'fb') return { tipo: 'fb', label: low === 'fb' ? 'Facebook' : label }
+  return { tipo: 'outro', label }
+}
+
+function Th({ children, param, className = '' }: { children: React.ReactNode; param?: string; className?: string }) {
+  return (
+    <th className={`px-2 py-2.5 align-bottom font-medium ${className}`}>
+      <span className="block">{children}</span>
+      {param && <span className="block font-mono text-[9.5px] normal-case tracking-normal text-slate-600">{param}</span>}
+    </th>
+  )
+}
+
+function Celula({ valor, destaque }: { valor: string | null; destaque?: boolean }) {
+  if (!valor) return <span className="text-slate-600">-</span>
+  return <p className={`truncate ${destaque ? 'font-medium text-slate-100' : 'text-slate-300'}`} title={valor}>{valor}</p>
 }
 
 function IconeFacebook() {
@@ -254,28 +268,30 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
       {erro && <p className="px-5 pb-4 text-xs text-rose-300">{erro}</p>}
 
       <div className="max-h-[640px] overflow-auto border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-        <table className="w-full min-w-[1320px] text-left text-xs">
+        <table className="w-full min-w-[1680px] text-left text-xs">
           <thead className="sticky top-0 z-10" style={{ background: '#151524' }}>
             <tr className="text-[10.5px] uppercase tracking-wider text-slate-500">
-              <th className="py-2.5 pl-4 pr-2 font-medium sm:pl-5">Data e hora</th>
-              <th className="px-2 py-2.5 font-medium">Plataforma</th>
-              <th className="px-2 py-2.5 font-medium">Lead</th>
-              <th className="px-2 py-2.5 font-medium" title="utm_campaign">Campanha</th>
-              <th className="px-2 py-2.5 font-medium" title="utm_medium">Conjunto</th>
-              <th className="px-2 py-2.5 font-medium" title="utm_content">Anúncio</th>
-              <th className="px-2 py-2.5 font-medium">Página visitada</th>
-              <th className="px-2 py-2.5 font-medium">Status</th>
-              <th className="py-2.5 pl-2 pr-4 text-right font-medium sm:pr-5">Valor</th>
+              <Th className="pl-4 sm:pl-5">Data e hora</Th>
+              <Th>Lead</Th>
+              <Th>Status</Th>
+              <Th className="text-right">Valor</Th>
+              <Th param="utm_source">Origem</Th>
+              <Th param="utm_campaign">Campanha</Th>
+              <Th param="utm_medium">Conjunto</Th>
+              <Th param="utm_content">Anúncio</Th>
+              <Th param="utm_term">Posicionamento</Th>
+              <Th param="src">Src</Th>
+              <Th className="pr-4 sm:pr-5">Página visitada</Th>
             </tr>
           </thead>
           <tbody>
             {!dados && carregando ? (
-              <tr><td colSpan={9} className="py-16 text-center"><Spinner size={20} /></td></tr>
+              <tr><td colSpan={11} className="py-16 text-center"><Spinner size={20} /></td></tr>
             ) : leads.length === 0 ? (
-              <tr><td colSpan={9} className="py-14 text-center text-sm text-slate-600">Nenhum lead {status ? 'com esse status ' : ''}nesse período.</td></tr>
+              <tr><td colSpan={11} className="py-14 text-center text-sm text-slate-600">Nenhum lead {status ? 'com esse status ' : ''}nesse período.</td></tr>
             ) : leads.map(l => {
               const st = STATUS_MAP.get(l.status) ?? STATUS[STATUS.length - 1]
-              const pl = plataforma(l)
+              const pos = posicionamento(l.utm_term, l.utm_source)
               const dh = dataHora(l.ultimo)
               const camp = semId(l.utm_campaign)
               const conj = semId(l.utm_medium)
@@ -283,19 +299,14 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
               const pag = pagina(l.pagina)
               const local = [l.cidade, nomePais(l.pais)].filter(Boolean).join(', ')
               const valor = l.status === 'comprou' ? dinheiro(l.valor, l.moeda) : null
+              const semUtm = !l.utm_source && !camp && !conj && !ad && !l.utm_term
               return (
                 <tr key={l.lead} className="border-t transition-colors hover:bg-white/[0.02]" style={{ borderColor: 'rgba(255,255,255,0.05)', boxShadow: `inset 3px 0 0 ${st.cor}` }}>
                   <td className="whitespace-nowrap py-3 pl-4 pr-2 align-top sm:pl-5">
                     <p className="tabular-nums text-slate-200">{dh.data}</p>
                     <p className="tabular-nums text-[11px] text-slate-500">{dh.hora}</p>
                   </td>
-                  <td className="px-2 py-3 align-top">
-                    <div className="flex items-center gap-2">
-                      <IconePlataforma tipo={pl.tipo} />
-                      <span className="max-w-[120px] truncate text-[11px] text-slate-400" title={pl.label}>{pl.label}</span>
-                    </div>
-                  </td>
-                  <td className="max-w-[240px] px-2 py-3 align-top">
+                  <td className="max-w-[230px] px-2 py-3 align-top">
                     {l.nome || l.email ? (
                       <div className="min-w-0 space-y-0.5">
                         <p className="truncate font-semibold text-slate-100" title={l.nome ?? ''}>{l.nome ?? 'Sem nome'}</p>
@@ -308,47 +319,51 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
                         {l.telefone && <Copiavel texto={l.telefone} className="text-[11px] tabular-nums text-slate-400" />}
                       </div>
                     ) : (
-                      <div className="min-w-0">
-                        <p className="text-slate-500">Visitante anônimo</p>
-                        <p className="truncate text-[11px] text-slate-600" title={local}>{local || 'local desconhecido'}</p>
-                      </div>
+                      <p className="text-slate-500">Visitante anônimo</p>
                     )}
-                    {(l.nome || l.email) && local && <p className="truncate text-[10.5px] text-slate-600">{local}</p>}
-                  </td>
-                  <td className="max-w-[230px] px-2 py-3 align-top">
-                    {camp
-                      ? <p className="truncate text-slate-200" title={camp}>{camp}</p>
-                      : <p className="text-slate-600">{l.src ? `src: ${l.src}` : 'Sem UTM'}</p>}
-                  </td>
-                  <td className="max-w-[200px] px-2 py-3 align-top">
-                    {conj ? <p className="truncate text-slate-300" title={conj}>{conj}</p> : <p className="text-slate-600">-</p>}
-                  </td>
-                  <td className="max-w-[180px] px-2 py-3 align-top">
-                    {ad ? <p className="truncate font-medium text-slate-200" title={ad}>{ad}</p> : <p className="text-slate-600">-</p>}
-                  </td>
-                  <td className="max-w-[170px] px-2 py-3 align-top">
-                    {pag ? (
-                      <a href={l.pagina ?? undefined} target="_blank" rel="noreferrer" className="block truncate text-indigo-300 hover:underline" title={l.pagina ?? ''}>{pag}</a>
-                    ) : <p className="text-slate-600">-</p>}
-                    {l.paginas > 1 && <p className="text-[10.5px] text-slate-600">{l.paginas} páginas vistas</p>}
+                    {local && <p className="truncate text-[10.5px] text-slate-600" title={local}>{local}</p>}
                   </td>
                   <td className="px-2 py-3 align-top">
                     <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: st.fundo, color: st.cor, boxShadow: `inset 0 0 0 1px ${st.borda}` }}>
                       <span className="h-1.5 w-1.5 rounded-full" style={{ background: st.cor }} />
                       {st.label}
                     </span>
-                    <p className="mt-1 text-[10.5px] text-slate-600">
+                    <p className="mt-1 whitespace-nowrap text-[10.5px] text-slate-600">
                       {st.ev}
                       {l.status === 'comprou' && (l.enviada_fb ? ' · enviada ao Facebook' : ' · não enviada ao Facebook')}
                     </p>
                   </td>
-                  <td className="whitespace-nowrap py-3 pl-2 pr-4 text-right align-top sm:pr-5">
+                  <td className="whitespace-nowrap px-2 py-3 text-right align-top">
                     {valor ? (
                       <>
                         <p className="font-bold tabular-nums text-emerald-300">{valor}</p>
-                        {l.produto && <p className="ml-auto max-w-[160px] truncate text-[10.5px] text-slate-500" title={l.produto}>{l.produto}</p>}
+                        {l.produto && <p className="ml-auto max-w-[150px] truncate text-[10.5px] text-slate-500" title={l.produto}>{l.produto}</p>}
                       </>
                     ) : <span className="text-slate-700">-</span>}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-3 align-top">
+                    {l.utm_source ? <span className="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-200" style={{ background: 'rgba(255,255,255,0.06)' }}>{l.utm_source}</span>
+                      : <span className="text-slate-600">{semUtm ? 'sem UTM' : '-'}</span>}
+                  </td>
+                  <td className="max-w-[240px] px-2 py-3 align-top"><Celula valor={camp} destaque /></td>
+                  <td className="max-w-[210px] px-2 py-3 align-top"><Celula valor={conj} /></td>
+                  <td className="max-w-[170px] px-2 py-3 align-top"><Celula valor={ad} destaque /></td>
+                  <td className="whitespace-nowrap px-2 py-3 align-top">
+                    {pos ? (
+                      <div className="flex items-center gap-1.5" title={l.utm_term ?? ''}>
+                        <IconePlataforma tipo={pos.tipo} />
+                        <span className="text-[11px] text-slate-300">{pos.label}</span>
+                      </div>
+                    ) : <span className="text-slate-600">-</span>}
+                  </td>
+                  <td className="max-w-[200px] px-2 py-3 align-top">
+                    {l.src ? <span className="block truncate font-mono text-[11px] text-teal-300" title={l.src}>{l.src}</span> : <span className="text-slate-600">-</span>}
+                  </td>
+                  <td className="max-w-[190px] py-3 pl-2 pr-4 align-top sm:pr-5">
+                    {pag ? (
+                      <a href={l.pagina ?? undefined} target="_blank" rel="noreferrer" className="block truncate text-indigo-300 hover:underline" title={l.pagina ?? ''}>{pag}</a>
+                    ) : <p className="text-slate-600">-</p>}
+                    {l.paginas > 1 && <p className="text-[10.5px] text-slate-600">{l.paginas} páginas vistas</p>}
                   </td>
                 </tr>
               )
