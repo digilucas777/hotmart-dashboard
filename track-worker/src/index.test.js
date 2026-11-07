@@ -1426,3 +1426,79 @@ test('ataque: com 2 hottoks cadastrados, um hottok inventado continua recusado',
   const res = await worker.fetch(req, makeEnv({ WEBHOOK_SECRET: 'segredo', HOTMART_HOTTOK: 'hottok-conta-a,hottok-conta-b' }))
   assert.equal(res.status, 401)
 })
+
+test('POST /collect de robô (meta-externalads) NÃO vai pro Facebook, NÃO grava no KV e só avisa o painel', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => { calls.push({ url: String(url), init }); return new Response('{}', { status: 200 }) }
+  try {
+    const env = makeEnvWithIngest()
+    const ctx = makeCtx()
+    const req = new Request('https://sinal.teste.com/collect', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json', 'User-Agent': 'meta-externalads/1.1 (+https://developers.facebook.com/docs/sharing/webmasters/crawler)' },
+      body: JSON.stringify({ event_name: 'PageView', session_id: 'robo1', url: 'https://minhalp.com.br/', new_session: true }),
+    })
+    const res = await worker.fetch(req, env, ctx)
+    await Promise.all(ctx._tasks)
+    assert.equal(res.status, 200)
+    assert.equal((await res.json()).ignored, 'bot')
+    assert.equal(calls.filter(c => c.url.includes('graph.facebook.com')).length, 0)
+    assert.equal(env.SESSIONS._store.size, 0)
+    const ingest = calls.filter(c => c.url.includes('/api/track/events/ingest'))
+    assert.equal(ingest.length, 1)
+    assert.equal(JSON.parse(ingest[0].init.body).user_agent.startsWith('meta-externalads'), true)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('POST /collect de celular Cubot (gente real) continua indo pro Facebook', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => { calls.push({ url: String(url), init }); return new Response('{}', { status: 200 }) }
+  try {
+    const env = makeEnv()
+    const req = new Request('https://sinal.teste.com/collect', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (Linux; Android 14; KINGKONG STAR 2) AppleWebKit/537.36 Instagram 448.0 Android (34/14; CUBOT; KINGKONG STAR 2)' },
+      body: JSON.stringify({ event_name: 'PageView', session_id: 'gente1', url: 'https://minhalp.com.br/', new_session: true }),
+    })
+    const res = await worker.fetch(req, env)
+    assert.equal(res.status, 200)
+    assert.equal(calls.filter(c => c.url.includes('graph.facebook.com')).length, 1)
+    assert.ok(env.SESSIONS._store.has('sid:gente1'))
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('POST /monitor de robô é ignorado', async () => {
+  const originalFetch = globalThis.fetch
+  const calls = []
+  globalThis.fetch = async (url, init) => { calls.push({ url: String(url), init }); return new Response('{}', { status: 200 }) }
+  try {
+    const env = makeEnvWithIngest()
+    const ctx = makeCtx()
+    const req = new Request('https://sinal.teste.com/monitor', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)' },
+      body: JSON.stringify({ event_name: 'InitiateCheckout', session_id: 's1' }),
+    })
+    const res = await worker.fetch(req, env, ctx)
+    await Promise.all(ctx._tasks)
+    assert.equal(res.status, 200)
+    assert.equal(calls.length, 0)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('GET /t.js sai antes de carregar o pixel quando é robô', async () => {
+  const env = makeEnv({ PIXEL_IDS_JSON: JSON.stringify(['111']) })
+  const res = await worker.fetch(new Request('https://sinal.teste.com/t.js'), env)
+  const js = await res.text()
+  assert.match(js, /navigator\.webdriver/)
+  assert.ok(js.indexOf("fbq('init'") > 0)
+  assert.ok(js.indexOf('navigator.webdriver') < js.indexOf("fbq('init'"))
+})

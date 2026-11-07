@@ -1,8 +1,9 @@
 import { sha256Hex } from './hash.js'
 import { buildSnippet } from './snippet.js'
 import { normalizePhone } from './phone.js'
+import { isBotUserAgent } from './bots.js'
 
-const WORKER_VERSION = '1.3.1'
+const WORKER_VERSION = '1.4.0'
 
 function json(data, status = 200, extraHeaders) {
   return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...extraHeaders } })
@@ -209,6 +210,31 @@ async function handleCollect(request, env, ctx) {
   const ip = request.headers.get('CF-Connecting-IP') || ''
   const userAgent = request.headers.get('User-Agent') || ''
   const geo = extractGeo(request)
+
+  // Robô (verificador de anúncios da Meta, Google, Ahrefs...): não manda pro
+  // Facebook e não grava sessão no KV (cada gravação conta no limite da
+  // Cloudflare). Só avisa o painel, que mostra quantos robôs foram ignorados.
+  if (isBotUserAgent(userAgent)) {
+    const utmBot = body.utm || {}
+    sendToIngest(ctx, env, {
+      event_name: body.event_name,
+      source: 'capi',
+      capi_send_ok: null,
+      ip,
+      session_id: body.session_id,
+      session_hit: false,
+      geo_city: geo.city,
+      geo_region: geo.region,
+      geo_country: geo.country,
+      geo_postal_code: geo.postalCode,
+      user_agent: userAgent,
+      url: body.url || null,
+      utm_source: utmBot.utm_source || null,
+      utm_campaign: utmBot.utm_campaign || null,
+    })
+    return json({ ok: true, ignored: 'bot' }, 200, cors)
+  }
+
   // Pro PageView, o script já manda um event_id gerado no navegador — é o
   // mesmo ID que ele usa pra disparar o pixel nativo da Meta (fbq), fazendo
   // a Meta fundir os dois em 1 evento só em vez de contar em dobro. Só cai
@@ -358,6 +384,7 @@ async function handleMonitor(request, env, ctx) {
 
   const ip = request.headers.get('CF-Connecting-IP') || ''
   const geo = extractGeo(request)
+  if (isBotUserAgent(request.headers.get('User-Agent') || '')) return json({ ok: true, ignored: 'bot' }, 200, cors)
 
   sendToIngest(ctx, env, {
     event_name: body.event_name,

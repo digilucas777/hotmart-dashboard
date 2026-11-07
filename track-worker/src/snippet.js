@@ -1,3 +1,5 @@
+import { BOT_UA_PATTERN } from './bots.js'
+
 function jsString(value) {
   return JSON.stringify(value ?? '')
 }
@@ -242,6 +244,11 @@ export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, worker
     : 'null'
 
   return `(function(){
+  // Robô (verificador de anúncios da Meta, Google, navegador automático...):
+  // sai antes de carregar o pixel, então nada dele chega no Facebook.
+  try {
+    if (navigator.webdriver || new RegExp(${jsString(BOT_UA_PATTERN)}, 'i').test(navigator.userAgent || '')) return;
+  } catch (e) {}
   // Precisa ser uma URL absoluta pro domínio do Worker: esse script roda no
   // contexto da PÁGINA que o carregou (ex: lecoursdejoy.store), não no
   // domínio de onde ele foi baixado — uma URL relativa tipo '/collect'
