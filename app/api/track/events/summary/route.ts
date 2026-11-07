@@ -50,6 +50,7 @@ export async function GET(request: Request) {
       .from('track_events')
       .select('*', { count: 'exact', head: true })
       .eq('installation_id', installationId)
+      .eq('is_bot', false) // robôs (migration 102) não contam
       .gte('received_at', start)
       .lt('received_at', end)
   }

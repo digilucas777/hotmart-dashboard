@@ -37,6 +37,7 @@ type Bloco = {
     vendas_meta: number; vendas_sessao: number; vendas_fora: number; ic_detectado: number
   } | null
   resumido: boolean
+  robos?: number
   vendas: Venda[]
 }
 type Resposta = { atual: Bloco; anterior: Bloco | null }
@@ -648,6 +649,11 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
             {(q?.falhas ?? 0) > 0 && (
               <p className="rounded-lg px-2.5 py-2 text-[11px] text-rose-300 ring-1 ring-rose-500/25" style={{ background: 'rgba(244,63,94,0.08)' }}>
                 {inteiro(q!.falhas)} envio(s) recusado(s) pelo Facebook nesse período. Confira o token do pixel na instalação.
+              </p>
+            )}
+            {(a.robos ?? 0) > 0 && (
+              <p className="rounded-lg px-2.5 py-2 text-[11px] text-slate-400 ring-1 ring-white/10" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                🤖 {inteiro(a.robos ?? 0)} acesso(s) de robô ignorado(s) nesse período (verificador de anúncios da Meta, Google, Apple e outros). Não entram nas visitas nem na lista de leads.
               </p>
             )}
             {(q?.vendas_fora ?? 0) > 0 && (

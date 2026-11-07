@@ -61,6 +61,7 @@ export async function GET(request: Request) {
     .select('event_name, source, session_hit, capi_send_ok, received_at, ip, fbp, fbc, session_id, geo_city, geo_region, geo_country, url, utm_source, utm_medium, utm_campaign, utm_content, utm_term, src')
     .eq('installation_id', installationId)
     .eq('event_name', eventName)
+    .eq('is_bot', false) // robôs (migration 102) não aparecem
     .gte('received_at', start)
     .lt('received_at', end)
     .order('received_at', { ascending: false })
