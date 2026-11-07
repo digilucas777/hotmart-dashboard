@@ -11,6 +11,7 @@ import { InstallationModal } from './_components/InstallationModal'
 import { HelpGuideModal } from './_components/HelpGuideModal'
 import { TrackDashboard } from './_components/TrackDashboard'
 import { ScriptModal } from './_components/ScriptModal'
+import { LiveSidebar } from './_components/LiveSidebar'
 import type { TrackInstallation } from '@/lib/track/types'
 
 export default function RastreamentoPage() {
@@ -260,7 +261,13 @@ export default function RastreamentoPage() {
             </div>
 
             {selected.status === 'deployed' ? (
-              <TrackDashboard key={selected.id} installationId={selected.id} triggers={selected.triggers} />
+              <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_250px]">
+                <TrackDashboard key={selected.id} installationId={selected.id} triggers={selected.triggers} />
+                {/* coluna "Ao vivo" fixa na direita, igual à da dashboard */}
+                <div className="hidden xl:block xl:sticky xl:top-20">
+                  <LiveSidebar key={selected.id} installationId={selected.id} />
+                </div>
+              </div>
             ) : (
               <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed py-14 text-center" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
                 <Rocket size={28} className="text-indigo-400" />

@@ -88,9 +88,9 @@ function posicionamento(term: string | null, source: string | null): { tipo: 'fb
 
 function Th({ children, param, className = '' }: { children: React.ReactNode; param?: string; className?: string }) {
   return (
-    <th className={`px-2 py-2.5 align-bottom font-medium ${className}`}>
+    <th className={`truncate px-1.5 py-2.5 align-bottom font-medium ${className}`}>
       <span className="block">{children}</span>
-      {param && <span className="block font-mono text-[9.5px] normal-case tracking-normal text-slate-600">{param}</span>}
+      {param && <span className="block truncate font-mono text-[9px] normal-case tracking-normal text-slate-600">{param}</span>}
     </th>
   )
 }
@@ -268,27 +268,39 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
       {erro && <p className="px-5 pb-4 text-xs text-rose-300">{erro}</p>}
 
       <div className="max-h-[640px] overflow-auto border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-        <table className="w-full min-w-[1680px] text-left text-xs">
+        {/* larguras fixas por coluna: cabe sem arrastar; texto longo corta com "..." e aparece inteiro no mouse */}
+        <table className="w-full min-w-[1080px] table-fixed text-left text-xs">
+          <colgroup>
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '14.5%' }} />
+            <col style={{ width: '12.5%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '8.5%' }} />
+            <col style={{ width: '6.5%' }} />
+            <col style={{ width: '7%' }} />
+          </colgroup>
           <thead className="sticky top-0 z-10" style={{ background: '#151524' }}>
-            <tr className="text-[10.5px] uppercase tracking-wider text-slate-500">
-              <Th className="pl-4 sm:pl-5">Data e hora</Th>
+            <tr className="text-[10px] uppercase tracking-wider text-slate-500">
+              <Th className="pl-3 sm:pl-4">Data</Th>
               <Th>Lead</Th>
               <Th>Status</Th>
               <Th className="text-right">Valor</Th>
-              <Th param="utm_source">Origem</Th>
+              <Th param="utm_source · utm_term">Origem</Th>
               <Th param="utm_campaign">Campanha</Th>
               <Th param="utm_medium">Conjunto</Th>
               <Th param="utm_content">Anúncio</Th>
-              <Th param="utm_term">Posicionamento</Th>
               <Th param="src">Src</Th>
-              <Th className="pr-4 sm:pr-5">Página visitada</Th>
+              <Th className="pr-3 sm:pr-4">Página</Th>
             </tr>
           </thead>
           <tbody>
             {!dados && carregando ? (
-              <tr><td colSpan={11} className="py-16 text-center"><Spinner size={20} /></td></tr>
+              <tr><td colSpan={10} className="py-16 text-center"><Spinner size={20} /></td></tr>
             ) : leads.length === 0 ? (
-              <tr><td colSpan={11} className="py-14 text-center text-sm text-slate-600">Nenhum lead {status ? 'com esse status ' : ''}nesse período.</td></tr>
+              <tr><td colSpan={10} className="py-14 text-center text-sm text-slate-600">Nenhum lead {status ? 'com esse status ' : ''}nesse período.</td></tr>
             ) : leads.map(l => {
               const st = STATUS_MAP.get(l.status) ?? STATUS[STATUS.length - 1]
               const pos = posicionamento(l.utm_term, l.utm_source)
@@ -302,68 +314,67 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
               const semUtm = !l.utm_source && !camp && !conj && !ad && !l.utm_term
               return (
                 <tr key={l.lead} className="border-t transition-colors hover:bg-white/[0.02]" style={{ borderColor: 'rgba(255,255,255,0.05)', boxShadow: `inset 3px 0 0 ${st.cor}` }}>
-                  <td className="whitespace-nowrap py-3 pl-4 pr-2 align-top sm:pl-5">
+                  <td className="py-2.5 pl-3 pr-1.5 align-top sm:pl-4">
                     <p className="tabular-nums text-slate-200">{dh.data}</p>
-                    <p className="tabular-nums text-[11px] text-slate-500">{dh.hora}</p>
+                    <p className="tabular-nums text-[10.5px] text-slate-500">{dh.hora.slice(0, 5)}</p>
                   </td>
-                  <td className="max-w-[230px] px-2 py-3 align-top">
+                  <td className="px-1.5 py-2.5 align-top">
                     {l.nome || l.email ? (
                       <div className="min-w-0 space-y-0.5">
                         <p className="truncate font-semibold text-slate-100" title={l.nome ?? ''}>{l.nome ?? 'Sem nome'}</p>
                         {l.dados_abandono && (
-                          <span className="inline-block rounded px-1.5 py-px text-[9.5px] font-semibold text-amber-300" style={{ background: 'rgba(245,158,11,0.12)' }} title="Dados do aviso de abandono de carrinho da Hotmart (chega 30 a 60 min depois), ligado a esta visita pelo produto, país e horário">
-                            dados do abandono (Hotmart)
+                          <span className="inline-block max-w-full truncate rounded px-1.5 py-px text-[9px] font-semibold text-amber-300" style={{ background: 'rgba(245,158,11,0.12)' }} title="Dados do aviso de abandono de carrinho da Hotmart (chega 30 a 60 min depois), ligado a esta visita pelo produto, país e horário">
+                            dados do abandono
                           </span>
                         )}
-                        {l.email && <Copiavel texto={l.email} className="text-[11px] text-slate-400" />}
-                        {l.telefone && <Copiavel texto={l.telefone} className="text-[11px] tabular-nums text-slate-400" />}
+                        {l.email && <Copiavel texto={l.email} className="text-[10.5px] text-slate-400" />}
+                        {l.telefone && <Copiavel texto={l.telefone} className="text-[10.5px] tabular-nums text-slate-400" />}
                       </div>
                     ) : (
                       <p className="text-slate-500">Visitante anônimo</p>
                     )}
-                    {local && <p className="truncate text-[10.5px] text-slate-600" title={local}>{local}</p>}
+                    {local && <p className="truncate text-[10px] text-slate-600" title={local}>{local}</p>}
                   </td>
-                  <td className="px-2 py-3 align-top">
-                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: st.fundo, color: st.cor, boxShadow: `inset 0 0 0 1px ${st.borda}` }}>
-                      <span className="h-1.5 w-1.5 rounded-full" style={{ background: st.cor }} />
-                      {st.label}
+                  <td className="px-1.5 py-2.5 align-top">
+                    <span className="inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 text-[10.5px] font-semibold" style={{ background: st.fundo, color: st.cor, boxShadow: `inset 0 0 0 1px ${st.borda}` }} title={st.label}>
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: st.cor }} />
+                      <span className="truncate">{st.label}</span>
                     </span>
-                    <p className="mt-1 whitespace-nowrap text-[10.5px] text-slate-600">
-                      {st.ev}
-                      {l.status === 'comprou' && (l.enviada_fb ? ' · enviada ao Facebook' : ' · não enviada ao Facebook')}
-                    </p>
+                    <p className="mt-1 truncate text-[10px] text-slate-600" title={st.ev}>{st.ev}</p>
+                    {l.status === 'comprou' && (
+                      <p className={`truncate text-[10px] ${l.enviada_fb ? 'text-emerald-500/80' : 'text-amber-400/80'}`}>{l.enviada_fb ? '✓ enviada à Meta' : 'não enviada à Meta'}</p>
+                    )}
                   </td>
-                  <td className="whitespace-nowrap px-2 py-3 text-right align-top">
+                  <td className="px-1.5 py-2.5 text-right align-top">
                     {valor ? (
                       <>
-                        <p className="font-bold tabular-nums text-emerald-300">{valor}</p>
-                        {l.produto && <p className="ml-auto max-w-[150px] truncate text-[10.5px] text-slate-500" title={l.produto}>{l.produto}</p>}
+                        <p className="truncate font-bold tabular-nums text-emerald-300">{valor}</p>
+                        {l.produto && <p className="truncate text-[10px] text-slate-500" title={l.produto}>{l.produto}</p>}
                       </>
                     ) : <span className="text-slate-700">-</span>}
                   </td>
-                  <td className="whitespace-nowrap px-2 py-3 align-top">
-                    {l.utm_source ? <span className="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-200" style={{ background: 'rgba(255,255,255,0.06)' }}>{l.utm_source}</span>
-                      : <span className="text-slate-600">{semUtm ? 'sem UTM' : '-'}</span>}
-                  </td>
-                  <td className="max-w-[240px] px-2 py-3 align-top"><Celula valor={camp} destaque /></td>
-                  <td className="max-w-[210px] px-2 py-3 align-top"><Celula valor={conj} /></td>
-                  <td className="max-w-[170px] px-2 py-3 align-top"><Celula valor={ad} destaque /></td>
-                  <td className="whitespace-nowrap px-2 py-3 align-top">
-                    {pos ? (
-                      <div className="flex items-center gap-1.5" title={l.utm_term ?? ''}>
-                        <IconePlataforma tipo={pos.tipo} />
-                        <span className="text-[11px] text-slate-300">{pos.label}</span>
+                  <td className="px-1.5 py-2.5 align-top">
+                    {l.utm_source
+                      ? <p className="truncate text-[11px] font-medium text-slate-200" title={l.utm_source}>{l.utm_source}</p>
+                      : <p className="text-slate-600">{semUtm ? 'sem UTM' : '-'}</p>}
+                    {pos && (
+                      <div className="mt-0.5 flex min-w-0 items-center gap-1" title={l.utm_term ?? ''}>
+                        <span className="shrink-0 scale-[0.8]"><IconePlataforma tipo={pos.tipo} /></span>
+                        <span className="truncate text-[10.5px] text-slate-400">{pos.label}</span>
                       </div>
-                    ) : <span className="text-slate-600">-</span>}
+                    )}
                   </td>
-                  <td className="max-w-[200px] px-2 py-3 align-top">
-                    {l.src ? <span className="block truncate font-mono text-[11px] text-teal-300" title={l.src}>{l.src}</span> : <span className="text-slate-600">-</span>}
+                  <td className="px-1.5 py-2.5 align-top"><Celula valor={camp} destaque /></td>
+                  <td className="px-1.5 py-2.5 align-top"><Celula valor={conj} /></td>
+                  <td className="px-1.5 py-2.5 align-top"><Celula valor={ad} destaque /></td>
+                  <td className="px-1.5 py-2.5 align-top">
+                    {l.src ? <span className="block truncate font-mono text-[10.5px] text-teal-300" title={l.src}>{l.src}</span> : <span className="text-slate-600">-</span>}
                   </td>
-                  <td className="max-w-[190px] py-3 pl-2 pr-4 align-top sm:pr-5">
+                  <td className="py-2.5 pl-1.5 pr-3 align-top sm:pr-4">
                     {pag ? (
-                      <a href={l.pagina ?? undefined} target="_blank" rel="noreferrer" className="block truncate text-indigo-300 hover:underline" title={l.pagina ?? ''}>{pag}</a>
+                      <a href={l.pagina ?? undefined} target="_blank" rel="noreferrer" className="block truncate text-[11px] text-indigo-300 hover:underline" title={l.pagina ?? ''}>{pag.replace(/^[^/]+/, '') || pag}</a>
                     ) : <p className="text-slate-600">-</p>}
-                    {l.paginas > 1 && <p className="text-[10.5px] text-slate-600">{l.paginas} páginas vistas</p>}
+                    {l.paginas > 1 && <p className="truncate text-[10px] text-slate-600">{l.paginas} páginas</p>}
                   </td>
                 </tr>
               )
