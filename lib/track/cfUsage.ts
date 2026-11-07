@@ -43,10 +43,12 @@ export async function fetchKvWrites(token: string, accountId: string): Promise<C
 }
 
 // Plano de Workers da conta. Só dá pra ler se o token tiver a permissão
-// "Faturamento: Ler" (Billing Read); sem ela a Cloudflare responde 403 e o
+// "Cobrança: Ler" (Billing Read); sem ela a Cloudflare responde 403 e o
 // plano fica "não sei" (aí vale o que o cliente marcou no painel).
-// HIPÓTESE (não confirmada com conta paga real): a assinatura do Workers Paid
-// aparece na lista de assinaturas com um id/nome contendo "workers".
+// Conferido com conta real (07/11/2026): o Workers Paid aparece na lista de
+// assinaturas com rate_plan.id = "workers_paid" e state "Paid" quando ativo
+// ("Expired" depois do downgrade). Os planos grátis de domínio também vêm
+// com state "Paid" (preço 0), por isso o filtro é pelo rate_plan.
 export async function detectWorkersPaid(token: string, accountId: string): Promise<boolean | null> {
   try {
     const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/subscriptions`, {
@@ -54,13 +56,8 @@ export async function detectWorkersPaid(token: string, accountId: string): Promi
     })
     if (!r.ok) return null
     const j = await r.json()
-    const subs = Array.isArray(j?.result) ? j.result : []
-    const paid = subs.some((s: Record<string, unknown>) => {
-      const txt = JSON.stringify({ rate_plan: s.rate_plan, product: s.product, component_values: s.component_values }).toLowerCase()
-      const active = !s.state || /paid|active|trial/i.test(String(s.state))
-      return active && /workers[ _-]?(paid|standard|bundled|unbound)/.test(txt)
-    })
-    return paid
+    const subs = (Array.isArray(j?.result) ? j.result : []) as { state?: string; rate_plan?: { id?: string } }[]
+    return subs.some(s => s.rate_plan?.id === 'workers_paid' && !/expired|cancel|fail/i.test(String(s.state ?? '')))
   } catch {
     return null
   }
