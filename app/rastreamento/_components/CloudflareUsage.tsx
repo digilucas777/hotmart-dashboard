@@ -71,8 +71,9 @@ export function UsageBar({ installationId, compact = false, label }: { installat
   const limit = paid ? u.limitMonth ?? 1_000_000 : u.limitDay ?? 1000
   const pct = Math.min(100, (used / limit) * 100)
   const peakPct = paid ? 0 : Math.min(100, ((u.peak7 ?? 0) / limit) * 100)
-  const worst = Math.max(pct, peakPct)
-  const level = worst >= 80 ? 'bad' : worst >= 60 ? 'warn' : 'ok'
+  // A cor e o alerta seguem o uso de hoje; o pico da semana vira só um lembrete.
+  const level = pct >= 80 ? 'bad' : pct >= 60 || peakPct >= 80 ? 'warn' : 'ok'
+  const atLimit = pct >= 100
 
   return (
     <div className={`cf-usage ${level}${compact ? ' compact' : ''}`}>
@@ -86,8 +87,9 @@ export function UsageBar({ installationId, compact = false, label }: { installat
       {!paid && u.available && (
         <span className="cf-u-note">
           pico dos últimos 7 dias: {(u.peak7 ?? 0).toLocaleString('pt-BR')} por dia
-          {level === 'bad' && <> · <b>no limite do plano gratuito: vendas estão chegando sem a origem do anúncio.</b></>}
-          {level === 'warn' && <> · perto do limite do plano gratuito.</>}
+          {atLimit && <> · <b>limite do plano gratuito atingido hoje: as próximas vendas chegam sem a origem do anúncio.</b></>}
+          {!atLimit && pct >= 80 && <> · <b>perto do limite do plano gratuito hoje.</b></>}
+          {pct < 80 && peakPct >= 80 && <> · nos últimos dias passou perto do limite do plano gratuito.</>}
         </span>
       )}
       <div className="cf-u-act">
