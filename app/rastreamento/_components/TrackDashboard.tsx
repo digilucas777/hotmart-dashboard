@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
-import { RefreshCw, ShoppingBag, Wallet, Receipt, Percent, CalendarDays, Unlink } from 'lucide-react'
+import { RefreshCw, ShoppingBag, Wallet, Receipt, Percent, CalendarDays, Unlink, SendHorizontal } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
+import { getPeriodRange } from '@/lib/utils'
+import type { Period } from '@/lib/types'
 import { UsageBar } from './CloudflareUsage'
 import { LeadsTable } from './LeadsTable'
 import type { TrackTrigger } from '@/lib/track/types'
@@ -44,15 +46,15 @@ type Bloco = {
 }
 type Resposta = { atual: Bloco; anterior: Bloco | null }
 
-type PeriodoId = 'hoje' | 'ontem' | '7d' | '30d' | 'mes' | '3m' | 'total' | 'custom'
+// Mesmos períodos da dashboard (lib/utils getPeriodRange: semana começa na segunda).
+type PeriodoId = 'hoje' | 'ontem' | 'semana' | 'semanaPassada' | 'mes' | 'mesPassado' | 'custom'
 const PERIODOS: { id: PeriodoId; label: string }[] = [
   { id: 'hoje', label: 'Hoje' },
   { id: 'ontem', label: 'Ontem' },
-  { id: '7d', label: '7 dias' },
-  { id: '30d', label: '30 dias' },
-  { id: 'mes', label: 'Último mês' },
-  { id: '3m', label: 'Últimos 3 meses' },
-  { id: 'total', label: 'Total' },
+  { id: 'semana', label: 'Esta semana' },
+  { id: 'semanaPassada', label: 'Semana passada' },
+  { id: 'mes', label: 'Este mês' },
+  { id: 'mesPassado', label: 'Último mês' },
   { id: 'custom', label: 'Personalizado' },
 ]
 
@@ -138,29 +140,22 @@ function horaCurta(iso: string) {
   return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
-function intervalo(p: PeriodoId, de: string, ate: string, criadaEm: string | null) {
-  const now = new Date()
-  const d0 = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const add = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)
+const MAPA_DASH: Record<Exclude<PeriodoId, 'custom'>, Period> = {
+  hoje: 'today', ontem: 'yesterday', semana: 'thisWeek', semanaPassada: 'lastWeek', mes: 'thisMonth', mesPassado: 'lastMonth',
+}
+
+function intervalo(p: PeriodoId, de: string, ate: string) {
   const parse = (k: string) => { const [y, m, dd] = k.split('-').map(Number); return new Date(y, m - 1, dd) }
   let s: Date, e: Date
-  if (p === 'hoje') { s = d0; e = add(d0, 1) }
-  else if (p === 'ontem') { s = add(d0, -1); e = d0 }
-  else if (p === '7d') { s = add(d0, -6); e = add(d0, 1) }
-  else if (p === '30d') { s = add(d0, -29); e = add(d0, 1) }
-  // mês passado inteiro (do dia 1 ao último dia)
-  else if (p === 'mes') { s = new Date(d0.getFullYear(), d0.getMonth() - 1, 1); e = new Date(d0.getFullYear(), d0.getMonth(), 1) }
-  else if (p === '3m') { s = new Date(d0.getFullYear(), d0.getMonth() - 3, d0.getDate() + 1); e = add(d0, 1) }
-  else if (p === 'total') {
-    // desde o dia em que a instalação foi criada (máx. 400 dias, o limite da consulta)
-    const c = criadaEm ? new Date(criadaEm) : add(d0, -89)
-    s = new Date(Math.max(new Date(c.getFullYear(), c.getMonth(), c.getDate()).getTime(), add(d0, -399).getTime()))
-    e = add(d0, 1)
-  } else {
+  if (p === 'custom') {
     const a1 = parse(de), a2 = parse(ate)
     s = a1 <= a2 ? a1 : a2
-    e = add(a1 <= a2 ? a2 : a1, 1)
-    if (e.getTime() - s.getTime() > 400 * 86400000) s = add(e, -400)
+    const fim = a1 <= a2 ? a2 : a1
+    e = new Date(fim.getFullYear(), fim.getMonth(), fim.getDate() + 1)
+    if (e.getTime() - s.getTime() > 400 * 86400000) s = new Date(e.getTime() - 400 * 86400000)
+  } else {
+    const r = getPeriodRange(MAPA_DASH[p])
+    s = r.from; e = r.to
   }
   const umDia = e.getTime() - s.getTime() <= 86400000 + 3600000
   const hourly = umDia && Date.now() - s.getTime() < RETENCAO_MS
@@ -306,7 +301,7 @@ function TooltipGrafico({ active, payload, label }: { active?: boolean; payload?
 type AbaOrigem = 'campanha' | 'conjunto' | 'anuncio' | 'pais'
 
 // ---------- painel ----------
-export function TrackDashboard({ installationId, triggers, criadaEm }: { installationId: string; triggers: TrackTrigger[]; criadaEm?: string | null }) {
+export function TrackDashboard({ installationId, triggers }: { installationId: string; triggers: TrackTrigger[] }) {
   const [periodo, setPeriodo] = useState<PeriodoId>('hoje')
   const [de, setDe] = useState(() => dataKey(new Date(Date.now() - 6 * 86400000)))
   const [ate, setAte] = useState(() => dataKey(new Date()))
@@ -323,14 +318,13 @@ export function TrackDashboard({ installationId, triggers, criadaEm }: { install
   const [aba, setAba] = useState<AbaOrigem>('campanha')
   const pedido = useRef(0)
 
-  const r = useMemo(() => intervalo(periodo, de, ate, criadaEm ?? null), [periodo, de, ate, criadaEm])
+  const r = useMemo(() => intervalo(periodo, de, ate), [periodo, de, ate])
   const comAno = (k: string) => `${k.slice(8, 10)}/${k.slice(5, 7)}/${k.slice(0, 4)}`
   const ultimoDia = dataKey(new Date(r.e.getTime() - 86400000))
   const intervaloTxt = `${comAno(dataKey(r.s))} a ${comAno(ultimoDia)}`
   const rotuloPeriodo = periodo === 'hoje' ? `hoje, ${comAno(dataKey(r.s))}`
     : periodo === 'ontem' ? `ontem, ${comAno(dataKey(r.s))}`
-    : periodo === 'mes' ? `${r.s.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })} (${intervaloTxt})`
-    : periodo === 'total' ? `desde ${comAno(dataKey(r.s))} (total)`
+    : periodo === 'mesPassado' ? `${r.s.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })} (${intervaloTxt})`
     : dataKey(r.s) === ultimoDia ? `em ${comAno(ultimoDia)}`
     : intervaloTxt
   const aoVivo = periodo === 'hoje'
@@ -387,13 +381,13 @@ export function TrackDashboard({ installationId, triggers, criadaEm }: { install
     const q = a.qualidade
     const antVisitas = ant?.funil.PageView ?? 0
     const antVendas = ant?.funil.Purchase ?? 0
-    const antMoedas = ant && periodo !== 'total' ? porMoeda(vendasUnicas(ant.vendas)) : []
+    const antMoedas = ant ? porMoeda(vendasUnicas(ant.vendas)) : []
     return {
       vendas, moedas, visitas, nVendas,
       conv: pct(nVendas, visitas),
-      antConv: ant && periodo !== 'total' ? pct(antVendas, antVisitas) : null,
-      antVisitas: ant && periodo !== 'total' ? antVisitas : null,
-      antVendas: ant && periodo !== 'total' ? antVendas : null,
+      antConv: ant ? pct(antVendas, antVisitas) : null,
+      antVisitas: ant ? antVisitas : null,
+      antVendas: ant ? antVendas : null,
       antMoedas,
       checkoutConv: pct(nVendas, a.funil.InitiateCheckout ?? 0),
       fbc: q ? pct(q.com_fbc, q.capi) : null,
@@ -405,7 +399,7 @@ export function TrackDashboard({ installationId, triggers, criadaEm }: { install
       naoEnviadas: vendas.filter(v => v.source !== 'capi' || v.capi_send_ok === false).length,
       serie: montarSerie(a.serie, r.s, r.e, r.hourly),
     }
-  }, [a, ant, r, periodo])
+  }, [a, ant, r])
 
   const origem = useMemo(() => {
     if (!calc) return []
@@ -528,7 +522,7 @@ export function TrackDashboard({ installationId, triggers, criadaEm }: { install
 
 
       {/* ---------- indicadores ---------- */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         <Kpi icon={<Wallet size={14} />} label="Faturamento" destaque rodape={calc.antMoedas.length > 0 && calc.moedas.length > 0
           ? <Variacao atual={calc.moedas[0].total} anterior={calc.antMoedas.find(m => m.moeda === calc.moedas[0].moeda)?.total ?? 0} />
           : undefined}>
@@ -546,6 +540,13 @@ export function TrackDashboard({ installationId, triggers, criadaEm }: { install
         </Kpi>
         <Kpi icon={<ShoppingBag size={14} />} label="Vendas" rodape={<Variacao atual={calc.nVendas} anterior={calc.antVendas} />}>
           <p className="text-3xl font-bold tabular-nums text-slate-50">{inteiro(calc.nVendas)}</p>
+        </Kpi>
+        <Kpi icon={<SendHorizontal size={14} />} label="Enviadas à Meta" rodape={
+          <span className="text-[11px] text-slate-500">{pctTxt(calc.sessao, 0)} com a origem do anúncio</span>
+        }>
+          <p className="text-3xl font-bold tabular-nums text-slate-50">
+            {inteiro(calc.nVendas - calc.naoEnviadas)}<span className="text-base font-medium text-slate-500"> / {inteiro(calc.nVendas)}</span>
+          </p>
         </Kpi>
         <Kpi icon={<Unlink size={14} />} label="Vendas sem rastreio" alerta={calc.semUtm > 0 || calc.naoEnviadas > 0} rodape={
           <span className="text-[11px] text-slate-500">

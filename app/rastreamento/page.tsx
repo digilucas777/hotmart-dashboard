@@ -260,7 +260,7 @@ export default function RastreamentoPage() {
             </div>
 
             {selected.status === 'deployed' ? (
-              <TrackDashboard key={selected.id} installationId={selected.id} triggers={selected.triggers} criadaEm={selected.created_at} />
+              <TrackDashboard key={selected.id} installationId={selected.id} triggers={selected.triggers} />
             ) : (
               <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed py-14 text-center" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
                 <Rocket size={28} className="text-indigo-400" />
