@@ -28,6 +28,7 @@ type RecentEvent = {
 
 type Summary = {
   counts_today: Record<string, number>
+  resumido?: boolean
   coverage_today: {
     total: number
     with_fbp_pct: number | null
@@ -478,6 +479,12 @@ export function EventsPanel({ installationId }: { installationId: string }) {
           </button>
         </div>
       </div>
+
+      {summary.resumido && (
+        <div className="rounded-xl px-3 py-2 text-[11px] text-amber-200 ring-1 ring-amber-500/25" style={{ background: 'rgba(245,158,11,0.08)' }}>
+          Dia com mais de 45 dias: os totais continuam guardados, mas o detalhe de cada visita e clique já foi apagado pra não pesar o banco. As vendas ficam sempre.
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-2">
         {EVENT_TYPES.map(ev => (

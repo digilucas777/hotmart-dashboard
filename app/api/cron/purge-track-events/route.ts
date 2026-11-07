@@ -9,11 +9,11 @@ function getServiceClient() {
   })
 }
 
-const RETENTION_DAYS = 14
-
-// Roda diariamente (ver vercel.json) e apaga eventos de rastreamento
-// (track_events) com mais de RETENTION_DAYS — evita o banco crescer sem
-// limite (mesmo padrão de app/api/cron/purge-dashboards).
+// DESATIVADA em 07/11/2026. Ela apagava TUDO com mais de 14 dias, inclusive
+// as vendas (Purchase). A retenção agora é feita no próprio banco pela função
+// track_prune_events(45) (migration 098, pg_cron diário): visitas e cliques
+// ficam 45 dias com o total por dia guardado, vendas ficam pra sempre.
+// A rota continua existindo só pra não quebrar chamadas antigas.
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET
   if (!cronSecret) return NextResponse.json({ error: 'CRON_SECRET não configurado' }, { status: 500 })
@@ -26,14 +26,5 @@ export async function GET(request: Request) {
   const admin = getServiceClient()
   if (!admin) return NextResponse.json({ error: 'service key not configured' }, { status: 500 })
 
-  const limite = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString()
-
-  const { error, count } = await admin
-    .from('track_events')
-    .delete({ count: 'exact' })
-    .lt('received_at', limite)
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  return NextResponse.json({ ok: true, apagados: count ?? 0 })
+  return NextResponse.json({ ok: true, apagados: 0, motivo: 'retenção feita no banco (track_prune_events)' })
 }

@@ -79,17 +79,35 @@ export async function GET(request: Request) {
     .find(r => r.error)?.error
   if (firstError) return NextResponse.json({ error: firstError.message }, { status: 500 })
 
+  // Visitas e cliques com mais de 45 dias saem de track_events e ficam só como
+  // total por dia (track_events_daily, migration 098). Pra um dia antigo, soma
+  // esse total. O dia guardado é o dia UTC; usa o do meio do período pedido.
+  const RETENCAO_DIAS = 45
+  const extra: Record<string, number> = {}
+  let resumido = false
+  if (startMs < Date.now() - RETENCAO_DIAS * 86400000) {
+    const dia = new Date(startMs + (endMs - startMs) / 2).toISOString().slice(0, 10)
+    const { data: diarios } = await supabase.from('track_events_daily').select('event_name, n')
+      .eq('installation_id', installationId).eq('day', dia)
+    for (const r of (diarios ?? []) as { event_name: string; n: number }[]) {
+      extra[r.event_name] = (extra[r.event_name] ?? 0) + (r.n ?? 0)
+      resumido = true
+    }
+  }
+
   const capiTotalCount = capiTotal.count ?? 0
   const purchaseTotalCount = purchaseTotal.count ?? 0
 
   return NextResponse.json({
     counts_today: {
-      PageView: pageView.count ?? 0,
-      ViewContent: viewContent.count ?? 0,
-      AddToCart: addToCart.count ?? 0,
-      InitiateCheckout: initiateCheckout.count ?? 0,
+      PageView: (pageView.count ?? 0) + (extra.PageView ?? 0),
+      ViewContent: (viewContent.count ?? 0) + (extra.ViewContent ?? 0),
+      AddToCart: (addToCart.count ?? 0) + (extra.AddToCart ?? 0),
+      InitiateCheckout: (initiateCheckout.count ?? 0) + (extra.InitiateCheckout ?? 0),
       Purchase: purchase.count ?? 0,
     },
+    // true = dia antigo: só existe o total, os detalhes de cada visita já foram apagados
+    resumido,
     coverage_today: {
       total: capiTotalCount,
       with_fbp_pct: capiTotalCount > 0 ? Math.round(((withFbp.count ?? 0) / capiTotalCount) * 100) : null,
