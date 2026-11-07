@@ -11,7 +11,6 @@ import { InstallationModal } from './_components/InstallationModal'
 import { HelpGuideModal } from './_components/HelpGuideModal'
 import { TrackDashboard } from './_components/TrackDashboard'
 import { ScriptModal } from './_components/ScriptModal'
-import { UsageBar } from './_components/CloudflareUsage'
 import type { TrackInstallation } from '@/lib/track/types'
 
 export default function RastreamentoPage() {
@@ -258,7 +257,6 @@ export default function RastreamentoPage() {
                   </button>
                 </div>
               </div>
-              {selected.status === 'deployed' && <UsageBar key={selected.id} installationId={selected.id} />}
             </div>
 
             {selected.status === 'deployed' ? (

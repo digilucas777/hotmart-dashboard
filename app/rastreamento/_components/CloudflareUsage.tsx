@@ -45,20 +45,29 @@ export function CloudflarePlanText() {
   )
 }
 
-type Usage = { available: boolean; paid: boolean; detected: boolean | null; today?: number; peak7?: number; month?: number; limitDay?: number; limitMonth?: number }
+type Periodo = { dias: { date: string; v: number }[]; robosIgnorados: number; robosAntesDaCorrecao: number }
+type Usage = { available: boolean; paid: boolean; detected: boolean | null; today?: number; peak7?: number; month?: number; limitDay?: number; limitMonth?: number; periodo?: Periodo | null }
+
+const diaCurto = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
 
 // Barra de uso: visitantes gravados hoje (gratuito) ou no mês (Workers Paid).
-export function UsageBar({ installationId, compact = false, label }: { installationId: string; compact?: boolean; label?: string }) {
+// Com start/end (o período escolhido no painel), mostra o uso desse período
+// e os robôs ignorados nele.
+export function UsageBar({ installationId, compact = false, label, start, end, periodoLabel }: {
+  installationId: string; compact?: boolean; label?: string; start?: string; end?: string; periodoLabel?: string
+}) {
   const [u, setU] = useState<Usage | null>(null)
   const [info, setInfo] = useState(false)
 
   useEffect(() => {
     let alive = true
-    const load = () => fetch(`/api/track/installations/usage?id=${installationId}`).then(r => (r.ok ? r.json() : null)).then(j => { if (alive && j) setU(j) }).catch(() => {})
+    const q = new URLSearchParams({ id: installationId })
+    if (start && end) { q.set('start', start); q.set('end', end) }
+    const load = () => fetch(`/api/track/installations/usage?${q}`).then(r => (r.ok ? r.json() : null)).then(j => { if (alive && j) setU(j) }).catch(() => {})
     load()
     const t = setInterval(load, 5 * 60 * 1000)
     return () => { alive = false; clearInterval(t) }
-  }, [installationId])
+  }, [installationId, start, end])
 
   async function setPaid(paid: boolean) {
     setU(x => (x ? { ...x, paid } : x))
@@ -67,29 +76,58 @@ export function UsageBar({ installationId, compact = false, label }: { installat
 
   if (!u) return null
   const paid = u.paid
-  const used = paid ? u.month ?? 0 : u.today ?? 0
+  const per = u.periodo ?? null
+  const dias = per?.dias ?? []
+  const totalPeriodo = dias.reduce((a, d) => a + d.v, 0)
+  const maiorDia = dias.reduce<{ date: string; v: number } | null>((m, d) => (!m || d.v > m.v ? d : m), null)
+  const umDia = dias.length === 1
+  // Plano gratuito: o limite é por dia, então num período de vários dias a
+  // barra mostra o dia que mais gastou. Workers Paid: limite do mês.
+  const used = paid ? u.month ?? 0 : per ? (umDia ? dias[0].v : maiorDia?.v ?? 0) : u.today ?? 0
   const limit = paid ? u.limitMonth ?? 1_000_000 : u.limitDay ?? 1000
   const pct = Math.min(100, (used / limit) * 100)
-  const peakPct = paid ? 0 : Math.min(100, ((u.peak7 ?? 0) / limit) * 100)
-  // A cor e o alerta seguem o uso de hoje; o pico da semana vira só um lembrete.
+  const peakPct = paid || per ? 0 : Math.min(100, ((u.peak7 ?? 0) / limit) * 100)
   const level = pct >= 80 ? 'bad' : pct >= 60 || peakPct >= 80 ? 'warn' : 'ok'
   const atLimit = pct >= 100
+  const titulo = paid
+    ? 'visitantes gravados no mês'
+    : !per ? 'visitantes gravados hoje'
+    : umDia ? `visitantes gravados ${periodoLabel ?? `em ${diaCurto(dias[0].date)}`}`
+    : `dia que mais gravou ${periodoLabel ? `(${periodoLabel})` : 'no período'}${maiorDia && maiorDia.v > 0 ? `: ${diaCurto(maiorDia.date)}` : ''}`
 
   return (
     <div className={`cf-usage ${level}${compact ? ' compact' : ''}`}>
       <div className="cf-u-head">
-        <span>{label ? <b className="cf-u-name">{label}</b> : null}{paid ? 'visitantes gravados no mês' : 'visitantes gravados hoje'} · {paid ? 'Workers Paid' : 'plano gratuito'}</span>
+        <span>{label ? <b className="cf-u-name">{label}</b> : null}{titulo} · {paid ? 'Workers Paid' : 'plano gratuito'}</span>
         <b>{used.toLocaleString('pt-BR')} <small>de {limit.toLocaleString('pt-BR')}</small></b>
       </div>
       {u.available
         ? <span className="cf-bar"><i style={{ width: `${Math.max(2, pct)}%` }} /></span>
         : <span className="cf-u-note">O uso aparece aqui depois que o robô começar a receber visitas.</span>}
-      {!paid && u.available && (
+      {u.available && per && !umDia && (
+        <span className="cf-u-days" aria-label="visitantes gravados por dia">
+          {dias.map(d => (
+            <i key={d.date} title={`${diaCurto(d.date)}: ${d.v.toLocaleString('pt-BR')}`}
+              className={!paid && d.v >= limit ? 'bad' : !paid && d.v >= limit * 0.8 ? 'warn' : ''}
+              style={{ height: `${Math.max(6, Math.min(100, (d.v / Math.max(paid ? maiorDia?.v || 1 : limit, 1)) * 100))}%` }} />
+          ))}
+        </span>
+      )}
+      {u.available && (
         <span className="cf-u-note">
-          pico dos últimos 7 dias: {(u.peak7 ?? 0).toLocaleString('pt-BR')} por dia
-          {atLimit && <> · <b>limite do plano gratuito atingido hoje: as próximas vendas chegam sem a origem do anúncio.</b></>}
-          {!atLimit && pct >= 80 && <> · <b>perto do limite do plano gratuito hoje.</b></>}
-          {pct < 80 && peakPct >= 80 && <> · nos últimos dias passou perto do limite do plano gratuito.</>}
+          {per && !umDia && <>total no período: {totalPeriodo.toLocaleString('pt-BR')}{!paid && ' · o limite do plano gratuito é por dia (dia em horário de Londres)'}</>}
+          {per && umDia && !paid && <>o dia da Cloudflare vai da meia-noite à meia-noite de Londres (21h de Brasília)</>}
+          {per && umDia && paid && <>no período: {totalPeriodo.toLocaleString('pt-BR')}</>}
+          {!per && !paid && <>pico dos últimos 7 dias: {(u.peak7 ?? 0).toLocaleString('pt-BR')} por dia</>}
+          {!paid && atLimit && <> · <b>limite do plano gratuito atingido: as próximas vendas desse dia chegaram sem a origem do anúncio.</b></>}
+          {!paid && !atLimit && pct >= 80 && <> · <b>perto do limite do plano gratuito.</b></>}
+          {!paid && pct < 80 && peakPct >= 80 && <> · nos últimos dias passou perto do limite do plano gratuito.</>}
+        </span>
+      )}
+      {per && (per.robosIgnorados > 0 || per.robosAntesDaCorrecao > 0) && (
+        <span className="cf-u-bots">
+          🤖 <b>{per.robosIgnorados.toLocaleString('pt-BR')}</b> acesso(s) de robô ignorado(s) no período: não foram pro Facebook nem gastaram o plano.
+          {per.robosAntesDaCorrecao > 0 && <> Outros {per.robosAntesDaCorrecao.toLocaleString('pt-BR')} chegaram antes da correção de 07/11 e foram contados.</>}
         </span>
       )}
       <div className="cf-u-act">

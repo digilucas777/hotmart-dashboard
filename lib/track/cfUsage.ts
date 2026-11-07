@@ -42,6 +42,34 @@ export async function fetchKvWrites(token: string, accountId: string): Promise<C
   }
 }
 
+// Visitantes gravados (gravações no KV) por dia UTC, num intervalo de datas
+// (AAAA-MM-DD, inclusivo). A Cloudflare conta o limite diário pelo dia UTC.
+export async function fetchKvWritesDays(token: string, accountId: string, since: string, until: string): Promise<{ date: string; v: number }[] | null> {
+  const query = `query($a:String!,$s:Date!,$u:Date!){viewer{accounts(filter:{accountTag:$a}){
+    kv: kvOperationsAdaptiveGroups(limit:400, filter:{date_geq:$s,date_leq:$u}){dimensions{date actionType} sum{requests}}
+  }}}`
+  try {
+    const r = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, variables: { a: accountId, s: since, u: until } }),
+      signal: AbortSignal.timeout(8000),
+    })
+    const j = await r.json()
+    if (!r.ok || j?.errors) return null
+    const groups = (j?.data?.viewer?.accounts?.[0]?.kv ?? []) as { dimensions: { date: string; actionType: string }; sum: { requests: number } }[]
+    const byDay = new Map<string, number>()
+    for (const g of groups) if (g.dimensions.actionType.toLowerCase() === 'write') byDay.set(g.dimensions.date, (byDay.get(g.dimensions.date) ?? 0) + g.sum.requests)
+    const out: { date: string; v: number }[] = []
+    for (let t = new Date(`${since}T00:00:00Z`); t.toISOString().slice(0, 10) <= until; t = new Date(t.getTime() + 86400000)) {
+      const d = t.toISOString().slice(0, 10)
+      out.push({ date: d, v: byDay.get(d) ?? 0 })
+    }
+    return out
+  } catch {
+    return null
+  }
+}
+
 // Plano de Workers da conta. Só dá pra ler se o token tiver a permissão
 // "Cobrança: Ler" (Billing Read); sem ela a Cloudflare responde 403 e o
 // plano fica "não sei" (aí vale o que o cliente marcou no painel).

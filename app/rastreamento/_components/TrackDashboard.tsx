@@ -6,7 +6,7 @@ import {
 } from 'recharts'
 import { RefreshCw, ShoppingBag, Wallet, Receipt, Percent, Info, CalendarDays, Unlink } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
-import { EventExplorer } from './EventsPanel'
+import { UsageBar } from './CloudflareUsage'
 import { LeadsTable } from './LeadsTable'
 import type { TrackTrigger } from '@/lib/track/types'
 
@@ -299,6 +299,7 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
   const pedido = useRef(0)
 
   const r = useMemo(() => intervalo(periodo, dia), [periodo, dia])
+  const rotuloPeriodo = periodo === 'hoje' ? 'hoje' : periodo === 'ontem' ? 'ontem' : periodo === '7d' ? 'últimos 7 dias' : periodo === '30d' ? 'últimos 30 dias' : `em ${dia.slice(8, 10)}/${dia.slice(5, 7)}`
   const aoVivo = periodo === 'hoje'
   const chave = `${installationId}|${r.start}|${r.end}`
   // carregando = ainda não chegou a resposta do período escolhido agora
@@ -475,6 +476,8 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
   return (
     <div className={`space-y-5 transition-opacity ${carregando ? 'opacity-60' : ''}`}>
       {barraPeriodo}
+
+      <UsageBar key={installationId} installationId={installationId} start={r.start} end={r.end} periodoLabel={rotuloPeriodo} />
 
       {a.resumido && (
         <div className="flex gap-2 rounded-xl px-3 py-2.5 text-xs text-amber-200 ring-1 ring-amber-500/25" style={{ background: 'rgba(245,158,11,0.08)' }}>
@@ -732,18 +735,6 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
         </Card>
       </div>
 
-      {/* ---------- eventos um por um ---------- */}
-      <EventExplorer
-        key={`${installationId}|${r.start}|${r.end}`}
-        installationId={installationId}
-        start={r.start}
-        end={r.end}
-        refreshTick={tick}
-        counts={{
-          ...a.funil,
-          InitiateCheckout: (a.funil.InitiateCheckout ?? 0) + (q?.ic_detectado ?? 0),
-        }}
-      />
     </div>
   )
 }
