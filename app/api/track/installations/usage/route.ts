@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/app/api/meta/_utils'
 import { canManageTracking } from '@/app/api/track/_utils'
 import { decryptSecret } from '@/lib/crypto'
-import { detectWorkersPaid, fetchKvWrites, fetchKvWritesDays, FREE_WRITES_DAY, PAID_WRITES_MONTH } from '@/lib/track/cfUsage'
+import { CF_HISTORICO_DIAS, detectWorkersPaid, fetchKvWrites, fetchKvWritesDays, FREE_WRITES_DAY, PAID_WRITES_MONTH } from '@/lib/track/cfUsage'
 
 // Uso da conta Cloudflare do cliente: visitantes gravados hoje / no mês e,
 // quando vem start/end (o período escolhido no painel), dia a dia no período,
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   const id = sp.get('id') ?? ''
   const startMs = Date.parse(sp.get('start') ?? '')
   const endMs = Date.parse(sp.get('end') ?? '')
-  const comPeriodo = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs && endMs - startMs <= 32 * 86400000
+  const comPeriodo = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs && endMs - startMs <= 400 * 86400000
   if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: 'id inválido' }, { status: 400 })
   const { data: inst } = await supabase.from('track_installations')
     .select('cloudflare_account_id, cloudflare_api_token_encrypted, cloudflare_paid')
@@ -28,7 +28,10 @@ export async function GET(request: Request) {
   let token = ''
   try { token = decryptSecret(row.cloudflare_api_token_encrypted).trim() } catch { /* sem token */ }
   // Dias UTC que o período toca (a Cloudflare zera o limite diário à meia-noite UTC).
-  const since = comPeriodo ? new Date(startMs).toISOString().slice(0, 10) : ''
+  // A Cloudflare só guarda 90 dias: um período maior começa no dia mais antigo que ela tem.
+  const maisAntigo = new Date(Date.now() - CF_HISTORICO_DIAS * 86400000).toISOString().slice(0, 10)
+  const sincePedido = comPeriodo ? new Date(startMs).toISOString().slice(0, 10) : ''
+  const since = sincePedido && sincePedido < maisAntigo ? maisAntigo : sincePedido
   const until = comPeriodo ? new Date(Math.min(endMs, Date.now()) - 1).toISOString().slice(0, 10) : ''
   const contar = (filtro: (q: ReturnType<typeof base>) => ReturnType<typeof base>) => filtro(base())
   function base() {
@@ -47,6 +50,7 @@ export async function GET(request: Request) {
   ])
   const periodo = comPeriodo ? {
     dias: dias ?? [],
+    cortadoEm: since !== sincePedido ? since : null,
     robosIgnorados: ignorados?.count ?? 0,
     robosAntesDaCorrecao: enviadosAntes?.count ?? 0,
   } : null

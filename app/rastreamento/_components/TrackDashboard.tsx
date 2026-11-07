@@ -42,12 +42,14 @@ type Bloco = {
 }
 type Resposta = { atual: Bloco; anterior: Bloco | null }
 
-type PeriodoId = 'hoje' | 'ontem' | '7d' | '30d' | 'dia'
+type PeriodoId = 'hoje' | 'ontem' | '7d' | '30d' | 'total' | 'custom'
 const PERIODOS: { id: PeriodoId; label: string }[] = [
   { id: 'hoje', label: 'Hoje' },
   { id: 'ontem', label: 'Ontem' },
   { id: '7d', label: '7 dias' },
   { id: '30d', label: '30 dias' },
+  { id: 'total', label: 'Total' },
+  { id: 'custom', label: 'Personalizado' },
 ]
 
 // Ordem padrão do funil de cima pra baixo. Evento configurado que não está
@@ -132,16 +134,27 @@ function horaCurta(iso: string) {
   return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
-function intervalo(p: PeriodoId, dia: string) {
+function intervalo(p: PeriodoId, de: string, ate: string, criadaEm: string | null) {
   const now = new Date()
   const d0 = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const add = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)
+  const parse = (k: string) => { const [y, m, dd] = k.split('-').map(Number); return new Date(y, m - 1, dd) }
   let s: Date, e: Date
   if (p === 'hoje') { s = d0; e = add(d0, 1) }
   else if (p === 'ontem') { s = add(d0, -1); e = d0 }
   else if (p === '7d') { s = add(d0, -6); e = add(d0, 1) }
   else if (p === '30d') { s = add(d0, -29); e = add(d0, 1) }
-  else { const [y, m, dd] = dia.split('-').map(Number); s = new Date(y, m - 1, dd); e = add(s, 1) }
+  else if (p === 'total') {
+    // desde o dia em que a instalação foi criada (máx. 400 dias, o limite da consulta)
+    const c = criadaEm ? new Date(criadaEm) : add(d0, -89)
+    s = new Date(Math.max(new Date(c.getFullYear(), c.getMonth(), c.getDate()).getTime(), add(d0, -399).getTime()))
+    e = add(d0, 1)
+  } else {
+    const a1 = parse(de), a2 = parse(ate)
+    s = a1 <= a2 ? a1 : a2
+    e = add(a1 <= a2 ? a2 : a1, 1)
+    if (e.getTime() - s.getTime() > 400 * 86400000) s = add(e, -400)
+  }
   const umDia = e.getTime() - s.getTime() <= 86400000 + 3600000
   const hourly = umDia && Date.now() - s.getTime() < RETENCAO_MS
   return { start: s.toISOString(), end: e.toISOString(), s, e, hourly }
@@ -286,9 +299,10 @@ function TooltipGrafico({ active, payload, label }: { active?: boolean; payload?
 type AbaOrigem = 'campanha' | 'anuncio' | 'produto' | 'pais'
 
 // ---------- painel ----------
-export function TrackDashboard({ installationId, triggers }: { installationId: string; triggers: TrackTrigger[] }) {
+export function TrackDashboard({ installationId, triggers, criadaEm }: { installationId: string; triggers: TrackTrigger[]; criadaEm?: string | null }) {
   const [periodo, setPeriodo] = useState<PeriodoId>('hoje')
-  const [dia, setDia] = useState(() => dataKey(new Date()))
+  const [de, setDe] = useState(() => dataKey(new Date(Date.now() - 6 * 86400000)))
+  const [ate, setAte] = useState(() => dataKey(new Date()))
   const [dados, setDados] = useState<Resposta | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [carregadoChave, setCarregadoChave] = useState<string | null>(null)
@@ -298,8 +312,14 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
   const [aba, setAba] = useState<AbaOrigem>('campanha')
   const pedido = useRef(0)
 
-  const r = useMemo(() => intervalo(periodo, dia), [periodo, dia])
-  const rotuloPeriodo = periodo === 'hoje' ? 'hoje' : periodo === 'ontem' ? 'ontem' : periodo === '7d' ? 'últimos 7 dias' : periodo === '30d' ? 'últimos 30 dias' : `em ${dia.slice(8, 10)}/${dia.slice(5, 7)}`
+  const r = useMemo(() => intervalo(periodo, de, ate, criadaEm ?? null), [periodo, de, ate, criadaEm])
+  const curto = (k: string) => `${k.slice(8, 10)}/${k.slice(5, 7)}`
+  const rotuloPeriodo = periodo === 'hoje' ? 'hoje'
+    : periodo === 'ontem' ? 'ontem'
+    : periodo === '7d' ? 'últimos 7 dias'
+    : periodo === '30d' ? 'últimos 30 dias'
+    : periodo === 'total' ? `desde ${curto(dataKey(r.s))} (total)`
+    : de === ate ? `em ${curto(de)}` : `de ${curto(de < ate ? de : ate)} a ${curto(de < ate ? ate : de)}`
   const aoVivo = periodo === 'hoje'
   const chave = `${installationId}|${r.start}|${r.end}`
   // carregando = ainda não chegou a resposta do período escolhido agora
@@ -354,13 +374,13 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
     const q = a.qualidade
     const antVisitas = ant?.funil.PageView ?? 0
     const antVendas = ant?.funil.Purchase ?? 0
-    const antMoedas = ant ? porMoeda(vendasUnicas(ant.vendas)) : []
+    const antMoedas = ant && periodo !== 'total' ? porMoeda(vendasUnicas(ant.vendas)) : []
     return {
       vendas, moedas, visitas, nVendas,
       conv: pct(nVendas, visitas),
-      antConv: ant ? pct(antVendas, antVisitas) : null,
-      antVisitas: ant ? antVisitas : null,
-      antVendas: ant ? antVendas : null,
+      antConv: ant && periodo !== 'total' ? pct(antVendas, antVisitas) : null,
+      antVisitas: ant && periodo !== 'total' ? antVisitas : null,
+      antVendas: ant && periodo !== 'total' ? antVendas : null,
       antMoedas,
       checkoutConv: pct(nVendas, a.funil.InitiateCheckout ?? 0),
       fbc: q ? pct(q.com_fbc, q.capi) : null,
@@ -372,7 +392,7 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
       naoEnviadas: vendas.filter(v => v.source !== 'capi' || v.capi_send_ok === false).length,
       serie: montarSerie(a.serie, r.s, r.e, r.hourly),
     }
-  }, [a, ant, r])
+  }, [a, ant, r, periodo])
 
   const origem = useMemo(() => {
     if (!calc) return []
@@ -418,20 +438,16 @@ export function TrackDashboard({ installationId, triggers }: { installationId: s
             </button>
           ))}
         </div>
-        <label
-          className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs ${periodo === 'dia' ? 'text-indigo-200 ring-1 ring-indigo-500/50' : 'text-slate-400'}`}
-          style={{ background: '#151524', border: '1px solid rgba(255,255,255,0.07)' }}
-          title="Escolher um dia"
-        >
-          <CalendarDays size={13} />
-          <input
-            type="date"
-            value={dia}
-            max={dataKey(new Date())}
-            onChange={e => { if (e.target.value) { setDia(e.target.value); setPeriodo('dia') } }}
-            className="bg-transparent text-xs outline-none [color-scheme:dark]"
-          />
-        </label>
+        {periodo === 'custom' && (
+          <div className="flex flex-wrap items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs text-indigo-200 ring-1 ring-indigo-500/50" style={{ background: '#151524' }}>
+            <CalendarDays size={13} />
+            <span className="text-slate-500">de</span>
+            <input type="date" value={de} max={dataKey(new Date())} onChange={e => { if (e.target.value) setDe(e.target.value) }} className="bg-transparent text-xs outline-none [color-scheme:dark]" aria-label="data inicial" />
+            <span className="text-slate-500">até</span>
+            <input type="date" value={ate} max={dataKey(new Date())} onChange={e => { if (e.target.value) setAte(e.target.value) }} className="bg-transparent text-xs outline-none [color-scheme:dark]" aria-label="data final" />
+          </div>
+        )}
+        {periodo !== 'custom' && <span className="text-[11px] text-slate-500">{rotuloPeriodo}</span>}
       </div>
       <div className="flex items-center gap-3">
         {aoVivo ? (
