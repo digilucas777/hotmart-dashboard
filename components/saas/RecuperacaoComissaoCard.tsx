@@ -31,8 +31,15 @@ import type { DiaRow } from '@/lib/types'
  * de 4 pra 2 idas ao banco. Mesmo assim a chamada combinada (3 projetos, mais linhas)
  * ainda dava timeout ocasional quando disparada JUNTO com a do total geral — por isso
  * agora elas rodam em SEQUÊNCIA (não em paralelo): o total geral aparece primeiro,
- * sem esperar a de origem, e a seção "Faturamento por Projeto" tem loading e retry
- * próprios (3 tentativas com espera crescente), só pra ela.
+ * sem esperar a de origem.
+ *
+ * Bug corrigido (08/11/2026): o retry forte (3 tentativas, espera crescente) só
+ * tinha sido aplicado na busca de origens; a busca do "Total geral" ficava com o
+ * retry padrão fraco de fetchVendasPorDia (2 tentativas, 400ms), e por isso era a
+ * que mais aparecia com "canceling statement due to statement timeout" no banner de
+ * erro (a query isolada roda rápido, ~250-360ms mesmo pro período inteiro; o estouro
+ * é contenção passageira de CPU/conexão quando o resto da página busca dados junto).
+ * `withRetry` generaliza o retry pras duas buscas.
  */
 const RATE_CUTOFF = '2026-10-16'
 const RATE_ATE_15 = 0.18
@@ -57,16 +64,20 @@ function toSummary(rows: DiaRow[]): SummaryRow[] {
   return Array.from(byKey.values())
 }
 
-// Retry próprio (além do que fetchVendasSummaryMulti já faz) pra absorver timeout
-// ocasional por contenção — 3 tentativas com espera crescente (0.8s, 2s).
-async function fetchOrigensComRetry(ids: string[], from: Date, to: Date, signal: AbortSignal) {
+// Retry próprio (além do que fetchVendasSummaryMulti/fetchVendasPorDia já fazem)
+// pra absorver timeout ocasional por contenção — 3 tentativas com espera crescente
+// (0.8s, 2s). Em 08/11/2026 descoberto que só a busca de origens (ES/FR/IT) tinha
+// esse retry forte; a de "Total geral" ficava só com o retry padrão fraco de
+// fetchVendasPorDia (2 tentativas, 400ms) e por isso era a que mais aparecia
+// falhando no banner de erro. Generalizado pra servir as duas buscas.
+async function withRetry<T>(fn: () => Promise<T>, signal: AbortSignal): Promise<T> {
   const delays = [0, 800, 2000]
   let lastErr: unknown
   for (const delay of delays) {
     if (delay > 0) await new Promise(r => setTimeout(r, delay))
     if (signal.aborted) throw new Error('aborted')
     try {
-      return await fetchVendasSummaryMulti(ids, from, to, signal)
+      return await fn()
     } catch (err) {
       lastErr = err
     }
@@ -134,7 +145,7 @@ export function RecuperacaoComissaoCard({
     // Sequencial, não paralelo: o total geral aparece assim que chega, sem esperar
     // a busca de origem (mais pesada, 3 projetos) — e as duas não disputam conexão
     // com o banco ao mesmo tempo, o que era a causa do timeout ocasional.
-    fetchVendasPorDia(projectId, from, to, controller.signal)
+    withRetry(() => fetchVendasPorDia(projectId, from, to, controller.signal), controller.signal)
       .then(geral => {
         if (cancelled) return
         setGeralRows(geral)
@@ -148,7 +159,7 @@ export function RecuperacaoComissaoCard({
         setLoading(false)
       })
 
-    fetchOrigensComRetry([ES_RECUPERACAO_ID, FR_RECUPERACAO_ID, IT_RECUPERACAO_ID], from, to, controller.signal)
+    withRetry(() => fetchVendasSummaryMulti([ES_RECUPERACAO_ID, FR_RECUPERACAO_ID, IT_RECUPERACAO_ID], from, to, controller.signal), controller.signal)
       .then(origens => {
         if (cancelled) return
         setEsSummary(origens.filter(r => r.projeto_id === ES_RECUPERACAO_ID))
@@ -267,7 +278,7 @@ export function RecuperacaoComissaoCard({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <ProjetoFaturamentoCard nome="Recuperação Espanhol" icone="🟡" summary={esSummary} exchangeRate={exchangeRate} />
           <ProjetoFaturamentoCard nome="Recuperação Francês" icone="🔵" summary={frSummary} exchangeRate={exchangeRate} />
-          <ProjetoFaturamentoCard nome="Recuperação Italiano+App" icone="🟢" summary={itSummary} exchangeRate={exchangeRate} />
+          <ProjetoFaturamentoCard nome="Recuperação Italiano" icone="🟢" summary={itSummary} exchangeRate={exchangeRate} />
           <ProjetoFaturamentoCard nome="Recuperação BR" icone="🇧🇷" summary={brSummary} exchangeRate={exchangeRate} />
           <ProjetoFaturamentoCard nome="Recuperação US" icone="🇺🇸" summary={usSummary} exchangeRate={exchangeRate} />
         </div>
