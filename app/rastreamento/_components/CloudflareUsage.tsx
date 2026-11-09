@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Loader2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import '../cfusage.css'
 
@@ -83,6 +83,11 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
   installationId: string; start: string; end: string; periodoLabel: string
 }) {
   const [u, setU] = useState<Usage | null>(null)
+  // Qual período os números na tela representam: enquanto for diferente do
+  // escolhido, o cartão mostra que está buscando os dados novos.
+  const chave = `${installationId}|${start}|${end}`
+  const [chaveCarregada, setChaveCarregada] = useState<string | null>(null)
+  const carregando = chaveCarregada !== chave
   const [info, setInfo] = useState(false)
   // Aberto/fechado fica guardado no navegador.
   const [aberto, setAberto] = useState(() => {
@@ -100,7 +105,10 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
     // dias do calendário local do período (início e último dia)
     const local = (ms: number) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
     const q = new URLSearchParams({ id: installationId, start, end, de: local(Date.parse(start)), ate: local(Date.parse(end) - 1) })
-    const load = () => fetch(`/api/track/installations/usage?${q}`).then(r => (r.ok ? r.json() : null)).then(j => { if (alive && j) setU(j) }).catch(() => {})
+    const k = `${installationId}|${start}|${end}`
+    const load = () => fetch(`/api/track/installations/usage?${q}`).then(r => (r.ok ? r.json() : null))
+      .then(j => { if (alive && j) setU(j) }).catch(() => {})
+      .finally(() => { if (alive) setChaveCarregada(k) })
     load()
     const t = setInterval(load, 5 * 60 * 1000)
     return () => { alive = false; clearInterval(t) }
@@ -111,7 +119,21 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
     await fetch('/api/track/installations/usage', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: installationId, paid }) }).catch(() => null)
   }
 
-  if (!u) return null
+  if (!u) {
+    return (
+      <div className="rounded-2xl border p-4 sm:p-5" style={{ background: '#151524', borderColor: 'rgba(255,255,255,0.07)' }} aria-busy="true">
+        <div className="flex items-center gap-2 text-[13px] font-semibold text-slate-300">
+          <Loader2 size={14} className="animate-spin text-indigo-400" />Plano da Cloudflare
+          <span className="text-[11px] font-normal text-slate-500">buscando o uso de {periodoLabel.toLowerCase()}...</span>
+        </div>
+        {aberto && (
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+            {[0, 1, 2, 3, 4, 5].map(i => <div key={i} className="h-[62px] animate-pulse rounded-xl" style={{ background: 'rgba(255,255,255,0.05)' }} />)}
+          </div>
+        )}
+      </div>
+    )
+  }
   const paid = u.paid
   const limiteDia = u.limitDay ?? 1000
   const limiteMes = u.limitMonth ?? 1_000_000
@@ -129,10 +151,11 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
   const tetoY = paid ? Math.max(pico?.v ?? 0, 10) * 1.15 : Math.max(pico?.v ?? 0, limiteDia) * 1.15
 
   return (
-    <div className="rounded-2xl border p-4 sm:p-5" style={{
+    <div className="relative overflow-hidden rounded-2xl border p-4 sm:p-5" aria-busy={carregando} style={{
       background: '#151524',
       borderColor: nivel === 'bad' ? 'rgba(244,63,94,0.45)' : nivel === 'warn' ? 'rgba(245,158,11,0.4)' : 'rgba(255,255,255,0.07)',
     }}>
+      {carregando && <div aria-hidden className="cf-scan pointer-events-none absolute inset-x-0 top-0 h-[2px]" />}
       <div className={`flex flex-wrap items-center justify-between gap-3 ${aberto ? 'mb-4' : ''}`}>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <button type="button" onClick={alternar} aria-expanded={aberto} className="flex items-center gap-1.5 text-[13px] font-semibold text-slate-200 hover:text-white" title={aberto ? 'Esconder' : 'Mostrar'}>
@@ -143,7 +166,12 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
             {paid ? 'Workers Paid' : 'plano gratuito · 1.000 visitantes por dia'}
           </span>
           <span className="text-[11px] text-slate-500">{periodoLabel}</span>
-          {!aberto && u.available && per && (
+          {carregando && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-indigo-300">
+              <Loader2 size={11} className="animate-spin" />buscando dados...
+            </span>
+          )}
+          {!carregando && !aberto && u.available && per && (
             <span className={`text-[11px] font-semibold ${!paid && acima ? 'text-rose-300' : 'text-slate-400'}`}>
               · {paid ? `uso do mês ${Math.round(pctMes)}%` : `hoje ${n(hoje)} de ${n(limiteDia)}${acima ? ` · ${acima} dia(s) acima do limite` : ''}`}
             </span>
@@ -158,7 +186,7 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
       {!aberto ? null : !u.available || !per ? (
         <p className="text-xs text-slate-500">O uso aparece aqui depois que o robô começar a receber visitas.</p>
       ) : (
-        <>
+        <div className={`transition-opacity duration-200 ${carregando ? 'pointer-events-none animate-pulse opacity-40' : 'opacity-100'}`}>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
             <Stat label="Visitantes gravados" valor={n(total)} sub={dias.length > 1 ? `em ${dias.length} dias` : diaCurto(dias[0]?.date ?? '')} />
             <Stat label="Média por dia" valor={n(media)} sub={paid ? 'sem limite diário' : `limite: ${n(limiteDia)} por dia`} />
@@ -208,8 +236,9 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
                 : 'Plano reconhecido automaticamente.'}
             </p>
           </div>
-        </>
+        </div>
       )}
+      <style>{`@keyframes cfScan { from { transform: translateX(-100%) } to { transform: translateX(100%) } } .cf-scan { background: linear-gradient(90deg, transparent, #818cf8, transparent); animation: cfScan 1s ease-in-out infinite }`}</style>
 
       {info && (
         <Modal open onClose={() => setInfo(false)} title="Plano da Cloudflare" maxWidth="max-w-lg">
