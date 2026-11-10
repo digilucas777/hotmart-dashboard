@@ -80,10 +80,10 @@ export async function GET(request: Request) {
     .find(r => r.error)?.error
   if (firstError) return NextResponse.json({ error: firstError.message }, { status: 500 })
 
-  // Visitas e cliques com mais de 45 dias saem de track_events e ficam só como
+  // Visitas e cliques com mais de 15 dias saem de track_events e ficam só como
   // total por dia (track_events_daily, migration 098). Pra um dia antigo, soma
   // esse total. O dia guardado é o dia UTC; usa o do meio do período pedido.
-  const RETENCAO_DIAS = 45
+  const RETENCAO_DIAS = 15
   const extra: Record<string, number> = {}
   let resumido = false
   if (startMs < Date.now() - RETENCAO_DIAS * 86400000) {

@@ -11,8 +11,8 @@ function getServiceClient() {
 
 // DESATIVADA em 07/11/2026. Ela apagava TUDO com mais de 14 dias, inclusive
 // as vendas (Purchase). A retenção agora é feita no próprio banco pela função
-// track_prune_events(45) (migration 098, pg_cron diário): visitas e cliques
-// ficam 45 dias com o total por dia guardado, vendas ficam pra sempre.
+// track_prune_events(15) (pg_cron diário, era 45 até 09/11/2026): visitas e cliques
+// ficam 15 dias com o total por dia guardado, vendas ficam pra sempre.
 // A rota continua existindo só pra não quebrar chamadas antigas.
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET

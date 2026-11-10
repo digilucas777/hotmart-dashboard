@@ -102,7 +102,7 @@ function montarFunil(triggers: TrackTrigger[]): { ev: string; dica: string }[] {
   ]
 }
 
-const RETENCAO_MS = 45 * 86400000
+const RETENCAO_MS = 15 * 86400000
 const LIVE_MS = 30_000
 
 // ---------- utilidades ----------
