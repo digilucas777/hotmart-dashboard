@@ -601,10 +601,12 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
           <div className="flex gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-200">
             <span>⚠️</span>
             <p>
-              Antes de ativar: vá em <strong>Hotmart → seu produto → Pixels de Rastreamento</strong> e
-              desmarque o evento <strong>Purchase</strong>, deixando só <strong>InitiateCheckout</strong> marcado.
-              Sem isso, a venda é contada em dobro na Meta (uma vez pelo pixel nativo da Hotmart, outra pela
-              nossa integração).
+              <strong>Pixel que você já usava:</strong> se ele já está em <strong>Hotmart › seu produto › Pixels de Rastreamento</strong>,
+              desmarque lá o evento <strong>Purchase</strong>, deixando só o <strong>InitiateCheckout</strong> marcado.
+              Sem isso, a venda é contada em dobro na Meta (uma vez pelo pixel da Hotmart, outra pela nossa integração).
+              <br />
+              <strong>Pixel novo:</strong> só cadastre na Hotmart se o InitiateCheckout for medido pelo pixel dela; nesse caso, marque só o
+              <strong> InitiateCheckout</strong>. Se o InitiateCheckout vem do script na página, não precisa cadastrar.
             </p>
           </div>
 

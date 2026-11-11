@@ -33,11 +33,11 @@ type Status = 'comprou' | 'checkout' | 'abandonou' | 'carrinho' | 'engajou' | 'v
 type Resposta = { contagem: Partial<Record<Status, number>> | null; total: number; leads: Lead[] }
 
 // Status do lead = a etapa mais avançada que ele chegou. Checkout sem compra
-// vira abandono de carrinho depois de 10 minutos (calculado no banco).
+// só vira abandono de carrinho quando a Hotmart avisa (webhook); senão fica InitiateCheckout.
 const STATUS: { id: Status; label: string; ev: string; cor: string; fundo: string; borda: string }[] = [
   { id: 'comprou', label: 'Compra aprovada', ev: 'Purchase', cor: '#4ade80', fundo: 'rgba(34,197,94,0.12)', borda: 'rgba(34,197,94,0.35)' },
-  { id: 'checkout', label: 'InitiateCheckout', ev: 'no checkout agora (menos de 10 min)', cor: '#c084fc', fundo: 'rgba(168,85,247,0.12)', borda: 'rgba(168,85,247,0.35)' },
-  { id: 'abandonou', label: 'Abandono de carrinho', ev: 'InitiateCheckout sem compra em 10 min', cor: '#fbbf24', fundo: 'rgba(245,158,11,0.12)', borda: 'rgba(245,158,11,0.35)' },
+  { id: 'checkout', label: 'InitiateCheckout', ev: '', cor: '#c084fc', fundo: 'rgba(168,85,247,0.12)', borda: 'rgba(168,85,247,0.35)' },
+  { id: 'abandonou', label: 'Abandono de carrinho', ev: 'avisado pela plataforma', cor: '#fbbf24', fundo: 'rgba(245,158,11,0.12)', borda: 'rgba(245,158,11,0.35)' },
   { id: 'carrinho', label: 'Adicionou ao carrinho', ev: 'AddToCart', cor: '#fb923c', fundo: 'rgba(249,115,22,0.12)', borda: 'rgba(249,115,22,0.35)' },
   { id: 'engajou', label: 'Viu a página', ev: 'ViewContent', cor: '#60a5fa', fundo: 'rgba(59,130,246,0.12)', borda: 'rgba(59,130,246,0.3)' },
   { id: 'visitou', label: 'Só visitou', ev: 'PageView', cor: '#94a3b8', fundo: 'rgba(148,163,184,0.10)', borda: 'rgba(148,163,184,0.25)' },
@@ -340,7 +340,7 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
                       <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: st.cor }} />
                       <span className="truncate">{st.label}</span>
                     </span>
-                    <p className="mt-1 truncate text-[10px] text-slate-600" title={st.ev}>{st.ev}</p>
+                    {st.ev && <p className="mt-1 truncate text-[10px] text-slate-600" title={st.ev}>{st.ev}</p>}
                     {l.status === 'comprou' && (
                       <p className={`truncate text-[10px] ${l.enviada_fb ? 'text-emerald-500/80' : 'text-amber-400/80'}`}>{l.enviada_fb ? '✓ enviada à Meta' : 'não enviada à Meta'}</p>
                     )}
