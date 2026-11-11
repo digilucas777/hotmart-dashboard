@@ -76,8 +76,8 @@ function TooltipUso({ active, payload, limite, multi, local }: { active?: boolea
     <div className="rounded-lg border border-white/10 bg-[#0f0f1e] px-3 py-2 text-xs shadow-xl">
       <p className="text-slate-500">{diaCurto(d.date)}</p>
       <p className="font-semibold text-slate-100">{n(d.v)} visitantes gravados{multi ? ' nesta instalação' : ''}</p>
-      {multi && <p className="text-slate-400">conta toda: {n(conta)} (outras instalações: {n(conta - d.v)})</p>}
-      {limite !== null && !local && conta > limite && <p className="text-rose-300">{n(conta - limite)} acima do limite grátis{multi ? ' da conta' : ''}</p>}
+      {multi && <p className="text-slate-400">total geral: {n(conta)} (outras instalações: {n(conta - d.v)})</p>}
+      {limite !== null && !local && conta > limite && <p className="text-rose-300">{n(conta - limite)} acima do limite grátis{multi ? ' no total geral' : ''}</p>}
     </div>
   )
 }
@@ -191,7 +191,7 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
           )}
           {!carregando && !aberto && u.available && per && (
             <span className={`text-[11px] font-semibold ${!paid && acima ? 'text-rose-300' : 'text-slate-400'}`}>
-              · {multi ? `nesta instalação hoje ${n(hojeInst)} · conta toda ` : ''}{paid ? `uso do mês ${Math.round(pctMes)}%` : `hoje ${n(hoje)} de ${n(limiteDia)}${acima ? ` · ${acima} dia(s) acima do limite` : ''}`}
+              · {multi ? `nesta instalação hoje ${n(hojeInst)} · total geral ` : ''}{paid ? `uso do mês ${Math.round(pctMes)}%` : `hoje ${n(hoje)} de ${n(limiteDia)}${acima ? ` · ${acima} dia(s) acima do limite` : ''}`}
             </span>
           )}
         </div>
@@ -206,14 +206,14 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
       ) : (
         <div className={`transition-opacity duration-200 ${carregando ? 'pointer-events-none animate-pulse opacity-40' : 'opacity-100'}`}>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-            <Stat label="Visitantes gravados" valor={n(total)} sub={multi ? `conta toda: ${n(totalConta)}` : dias.length > 1 ? `em ${dias.length} dias` : diaCurto(dias[0]?.date ?? '')} />
-            <Stat label="Média por dia" valor={n(media)} sub={multi ? `conta toda: ${n(mediaConta)} por dia` : paid ? 'sem limite diário' : `limite: ${n(limiteDia)} por dia`} />
+            <Stat label="Visitantes gravados" valor={n(total)} sub={multi ? `total geral: ${n(totalConta)}` : dias.length > 1 ? `em ${dias.length} dias` : diaCurto(dias[0]?.date ?? '')} />
+            <Stat label="Média por dia" valor={n(media)} sub={multi ? `total geral: ${n(mediaConta)} por dia` : paid ? 'sem limite diário' : `limite: ${n(limiteDia)} por dia`} />
             <Stat label="Dia de pico" valor={n(pico?.v ?? 0)} sub={pico && pico.v > 0 ? diaCurto(pico.date) : 'sem visitas'} tom={!paid && !multi && (pico?.v ?? 0) > limiteDia ? 'bad' : undefined} />
             {paid
-              ? <Stat label={multi ? 'Uso do mês (conta)' : 'Uso do mês'} valor={`${Math.round(pctMes)}%`} sub={`${n(u.month ?? 0)} de ${n(limiteMes)}`} tom={pctMes >= 80 ? 'bad' : pctMes >= 60 ? 'warn' : 'good'} />
-              : <Stat label={multi ? 'Dias acima (conta)' : 'Dias acima do limite'} valor={`${acima} de ${dias.length}`} sub={acima ? `${multi ? 'a conta passou' : 'passou'} de 1.000 nesses dias` : 'nenhum dia estourou'} tom={acima ? 'bad' : 'good'} />}
+              ? <Stat label={multi ? 'Uso do mês (total geral)' : 'Uso do mês'} valor={`${Math.round(pctMes)}%`} sub={`${n(u.month ?? 0)} de ${n(limiteMes)}`} tom={pctMes >= 80 ? 'bad' : pctMes >= 60 ? 'warn' : 'good'} />
+              : <Stat label={multi ? 'Dias acima (total geral)' : 'Dias acima do limite'} valor={`${acima} de ${dias.length}`} sub={acima ? `${multi ? 'o total geral passou' : 'passou'} de 1.000 nesses dias` : 'nenhum dia estourou'} tom={acima ? 'bad' : 'good'} />}
             {multi
-              ? <Stat label="Hoje" valor={n(hojeInst)} sub={paid ? `conta toda: ${n(hojeConta)}` : `limite da conta: ${n(hoje)} de ${n(limiteDia)}`} tom={paid ? undefined : pctHoje >= 80 ? 'bad' : pctHoje >= 60 ? 'warn' : 'good'} />
+              ? <Stat label="Hoje" valor={n(hojeInst)} sub={paid ? `total geral: ${n(hojeConta)}` : `limite do total geral: ${n(hoje)} de ${n(limiteDia)}`} tom={paid ? undefined : pctHoje >= 80 ? 'bad' : pctHoje >= 60 ? 'warn' : 'good'} />
               : <Stat label="Hoje" valor={paid ? n(hojeConta) : `${Math.round(pctHoje)}%`} sub={paid ? 'visitantes gravados desde 00h' : `limite: ${n(hoje)} de ${n(limiteDia)}`} tom={paid ? undefined : pctHoje >= 80 ? 'bad' : pctHoje >= 60 ? 'warn' : 'good'} />}
             <Stat label="Robôs ignorados" valor={n(per.robosIgnorados)} sub="não gastaram o plano" tom={per.robosIgnorados ? 'good' : undefined} />
           </div>
@@ -244,10 +244,10 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
 
           <div className="mt-3 space-y-1 text-[11px] leading-snug text-slate-500">
             {multi && (
-              <p>Os números são desta instalação. O limite e a cobrança valem para a conta da Cloudflare inteira, que tem {u.instalacoesNaConta} instalações: no gráfico, a parte cinza é o que as outras gravaram.</p>
+              <p>Os números são desta instalação. O total geral soma as {u.instalacoesNaConta} instalações da mesma conta da Cloudflare, e é nele que o limite e a cobrança valem. No gráfico, a parte cinza é o que as outras instalações gravaram.</p>
             )}
             {!paid && acima > 0 && (
-              <p className="text-rose-300">Em {acima} dia(s) {multi ? 'a conta toda passou' : 'passou'} de 1.000 visitantes. Se a conta estava no plano gratuito nesses dias, as vendas depois do limite chegaram no Facebook sem a origem do anúncio.</p>
+              <p className="text-rose-300">Em {acima} dia(s) {multi ? 'o total geral passou' : 'passou'} de 1.000 visitantes. Se a conta estava no plano gratuito nesses dias, as vendas depois do limite chegaram no Facebook sem a origem do anúncio.</p>
             )}
             {per.robosAntesDaCorrecao > 0 && (
               <p>🤖 Outros {n(per.robosAntesDaCorrecao)} acessos de robô chegaram antes da correção de 07/11 e foram contados no plano.</p>
