@@ -10,6 +10,7 @@ type Lead = {
   ultimo: string
   status: Status
   paginas: number
+  paginas_lista?: string[] // páginas abertas (sem UTMs), na ordem da primeira visita
   utm_source: string | null
   utm_term: string | null
   utm_medium: string | null
@@ -308,7 +309,8 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
               const camp = semId(l.utm_campaign)
               const conj = semId(l.utm_medium)
               const ad = semId(l.utm_content)
-              const pag = pagina(l.pagina)
+              const primeira = l.paginas_lista?.[0] ?? l.pagina
+              const pag = pagina(primeira)
               const local = [l.cidade, nomePais(l.pais)].filter(Boolean).join(', ')
               const valor = l.status === 'comprou' ? dinheiro(l.valor, l.moeda) : null
               const semUtm = !l.utm_source && !camp && !conj && !ad && !l.utm_term
@@ -372,9 +374,17 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
                   </td>
                   <td className="py-2.5 pl-1.5 pr-3 align-top sm:pr-4">
                     {pag ? (
-                      <a href={l.pagina ?? undefined} target="_blank" rel="noreferrer" className="block truncate text-[11px] text-indigo-300 hover:underline" title={l.pagina ?? ''}>{pag.replace(/^[^/]+/, '') || pag}</a>
+                      <a href={primeira ?? undefined} target="_blank" rel="noreferrer" className="block truncate text-[11px] text-indigo-300 hover:underline" title={primeira ?? ''}>{pag.replace(/^[^/]+/, '') || pag}</a>
                     ) : <p className="text-slate-600">-</p>}
-                    {l.paginas > 1 && <p className="truncate text-[10px] text-slate-600">{l.paginas} páginas</p>}
+                    {(() => {
+                      // demais páginas que o lead abriu, além da primeira
+                      const outras = (l.paginas_lista ?? []).slice(1)
+                      if (outras.length === 0) return l.paginas > 1 ? <p className="truncate text-[10px] text-slate-600">{l.paginas} visualizações</p> : null
+                      return <>
+                        {outras.map(u => <a key={u} href={u} target="_blank" rel="noreferrer" className="block truncate text-[11px] text-indigo-300 hover:underline" title={u}>{(pagina(u) ?? u).replace(/^[^/]+/, '') || u}</a>)}
+                        <p className="truncate text-[10px] text-slate-600">{outras.length + 1} páginas</p>
+                      </>
+                    })()}
                   </td>
                 </tr>
               )
