@@ -34,6 +34,9 @@ type Venda = {
   transacao: string | null
   pais_comprador: string | null
   status_venda?: string | null
+  // produto principal (vai pra Meta) x bump/upsell (só no painel); sem lista na instalação, tudo é principal
+  principal?: boolean | null
+  produto_id?: string | null
 }
 type Bloco = {
   funil: Record<string, number>
@@ -443,9 +446,11 @@ export function TrackDashboard({ installationId, triggers, nome }: { installatio
       fbp: q ? pct(q.com_fbp, q.capi) : null,
       sessao: q ? pct(q.vendas_sessao, q.vendas_meta) : null,
       // sem UTM = venda sem campanha e sem src; sem visita = o robô não achou a sessão
-      semUtm: vendas.filter(v => !v.utm_campaign && !v.src).length,
-      semVisita: vendas.filter(v => !v.session_hit).length,
-      naoEnviadas: vendas.filter(v => v.source !== 'capi' || v.capi_send_ok === false).length,
+      semUtm: vendas.filter(v => v.principal !== false && !v.utm_campaign && !v.src).length,
+      semVisita: vendas.filter(v => v.principal !== false && !v.session_hit).length,
+      // bump/upsell não vai pra Meta de propósito: não conta como "não enviada"
+      naoEnviadas: vendas.filter(v => v.principal !== false && (v.source !== 'capi' || v.capi_send_ok === false)).length,
+      extrasFunil: vendas.filter(v => v.principal === false && !reembolsada(v)).length,
       serie: montarSerie(a.serie, r.s, r.e, r.hourly),
     }
   }, [a, ant, r, custos, usdBrl])
@@ -648,7 +653,12 @@ export function TrackDashboard({ installationId, triggers, nome }: { installatio
         <Kpi icon={<TrendingUp size={14} />} label="ROAS" rodape={<span className="text-[11px] text-slate-500">{calc.roas === null ? 'lance um custo pra calcular' : 'faturamento ÷ gasto'}</span>}>
           <p className={`text-3xl font-bold tabular-nums ${calc.roas !== null && calc.roas < 1 ? 'text-rose-300' : 'text-slate-50'}`}>{calc.roas === null ? '-' : calc.roas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
         </Kpi>
-        <Kpi icon={<ShoppingBag size={14} />} label="Vendas" rodape={<Variacao atual={calc.nVendas} anterior={calc.antVendas} />}>
+        <Kpi icon={<ShoppingBag size={14} />} label="Vendas" rodape={
+          <span className="flex flex-col gap-0.5">
+            <Variacao atual={calc.nVendas} anterior={calc.antVendas} />
+            {calc.extrasFunil > 0 && <span className="text-[11px] text-slate-500">{inteiro(calc.nVendas)} do produto principal + {inteiro(calc.extrasFunil)} de bump/upsell</span>}
+          </span>
+        }>
           <p className="text-3xl font-bold tabular-nums text-slate-50">{inteiro(calc.aprovadas)}</p>
         </Kpi>
         <Kpi icon={<Receipt size={14} />} label="Ticket médio">
@@ -669,7 +679,7 @@ export function TrackDashboard({ installationId, triggers, nome }: { installatio
           <p className="text-3xl font-bold tabular-nums text-slate-50">{pctTxt(calc.taxaReemb, 1)}</p>
         </Kpi>
         <Kpi icon={<SendHorizontal size={14} />} label="Enviadas à Meta" rodape={
-          <span className="text-[11px] text-slate-500">{pctTxt(calc.sessao, 0)} com a origem do anúncio</span>
+          <span className="text-[11px] text-slate-500">{pctTxt(calc.sessao, 0)} com a origem do anúncio{calc.extrasFunil > 0 ? ` · bump/upsell ficam só no painel` : ''}</span>
         }>
           <p className="text-3xl font-bold tabular-nums text-slate-50">
             {inteiro(calc.nVendas - calc.naoEnviadas)}<span className="text-base font-medium text-slate-500"> / {inteiro(calc.nVendas)}</span>
@@ -816,7 +826,7 @@ export function TrackDashboard({ installationId, triggers, nome }: { installatio
             )}
             {(q?.vendas_fora ?? 0) > 0 && (
               <p className="rounded-lg px-2.5 py-2 text-[11px] text-amber-200 ring-1 ring-amber-500/25" style={{ background: 'rgba(245,158,11,0.08)' }}>
-                {inteiro(q!.vendas_fora)} venda(s) registrada(s) sem envio ao Facebook (filtro de produto ou do código -tracker). É o filtro funcionando.
+                {inteiro(q!.vendas_fora)} venda(s) registrada(s) sem envio ao Facebook: bumps e upsells (só o produto principal vai pra Meta) ou vendas sem o código -tracker. É o filtro funcionando.
               </p>
             )}
           </div>

@@ -145,6 +145,8 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
   const [diagnostico, setDiagnostico] = useState(false)
   const [requireTrackerSrc, setRequireTrackerSrc] = useState(false)
   const [metaPurchaseProductIds, setMetaPurchaseProductIds] = useState('')
+  // 'principal' = só o produto da frente vai pra Meta; 'todos' = cada produto do funil vira uma compra
+  const [envioModo, setEnvioModo] = useState<'principal' | 'todos'>('principal')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deploying, setDeploying] = useState(false)
@@ -192,6 +194,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
       setDiagnostico(installation.diagnostico_ativo)
       setRequireTrackerSrc(installation.require_tracker_src)
       setMetaPurchaseProductIds((installation.meta_purchase_product_ids ?? []).join(', '))
+      setEnvioModo((installation.meta_purchase_product_ids ?? []).length ? 'principal' : 'todos')
     } else {
       setNome('')
       setWorkerSubdomain('')
@@ -209,6 +212,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
       setDiagnostico(false)
       setRequireTrackerSrc(false)
       setMetaPurchaseProductIds('')
+      setEnvioModo('principal')
     }
     setError(null)
   }, [open, installation])
@@ -222,6 +226,10 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
 
   async function saveInstallation(): Promise<TrackInstallation | null> {
     if (!nome.trim()) { setError('Dê um nome pra instalação.'); return null }
+    if (envioModo === 'principal' && !metaPurchaseProductIds.trim()) {
+      setError('Informe o código do produto principal na Hotmart, ou escolha "Todas as vendas do funil".')
+      return null
+    }
     const validPixels = pixels.filter(p => p.pixel_id.trim())
     const validDomains = [
       ...lpDomains.filter(d => d.domain.trim()).map(d => ({ ...d, tipo: 'lp' as const })),
@@ -242,7 +250,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
         session_ttl_days: sessionTtlDays,
         diagnostico_ativo: diagnostico,
         require_tracker_src: requireTrackerSrc,
-        meta_purchase_product_ids: metaPurchaseProductIds.split(',').map(id => id.trim()).filter(Boolean),
+        meta_purchase_product_ids: envioModo === 'todos' ? [] : metaPurchaseProductIds.split(/[\s,;]+/).map(id => id.trim()).filter(Boolean),
         pixels: validPixels.map(p => ({
           id: p.id,
           pixel_id: p.pixel_id.trim(),
@@ -485,23 +493,38 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
           </p>
         </div>
 
-        <div>
-          <label className="mb-1 block text-sm text-slate-300">
-            IDs de produto da Hotmart que mandam Purchase pra Meta (opcional)
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-slate-300">Quais vendas do funil vão pra Meta como compra?</p>
+          <label className={`flex cursor-pointer gap-3 rounded-xl border p-3 ${envioModo === 'principal' ? 'border-indigo-400/60 bg-indigo-500/10' : 'border-white/10'}`}>
+            <input type="radio" name="envio-meta" checked={envioModo === 'principal'} onChange={() => setEnvioModo('principal')} className="mt-1" />
+            <span className="text-xs leading-relaxed text-slate-400">
+              <b className="block text-sm text-slate-200">Só o produto principal (recomendado)</b>
+              Cada pedido vira 1 compra na Meta, mesmo com order bump e upsell. Para o faturamento completo aparecer no painel,
+              cadastre o webhook do rastreamento na Hotmart em <b className="text-slate-300">todos os produtos do funil</b> (principal, bumps e upsells):
+              os outros produtos aparecem no painel, mas não vão pra Meta.
+            </span>
           </label>
-          <input
-            type="text"
-            value={metaPurchaseProductIds}
-            onChange={e => setMetaPurchaseProductIds(e.target.value)}
-            placeholder="Ex: 7101989, 1234567"
-            className={inputClass}
-            style={inputStyle}
-          />
-          <p className="mt-1 text-xs text-slate-500">
-            Separe por vírgula. Deixe vazio pra mandar Purchase de qualquer produto (comportamento padrão).
-            Use quando o funil tem order bump/upsell — assim só o produto principal conta como Purchase pra
-            Meta, e o cliente comprando o funil inteiro não vira vários Purchase separados.
-          </p>
+          {envioModo === 'principal' && (
+            <div className="ml-7">
+              <input
+                type="text"
+                value={metaPurchaseProductIds}
+                onChange={e => setMetaPurchaseProductIds(e.target.value)}
+                placeholder="código do produto principal na Hotmart (ex: 7101989)"
+                className={inputClass}
+                style={inputStyle}
+              />
+              <p className="mt-1 text-xs text-slate-500">Mais de um produto principal (ex: o mesmo curso em duas contas)? Separe por vírgula.</p>
+            </div>
+          )}
+          <label className={`flex cursor-pointer gap-3 rounded-xl border p-3 ${envioModo === 'todos' ? 'border-indigo-400/60 bg-indigo-500/10' : 'border-white/10'}`}>
+            <input type="radio" name="envio-meta" checked={envioModo === 'todos'} onChange={() => setEnvioModo('todos')} className="mt-1" />
+            <span className="text-xs leading-relaxed text-slate-400">
+              <b className="block text-sm text-slate-200">Todas as vendas do funil</b>
+              Cada produto vira uma compra separada na Meta. Exemplo: quem compra o principal + 2 bumps + 1 upsell gera 4 compras aprovadas no Gerenciador.
+              Cadastre o webhook em todos os produtos do funil.
+            </span>
+          </label>
         </div>
 
         {/* Seção 3 — Eventos (gatilhos) */}
