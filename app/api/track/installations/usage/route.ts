@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/app/api/meta/_utils'
 import { canManageTracking } from '@/app/api/track/_utils'
 import { decryptSecret } from '@/lib/crypto'
-import { CF_HISTORICO_DIAS, detectWorkersPaid, fetchKvWrites, findKvNamespaceId, fetchKvWritesDays, FREE_WRITES_DAY, PAID_WRITES_MONTH } from '@/lib/track/cfUsage'
+import { CF_HISTORICO_DIAS, detectWorkersPaid, fetchKvWrites, fetchKvWritesHours, findKvNamespaceId, fetchKvWritesDays, FREE_WRITES_DAY, PAID_WRITES_MONTH } from '@/lib/track/cfUsage'
 
 // Uso da conta Cloudflare do cliente: visitantes gravados hoje / no mês e,
 // quando vem start/end (o período escolhido no painel), dia a dia no período,
@@ -52,6 +52,37 @@ export async function GET(request: Request) {
     supabase.from('track_installations').select('id', { count: 'exact', head: true })
       .eq('user_id', user.id).eq('cloudflare_account_id', row.cloudflare_account_id),
   ])
+  // Dias no horário de quem está olhando (Brasília): soma as horas da Cloudflare
+  // a partir da meia-noite local (start). O dia UTC da Cloudflare (vira às 21h
+  // de Brasília) continua só pra conferir o limite grátis, que ela conta assim.
+  const somaDia = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10)
+  const maisAntigoMs = Date.now() - CF_HISTORICO_DIAS * 86400000
+  const pularDias = comPeriodo && startMs < maisAntigoMs ? Math.ceil((maisAntigoMs - startMs) / 86400000) : 0
+  const inicioLocal = startMs + pularDias * 86400000
+  const fimLocal = Math.min(endMs, Date.now())
+  const deLocal = comPeriodo && de ? somaDia(de, pularDias) : null
+  const hojeMs = Date.parse(sp.get('hoje') ?? '')
+  const hojeOk = Number.isFinite(hojeMs) && Date.now() - hojeMs < 2 * 86400000 && hojeMs <= Date.now()
+  const [horas, horasHoje] = await Promise.all([
+    comPeriodo && deLocal && ate && fimLocal > inicioLocal ? fetchKvWritesHours(token, row.cloudflare_account_id, new Date(inicioLocal).toISOString(), new Date(fimLocal).toISOString(), namespaceId) : Promise.resolve(null),
+    hojeOk ? fetchKvWritesHours(token, row.cloudflare_account_id, new Date(hojeMs).toISOString(), new Date().toISOString(), namespaceId) : Promise.resolve(null),
+  ])
+  let diasLocal: { date: string; v: number; conta: number }[] | null = null
+  if (horas && deLocal && ate) {
+    const ultimo = Math.floor((fimLocal - 1 - inicioLocal) / 86400000)
+    diasLocal = []
+    for (let k = 0; k <= ultimo && somaDia(deLocal, k) <= ate; k++) diasLocal.push({ date: somaDia(deLocal, k), v: 0, conta: 0 })
+    for (const h of horas) {
+      const d = diasLocal[Math.floor((h.t - inicioLocal) / 86400000)]
+      if (!d) continue
+      d.conta += h.conta
+      d.v += namespaceId ? h.inst : h.conta
+    }
+  }
+  const hojeLocal = horasHoje ? {
+    conta: horasHoje.reduce((a, h) => a + h.conta, 0),
+    inst: namespaceId ? horasHoje.reduce((a, h) => a + h.inst, 0) : null,
+  } : null
   const [usage, detected, dias, ignorados, enviadosAntes] = await Promise.all([
     fetchKvWrites(token, row.cloudflare_account_id, namespaceId),
     detectWorkersPaid(token, row.cloudflare_account_id),
@@ -62,8 +93,12 @@ export async function GET(request: Request) {
     comPeriodo ? contar(q => q.not('capi_send_ok', 'is', null)) : Promise.resolve(null),
   ])
   const periodo = comPeriodo ? {
-    dias: dias ?? [],
-    cortadoEm: since !== sincePedido ? since : null,
+    // dias no horário local (ou, se a Cloudflare não der as horas, os dias UTC)
+    dias: diasLocal ?? dias ?? [],
+    // dias UTC da conta inteira: é por eles que a Cloudflare conta o limite grátis
+    diasLimite: (dias ?? []).map(d => ({ date: d.date, conta: d.conta })),
+    horarioLocal: !!diasLocal,
+    cortadoEm: diasLocal ? (pularDias ? deLocal : null) : since !== sincePedido ? since : null,
     robosIgnorados: ignorados?.count ?? 0,
     robosAntesDaCorrecao: enviadosAntes?.count ?? 0,
   } : null
@@ -74,7 +109,7 @@ export async function GET(request: Request) {
   const paid = detected ?? row.cloudflare_paid
   if (!usage) return NextResponse.json({ available: false, paid, detected, periodo })
   return NextResponse.json({
-    available: true, paid, detected, ...usage, porInstalacao: !!namespaceId, instalacoesNaConta: mesmaConta.count ?? 1, limitDay: FREE_WRITES_DAY, limitMonth: PAID_WRITES_MONTH, periodo,
+    available: true, paid, detected, ...usage, hojeLocal, porInstalacao: !!namespaceId, instalacoesNaConta: mesmaConta.count ?? 1, limitDay: FREE_WRITES_DAY, limitMonth: PAID_WRITES_MONTH, periodo,
   }, { headers: { 'Cache-Control': 'no-store' } })
 }
 

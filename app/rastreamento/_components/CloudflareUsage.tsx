@@ -49,9 +49,10 @@ export function CloudflarePlanText() {
 
 // v = esta instalação; conta = a conta da Cloudflare inteira (onde o limite vale)
 type Dia = { date: string; v: number; conta?: number }
-type Periodo = { dias: Dia[]; cortadoEm: string | null; robosIgnorados: number; robosAntesDaCorrecao: number }
+// dias = no horário de quem olha (horarioLocal); diasLimite = dias UTC da conta, por onde a Cloudflare conta o limite grátis
+type Periodo = { dias: Dia[]; diasLimite?: { date: string; conta: number }[]; horarioLocal?: boolean; cortadoEm: string | null; robosIgnorados: number; robosAntesDaCorrecao: number }
 type Usage = { available: boolean; paid: boolean; detected: boolean | null; today?: number; peak7?: number; month?: number; limitDay?: number; limitMonth?: number; periodo?: Periodo | null
-  instToday?: number | null; instMonth?: number | null; porInstalacao?: boolean; instalacoesNaConta?: number }
+  instToday?: number | null; instMonth?: number | null; hojeLocal?: { conta: number; inst: number | null } | null; porInstalacao?: boolean; instalacoesNaConta?: number }
 
 const diaCurto = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
 const n = (v: number) => v.toLocaleString('pt-BR')
@@ -67,7 +68,7 @@ function Stat({ label, valor, sub, tom }: { label: string; valor: React.ReactNod
   )
 }
 
-function TooltipUso({ active, payload, limite, multi }: { active?: boolean; payload?: { payload: Dia }[]; limite: number | null; multi: boolean }) {
+function TooltipUso({ active, payload, limite, multi, local }: { active?: boolean; payload?: { payload: Dia }[]; limite: number | null; multi: boolean; local?: boolean }) {
   if (!active || !payload?.length) return null
   const d = payload[0].payload
   const conta = d.conta ?? d.v
@@ -76,7 +77,7 @@ function TooltipUso({ active, payload, limite, multi }: { active?: boolean; payl
       <p className="text-slate-500">{diaCurto(d.date)}</p>
       <p className="font-semibold text-slate-100">{n(d.v)} visitantes gravados{multi ? ' nesta instalação' : ''}</p>
       {multi && <p className="text-slate-400">conta toda: {n(conta)} (outras instalações: {n(conta - d.v)})</p>}
-      {limite !== null && conta > limite && <p className="text-rose-300">{n(conta - limite)} acima do limite grátis{multi ? ' da conta' : ''}</p>}
+      {limite !== null && !local && conta > limite && <p className="text-rose-300">{n(conta - limite)} acima do limite grátis{multi ? ' da conta' : ''}</p>}
     </div>
   )
 }
@@ -109,7 +110,9 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
     let alive = true
     // dias do calendário local do período (início e último dia)
     const local = (ms: number) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
-    const q = new URLSearchParams({ id: installationId, start, end, de: local(Date.parse(start)), ate: local(Date.parse(end) - 1) })
+    // meia-noite de hoje no horário de quem olha: o "hoje" do cartão começa aí, não às 21h (dia da Cloudflare)
+    const meiaNoite = new Date(); meiaNoite.setHours(0, 0, 0, 0)
+    const q = new URLSearchParams({ id: installationId, start, end, de: local(Date.parse(start)), ate: local(Date.parse(end) - 1), hoje: meiaNoite.toISOString() })
     const k = `${installationId}|${start}|${end}`
     const load = () => fetch(`/api/track/installations/usage?${q}`).then(r => (r.ok ? r.json() : null))
       .then(j => { if (alive && j) setU(j) }).catch(() => {})
@@ -152,9 +155,12 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
   const pico = dias.reduce<Dia | null>((m, d) => (!m || d.v > m.v ? d : m), null)
   const media = dias.length ? Math.round(total / dias.length) : 0
   const mediaConta = dias.length ? Math.round(totalConta / dias.length) : 0
-  const acima = dias.filter(d => d.conta > limiteDia).length
-  const hoje = u.today ?? 0
-  const hojeInst = multi ? (u.instToday ?? 0) : hoje
+  // o limite grátis vale pelo dia da Cloudflare (UTC, vira às 21h de Brasília)
+  const acima = per?.diasLimite?.length ? per.diasLimite.filter(d => d.conta > limiteDia).length : dias.filter(d => d.conta > limiteDia).length
+  const hoje = u.today ?? 0 // dia da Cloudflare, pro limite
+  // "hoje" pra mostrar: desde a meia-noite do horário de quem olha
+  const hojeConta = u.hojeLocal?.conta ?? hoje
+  const hojeInst = multi ? (u.hojeLocal?.inst ?? u.instToday ?? 0) : hojeConta
   const pctHoje = Math.min(100, (hoje / limiteDia) * 100)
   const pctMes = Math.min(100, ((u.month ?? 0) / limiteMes) * 100)
   const nivel = paid ? (pctMes >= 80 ? 'bad' : pctMes >= 60 ? 'warn' : 'ok') : (pctHoje >= 80 ? 'bad' : pctHoje >= 60 ? 'warn' : 'ok')
@@ -207,8 +213,8 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
               ? <Stat label={multi ? 'Uso do mês (conta)' : 'Uso do mês'} valor={`${Math.round(pctMes)}%`} sub={`${n(u.month ?? 0)} de ${n(limiteMes)}`} tom={pctMes >= 80 ? 'bad' : pctMes >= 60 ? 'warn' : 'good'} />
               : <Stat label={multi ? 'Dias acima (conta)' : 'Dias acima do limite'} valor={`${acima} de ${dias.length}`} sub={acima ? `${multi ? 'a conta passou' : 'passou'} de 1.000 nesses dias` : 'nenhum dia estourou'} tom={acima ? 'bad' : 'good'} />}
             {multi
-              ? <Stat label="Hoje" valor={n(hojeInst)} sub={paid ? `conta toda: ${n(hoje)}` : `conta toda: ${n(hoje)} de ${n(limiteDia)}`} tom={paid ? undefined : pctHoje >= 80 ? 'bad' : pctHoje >= 60 ? 'warn' : 'good'} />
-              : <Stat label="Hoje" valor={paid ? n(hoje) : `${Math.round(pctHoje)}%`} sub={paid ? 'visitantes gravados' : `${n(hoje)} de ${n(limiteDia)}`} tom={paid ? undefined : pctHoje >= 80 ? 'bad' : pctHoje >= 60 ? 'warn' : 'good'} />}
+              ? <Stat label="Hoje" valor={n(hojeInst)} sub={paid ? `conta toda: ${n(hojeConta)}` : `limite da conta: ${n(hoje)} de ${n(limiteDia)}`} tom={paid ? undefined : pctHoje >= 80 ? 'bad' : pctHoje >= 60 ? 'warn' : 'good'} />
+              : <Stat label="Hoje" valor={paid ? n(hojeConta) : `${Math.round(pctHoje)}%`} sub={paid ? 'visitantes gravados desde 00h' : `limite: ${n(hoje)} de ${n(limiteDia)}`} tom={paid ? undefined : pctHoje >= 80 ? 'bad' : pctHoje >= 60 ? 'warn' : 'good'} />}
             <Stat label="Robôs ignorados" valor={n(per.robosIgnorados)} sub="não gastaram o plano" tom={per.robosIgnorados ? 'good' : undefined} />
           </div>
 
@@ -219,7 +225,7 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
                   <XAxis dataKey="date" tickFormatter={diaCurto} tick={{ fill: '#475569', fontSize: 10.5 }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={18} />
                   <YAxis tick={{ fill: '#475569', fontSize: 10.5 }} axisLine={false} tickLine={false} allowDecimals={false} domain={[0, Math.ceil(tetoY)]} tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mil` : String(v))} />
-                  <Tooltip content={<TooltipUso limite={paid ? null : limiteDia} multi={multi} />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+                  <Tooltip content={<TooltipUso limite={paid ? null : limiteDia} multi={multi} local={per.horarioLocal} />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
                   {!paid && <ReferenceLine y={limiteDia} stroke="#f43f5e" strokeDasharray="5 4" label={{ value: 'limite grátis: 1.000 por dia', position: 'insideTopRight', fill: '#fda4af', fontSize: 10.5 }} />}
                   <Bar dataKey="v" stackId="u" radius={multi ? [0, 0, 0, 0] : [3, 3, 0, 0]} maxBarSize={22}>
                     {dias.map(d => <Cell key={d.date} fill={corBarra(multi ? d.conta : d.v)} />)}
@@ -247,7 +253,9 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
               <p>🤖 Outros {n(per.robosAntesDaCorrecao)} acessos de robô chegaram antes da correção de 07/11 e foram contados no plano.</p>
             )}
             {per.cortadoEm && <p>A Cloudflare guarda o uso só dos últimos 90 dias: o gráfico começa em {diaCurto(per.cortadoEm)}.</p>}
-            {!paid && <p>O dia da Cloudflare vira à meia-noite de Londres (21h de Brasília).</p>}
+            {per.horarioLocal
+              ? !paid && <p>Os dias seguem o seu horário. O limite grátis é contado pelo dia da Cloudflare, que vira às 21h de Brasília.</p>
+              : <p>Os dias seguem o horário da Cloudflare, que vira à meia-noite de Londres (21h de Brasília).</p>}
             <p>
               {u.detected === null
                 ? <label className="inline-flex cursor-pointer items-center gap-1.5"><input type="checkbox" checked={paid} onChange={e => void setPaid(e.target.checked)} />minha conta já está no Workers Paid</label>

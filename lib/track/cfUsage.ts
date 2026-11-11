@@ -130,3 +130,40 @@ export async function detectWorkersPaid(token: string, accountId: string): Promi
     return null
   }
 }
+
+// Gravações no KV hora a hora, entre dois instantes (ISO). Com as horas dá
+// pra montar o dia no horário de quem está olhando (Brasília), em vez do dia
+// UTC da Cloudflare, que vira às 21h de Brasília. A Cloudflare aceita no
+// máximo 4 semanas por consulta: busca em blocos de 28 dias.
+// conta = a conta inteira; inst = só o KV da instalação (com namespaceId).
+export async function fetchKvWritesHours(token: string, accountId: string, startIso: string, endIso: string, namespaceId: string | null = null): Promise<{ t: number; conta: number; inst: number }[] | null> {
+  const query = `query($a:String!,$s:Time!,$u:Time!){viewer{accounts(filter:{accountTag:$a}){
+    kv: kvOperationsAdaptiveGroups(limit:10000, filter:{datetime_geq:$s,datetime_lt:$u,actionType:"write"}){dimensions{datetimeHour namespaceId} sum{requests}}
+  }}}`
+  const BLOCO = 28 * 86400000
+  const fim = Date.parse(endIso)
+  const porHora = new Map<number, { conta: number; inst: number }>()
+  try {
+    for (let ini = Date.parse(startIso); ini < fim; ini += BLOCO) {
+      const ate = Math.min(ini + BLOCO, fim)
+      const r = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, variables: { a: accountId, s: new Date(ini).toISOString(), u: new Date(ate).toISOString() } }),
+        signal: AbortSignal.timeout(8000),
+      })
+      const j = await r.json()
+      if (!r.ok || j?.errors) return null
+      const groups = (j?.data?.viewer?.accounts?.[0]?.kv ?? []) as { dimensions: { datetimeHour: string; namespaceId: string }; sum: { requests: number } }[]
+      for (const g of groups) {
+        const t = Date.parse(g.dimensions.datetimeHour)
+        const x = porHora.get(t) ?? { conta: 0, inst: 0 }
+        x.conta += g.sum.requests
+        if (namespaceId && g.dimensions.namespaceId === namespaceId) x.inst += g.sum.requests
+        porHora.set(t, x)
+      }
+    }
+  } catch {
+    return null
+  }
+  return [...porHora.entries()].sort((a, b) => a[0] - b[0]).map(([t, x]) => ({ t, ...x }))
+}
