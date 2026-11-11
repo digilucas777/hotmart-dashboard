@@ -359,6 +359,12 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
           <div>
             <label className={labelClass}>Subdomínio do Worker</label>
             <input type="text" value={workerSubdomain} onChange={e => setWorkerSubdomain(e.target.value)} placeholder="sinal.seudominio.com" className={inputClass} style={inputStyle} />
+            <p className="mt-1 text-[11px] leading-snug text-slate-500">
+              O domínio precisa estar apontado pra Cloudflare. Conferido em 11/11/2026, a sua conta usa os nameservers{' '}
+              <b className="text-slate-300">aarav.ns.cloudflare.com</b> e <b className="text-slate-300">miki.ns.cloudflare.com</b>.
+              Confira na Cloudflare (página do domínio › DNS › Registros) se continuam os mesmos antes de trocar no site onde comprou o domínio: a Cloudflare pode mudar o par, por exemplo se o domínio for adicionado em outra conta.
+              Ao publicar, o sistema confere sozinho e avisa se o domínio estiver apontado pra nameservers diferentes.
+            </p>
           </div>
 
           <div>

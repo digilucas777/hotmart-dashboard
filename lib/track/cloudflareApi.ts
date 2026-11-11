@@ -34,6 +34,27 @@ export async function getZoneId(token: string, domain: string): Promise<string |
   return result.result[0].id
 }
 
+// Nameservers que a Cloudflare desta conta pede pro domínio x os que estão de
+// fato no registro do domínio (DNS público). A Cloudflare define o par por conta
+// e pode trocar (domínio removido e adicionado de novo, ou adicionado em outra
+// conta): com o par errado a zona fica "pendente" e o robô não publica.
+export async function checkZoneNameservers(token: string, zoneId: string, domain: string): Promise<{ ok: boolean; status: string; esperados: string[]; atuais: string[] }> {
+  const z = await cfFetch<{ status: string; name_servers: string[] }>(`/zones/${zoneId}`, token)
+  const status = String(z.result?.status ?? '')
+  const esperados = (z.result?.name_servers ?? []).map(n => n.toLowerCase())
+  let atuais: string[] = []
+  try {
+    const r = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=NS`, {
+      headers: { accept: 'application/dns-json' }, cache: 'no-store', signal: AbortSignal.timeout(5000),
+    })
+    const j = await r.json() as { Answer?: { type: number; data: string }[] }
+    atuais = (j.Answer ?? []).filter(a => a.type === 2).map(a => a.data.replace(/\.$/, '').toLowerCase())
+  } catch { /* DNS público fora do ar: não bloqueia */ }
+  const iguais = esperados.length > 0 && atuais.length > 0 && esperados.every(n => atuais.includes(n))
+  // Zona ativa = a Cloudflare já confirmou. Sem dado do DNS público, não bloqueia.
+  return { ok: status === 'active' || iguais || atuais.length === 0, status, esperados, atuais }
+}
+
 export async function ensureKvNamespace(token: string, accountId: string, title: string): Promise<string> {
   const list = await cfFetch<{ id: string; title: string }[]>(`/accounts/${accountId}/storage/kv/namespaces`, token)
   const existing = list.result?.find(ns => ns.title === title)

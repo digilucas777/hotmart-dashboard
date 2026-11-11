@@ -5,7 +5,7 @@ import { getAuthenticatedUser } from '@/app/api/meta/_utils'
 import { canManageTracking } from '@/app/api/track/_utils'
 import { decryptSecret } from '@/lib/crypto'
 import {
-  deployWorkerScript, ensureCustomDomain, ensureKvNamespace, getAccountId, getZoneId, verifyToken,
+  checkZoneNameservers, deployWorkerScript, ensureCustomDomain, ensureKvNamespace, getAccountId, getZoneId, verifyToken,
   type WorkerBinding,
 } from '@/lib/track/cloudflareApi'
 
@@ -96,6 +96,11 @@ export async function POST(request: Request) {
         { error: `domínio ${rootDomain} não encontrado nessa conta Cloudflare — confirme se ele já foi adicionado lá` },
         { status: 400 },
       )
+    }
+    {
+      const dom = rootDomain
+      const ns = await checkZoneNameservers(token, zoneId, dom)
+      if (!ns.ok) return NextResponse.json({ error: `O domínio ${dom} ainda não está apontado para esta conta da Cloudflare: o registro do domínio usa os nameservers ${ns.atuais.join(' e ')}, mas a Cloudflare desta conta pede ${ns.esperados.join(' e ')}. Troque os nameservers no site onde o domínio foi registrado (os nameservers podem mudar: confira sempre na Cloudflare, na página do domínio) e publique de novo quando o status ficar Ativo.` }, { status: 400 })
     }
 
     const scriptName = scriptNameFor(installation.id)
