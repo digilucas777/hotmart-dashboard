@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getAuthenticatedUser } from '@/app/api/meta/_utils'
 import { canManageTracking } from '@/app/api/track/_utils'
 import { decryptSecret } from '@/lib/crypto'
-import { CF_HISTORICO_DIAS, detectWorkersPaid, fetchKvWrites, fetchKvWritesDays, FREE_WRITES_DAY, PAID_WRITES_MONTH } from '@/lib/track/cfUsage'
+import { CF_HISTORICO_DIAS, detectWorkersPaid, fetchKvWrites, findKvNamespaceId, fetchKvWritesDays, FREE_WRITES_DAY, PAID_WRITES_MONTH } from '@/lib/track/cfUsage'
 
 // Uso da conta Cloudflare do cliente: visitantes gravados hoje / no mês e,
 // quando vem start/end (o período escolhido no painel), dia a dia no período,
@@ -45,10 +45,17 @@ export async function GET(request: Request) {
       .eq('installation_id', id).eq('is_bot', true)
       .gte('received_at', new Date(startMs).toISOString()).lt('received_at', new Date(endMs).toISOString())
   }
+  // O limite e a cobrança são da conta da Cloudflare inteira; os números da
+  // instalação saem do KV dela. Sem achar o KV, tudo fica pela conta (como antes).
+  const [namespaceId, mesmaConta] = await Promise.all([
+    findKvNamespaceId(token, row.cloudflare_account_id, id),
+    supabase.from('track_installations').select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id).eq('cloudflare_account_id', row.cloudflare_account_id),
+  ])
   const [usage, detected, dias, ignorados, enviadosAntes] = await Promise.all([
-    fetchKvWrites(token, row.cloudflare_account_id),
+    fetchKvWrites(token, row.cloudflare_account_id, namespaceId),
     detectWorkersPaid(token, row.cloudflare_account_id),
-    comPeriodo ? fetchKvWritesDays(token, row.cloudflare_account_id, since, until) : Promise.resolve(null),
+    comPeriodo ? fetchKvWritesDays(token, row.cloudflare_account_id, since, until, namespaceId) : Promise.resolve(null),
     // robô ignorado pelo robô novo (v1.4.0): chega sem capi_send_ok
     comPeriodo ? contar(q => q.is('capi_send_ok', null)) : Promise.resolve(null),
     // robô de antes da correção de 07/11/2026, que foi enviado ao Facebook
@@ -67,7 +74,7 @@ export async function GET(request: Request) {
   const paid = detected ?? row.cloudflare_paid
   if (!usage) return NextResponse.json({ available: false, paid, detected, periodo })
   return NextResponse.json({
-    available: true, paid, detected, ...usage, limitDay: FREE_WRITES_DAY, limitMonth: PAID_WRITES_MONTH, periodo,
+    available: true, paid, detected, ...usage, porInstalacao: !!namespaceId, instalacoesNaConta: mesmaConta.count ?? 1, limitDay: FREE_WRITES_DAY, limitMonth: PAID_WRITES_MONTH, periodo,
   }, { headers: { 'Cache-Control': 'no-store' } })
 }
 

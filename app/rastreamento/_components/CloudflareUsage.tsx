@@ -47,8 +47,11 @@ export function CloudflarePlanText() {
   )
 }
 
-type Periodo = { dias: { date: string; v: number }[]; cortadoEm: string | null; robosIgnorados: number; robosAntesDaCorrecao: number }
-type Usage = { available: boolean; paid: boolean; detected: boolean | null; today?: number; peak7?: number; month?: number; limitDay?: number; limitMonth?: number; periodo?: Periodo | null }
+// v = esta instalação; conta = a conta da Cloudflare inteira (onde o limite vale)
+type Dia = { date: string; v: number; conta?: number }
+type Periodo = { dias: Dia[]; cortadoEm: string | null; robosIgnorados: number; robosAntesDaCorrecao: number }
+type Usage = { available: boolean; paid: boolean; detected: boolean | null; today?: number; peak7?: number; month?: number; limitDay?: number; limitMonth?: number; periodo?: Periodo | null
+  instToday?: number | null; instMonth?: number | null; porInstalacao?: boolean; instalacoesNaConta?: number }
 
 const diaCurto = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
 const n = (v: number) => v.toLocaleString('pt-BR')
@@ -64,14 +67,16 @@ function Stat({ label, valor, sub, tom }: { label: string; valor: React.ReactNod
   )
 }
 
-function TooltipUso({ active, payload, limite }: { active?: boolean; payload?: { payload: { date: string; v: number } }[]; limite: number | null }) {
+function TooltipUso({ active, payload, limite, multi }: { active?: boolean; payload?: { payload: Dia }[]; limite: number | null; multi: boolean }) {
   if (!active || !payload?.length) return null
   const d = payload[0].payload
+  const conta = d.conta ?? d.v
   return (
     <div className="rounded-lg border border-white/10 bg-[#0f0f1e] px-3 py-2 text-xs shadow-xl">
       <p className="text-slate-500">{diaCurto(d.date)}</p>
-      <p className="font-semibold text-slate-100">{n(d.v)} visitantes gravados</p>
-      {limite !== null && d.v > limite && <p className="text-rose-300">{n(d.v - limite)} acima do limite grátis</p>}
+      <p className="font-semibold text-slate-100">{n(d.v)} visitantes gravados{multi ? ' nesta instalação' : ''}</p>
+      {multi && <p className="text-slate-400">conta toda: {n(conta)} (outras instalações: {n(conta - d.v)})</p>}
+      {limite !== null && conta > limite && <p className="text-rose-300">{n(conta - limite)} acima do limite grátis{multi ? ' da conta' : ''}</p>}
     </div>
   )
 }
@@ -138,17 +143,24 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
   const limiteDia = u.limitDay ?? 1000
   const limiteMes = u.limitMonth ?? 1_000_000
   const per = u.periodo ?? null
-  const dias = per?.dias ?? []
+  // Várias instalações na mesma conta da Cloudflare: os números são desta
+  // instalação, mas o limite e a cobrança contam a conta inteira.
+  const multi = !!u.porInstalacao && (u.instalacoesNaConta ?? 1) > 1
+  const dias = (per?.dias ?? []).map(d => ({ ...d, conta: d.conta ?? d.v, outras: Math.max(0, (d.conta ?? d.v) - d.v) }))
   const total = dias.reduce((a, d) => a + d.v, 0)
-  const pico = dias.reduce<{ date: string; v: number } | null>((m, d) => (!m || d.v > m.v ? d : m), null)
+  const totalConta = dias.reduce((a, d) => a + d.conta, 0)
+  const pico = dias.reduce<Dia | null>((m, d) => (!m || d.v > m.v ? d : m), null)
   const media = dias.length ? Math.round(total / dias.length) : 0
-  const acima = dias.filter(d => d.v > limiteDia).length
+  const mediaConta = dias.length ? Math.round(totalConta / dias.length) : 0
+  const acima = dias.filter(d => d.conta > limiteDia).length
   const hoje = u.today ?? 0
+  const hojeInst = multi ? (u.instToday ?? 0) : hoje
   const pctHoje = Math.min(100, (hoje / limiteDia) * 100)
   const pctMes = Math.min(100, ((u.month ?? 0) / limiteMes) * 100)
   const nivel = paid ? (pctMes >= 80 ? 'bad' : pctMes >= 60 ? 'warn' : 'ok') : (pctHoje >= 80 ? 'bad' : pctHoje >= 60 ? 'warn' : 'ok')
   const corBarra = (v: number) => (paid ? '#6366f1' : v > limiteDia ? '#f43f5e' : v >= limiteDia * 0.8 ? '#f59e0b' : '#6366f1')
-  const tetoY = paid ? Math.max(pico?.v ?? 0, 10) * 1.15 : Math.max(pico?.v ?? 0, limiteDia) * 1.15
+  const picoConta = dias.reduce((m, d) => Math.max(m, multi ? d.conta : d.v), 0)
+  const tetoY = paid ? Math.max(picoConta, 10) * 1.15 : Math.max(picoConta, limiteDia) * 1.15
 
   return (
     <div className="relative overflow-hidden rounded-2xl border p-4 sm:p-5" aria-busy={carregando} style={{
@@ -173,7 +185,7 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
           )}
           {!carregando && !aberto && u.available && per && (
             <span className={`text-[11px] font-semibold ${!paid && acima ? 'text-rose-300' : 'text-slate-400'}`}>
-              · {paid ? `uso do mês ${Math.round(pctMes)}%` : `hoje ${n(hoje)} de ${n(limiteDia)}${acima ? ` · ${acima} dia(s) acima do limite` : ''}`}
+              · {multi ? `nesta instalação hoje ${n(hojeInst)} · conta toda ` : ''}{paid ? `uso do mês ${Math.round(pctMes)}%` : `hoje ${n(hoje)} de ${n(limiteDia)}${acima ? ` · ${acima} dia(s) acima do limite` : ''}`}
             </span>
           )}
         </div>
@@ -188,13 +200,15 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
       ) : (
         <div className={`transition-opacity duration-200 ${carregando ? 'pointer-events-none animate-pulse opacity-40' : 'opacity-100'}`}>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-            <Stat label="Visitantes gravados" valor={n(total)} sub={dias.length > 1 ? `em ${dias.length} dias` : diaCurto(dias[0]?.date ?? '')} />
-            <Stat label="Média por dia" valor={n(media)} sub={paid ? 'sem limite diário' : `limite: ${n(limiteDia)} por dia`} />
-            <Stat label="Dia de pico" valor={n(pico?.v ?? 0)} sub={pico && pico.v > 0 ? diaCurto(pico.date) : 'sem visitas'} tom={!paid && (pico?.v ?? 0) > limiteDia ? 'bad' : undefined} />
+            <Stat label="Visitantes gravados" valor={n(total)} sub={multi ? `conta toda: ${n(totalConta)}` : dias.length > 1 ? `em ${dias.length} dias` : diaCurto(dias[0]?.date ?? '')} />
+            <Stat label="Média por dia" valor={n(media)} sub={multi ? `conta toda: ${n(mediaConta)} por dia` : paid ? 'sem limite diário' : `limite: ${n(limiteDia)} por dia`} />
+            <Stat label="Dia de pico" valor={n(pico?.v ?? 0)} sub={pico && pico.v > 0 ? diaCurto(pico.date) : 'sem visitas'} tom={!paid && !multi && (pico?.v ?? 0) > limiteDia ? 'bad' : undefined} />
             {paid
-              ? <Stat label="Uso do mês" valor={`${Math.round(pctMes)}%`} sub={`${n(u.month ?? 0)} de ${n(limiteMes)}`} tom={pctMes >= 80 ? 'bad' : pctMes >= 60 ? 'warn' : 'good'} />
-              : <Stat label="Dias acima do limite" valor={`${acima} de ${dias.length}`} sub={acima ? 'passou de 1.000 nesses dias' : 'nenhum dia estourou'} tom={acima ? 'bad' : 'good'} />}
-            <Stat label="Hoje" valor={paid ? n(hoje) : `${Math.round(pctHoje)}%`} sub={paid ? 'visitantes gravados' : `${n(hoje)} de ${n(limiteDia)}`} tom={paid ? undefined : pctHoje >= 80 ? 'bad' : pctHoje >= 60 ? 'warn' : 'good'} />
+              ? <Stat label={multi ? 'Uso do mês (conta)' : 'Uso do mês'} valor={`${Math.round(pctMes)}%`} sub={`${n(u.month ?? 0)} de ${n(limiteMes)}`} tom={pctMes >= 80 ? 'bad' : pctMes >= 60 ? 'warn' : 'good'} />
+              : <Stat label={multi ? 'Dias acima (conta)' : 'Dias acima do limite'} valor={`${acima} de ${dias.length}`} sub={acima ? `${multi ? 'a conta passou' : 'passou'} de 1.000 nesses dias` : 'nenhum dia estourou'} tom={acima ? 'bad' : 'good'} />}
+            {multi
+              ? <Stat label="Hoje" valor={n(hojeInst)} sub={paid ? `conta toda: ${n(hoje)}` : `conta toda: ${n(hoje)} de ${n(limiteDia)}`} tom={paid ? undefined : pctHoje >= 80 ? 'bad' : pctHoje >= 60 ? 'warn' : 'good'} />
+              : <Stat label="Hoje" valor={paid ? n(hoje) : `${Math.round(pctHoje)}%`} sub={paid ? 'visitantes gravados' : `${n(hoje)} de ${n(limiteDia)}`} tom={paid ? undefined : pctHoje >= 80 ? 'bad' : pctHoje >= 60 ? 'warn' : 'good'} />}
             <Stat label="Robôs ignorados" valor={n(per.robosIgnorados)} sub="não gastaram o plano" tom={per.robosIgnorados ? 'good' : undefined} />
           </div>
 
@@ -205,11 +219,12 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
                   <XAxis dataKey="date" tickFormatter={diaCurto} tick={{ fill: '#475569', fontSize: 10.5 }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={18} />
                   <YAxis tick={{ fill: '#475569', fontSize: 10.5 }} axisLine={false} tickLine={false} allowDecimals={false} domain={[0, Math.ceil(tetoY)]} tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mil` : String(v))} />
-                  <Tooltip content={<TooltipUso limite={paid ? null : limiteDia} />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+                  <Tooltip content={<TooltipUso limite={paid ? null : limiteDia} multi={multi} />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
                   {!paid && <ReferenceLine y={limiteDia} stroke="#f43f5e" strokeDasharray="5 4" label={{ value: 'limite grátis: 1.000 por dia', position: 'insideTopRight', fill: '#fda4af', fontSize: 10.5 }} />}
-                  <Bar dataKey="v" radius={[3, 3, 0, 0]} maxBarSize={22}>
-                    {dias.map(d => <Cell key={d.date} fill={corBarra(d.v)} />)}
+                  <Bar dataKey="v" stackId="u" radius={multi ? [0, 0, 0, 0] : [3, 3, 0, 0]} maxBarSize={22}>
+                    {dias.map(d => <Cell key={d.date} fill={corBarra(multi ? d.conta : d.v)} />)}
                   </Bar>
+                  {multi && <Bar dataKey="outras" stackId="u" radius={[3, 3, 0, 0]} maxBarSize={22} fill="rgba(148,163,184,0.25)" />}
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -222,8 +237,11 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
           )}
 
           <div className="mt-3 space-y-1 text-[11px] leading-snug text-slate-500">
+            {multi && (
+              <p>Os números são desta instalação. O limite e a cobrança valem para a conta da Cloudflare inteira, que tem {u.instalacoesNaConta} instalações: no gráfico, a parte cinza é o que as outras gravaram.</p>
+            )}
             {!paid && acima > 0 && (
-              <p className="text-rose-300">Em {acima} dia(s) passou de 1.000 visitantes. Se a conta estava no plano gratuito nesses dias, as vendas depois do limite chegaram no Facebook sem a origem do anúncio.</p>
+              <p className="text-rose-300">Em {acima} dia(s) {multi ? 'a conta toda passou' : 'passou'} de 1.000 visitantes. Se a conta estava no plano gratuito nesses dias, as vendas depois do limite chegaram no Facebook sem a origem do anúncio.</p>
             )}
             {per.robosAntesDaCorrecao > 0 && (
               <p>🤖 Outros {n(per.robosAntesDaCorrecao)} acessos de robô chegaram antes da correção de 07/11 e foram contados no plano.</p>
