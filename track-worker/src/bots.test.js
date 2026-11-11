@@ -26,3 +26,25 @@ test('não marca gente de verdade como robô', () => {
     '',
   ]) assert.equal(isBotUserAgent(ua), false, ua)
 })
+
+import { isBotRequest, isMetaInfraIp } from './bots.js'
+
+test('IP da Meta com celular genérico é robô (verificador de anúncio)', () => {
+  const ua = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36'
+  assert.equal(isBotRequest(ua, '2a03:2880:30ff:73::'), true)
+  assert.equal(isBotRequest(ua, '173.252.83.10'), true)
+  assert.equal(isBotRequest(ua, '157.240.1.1'), true)
+})
+
+test('app do Instagram/Facebook na rede da Meta continua sendo gente', () => {
+  assert.equal(isBotRequest('Mozilla/5.0 (Linux; Android 14) [FBAN/FB4A;FBAV/586.0.0.52.53;]', '2a03:2880:ff:49::'), false)
+  assert.equal(isBotRequest('Mozilla/5.0 (iPhone) Instagram 400.0.0', '31.13.70.1'), false)
+})
+
+test('IP comum não é da Meta', () => {
+  assert.equal(isMetaInfraIp('2804:1b3:c403:d098::1'), false)
+  assert.equal(isMetaInfraIp('64.140.144.96'), false)
+  assert.equal(isMetaInfraIp('31.13.1.1'), false)
+  assert.equal(isMetaInfraIp(''), false)
+  assert.equal(isBotRequest('Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X)', '177.10.2.3'), false)
+})

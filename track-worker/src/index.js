@@ -2,7 +2,7 @@ import { sha256Hex } from './hash.js'
 import { WORKER_VERSION } from './version.js'
 import { buildSnippet } from './snippet.js'
 import { normalizePhone } from './phone.js'
-import { isBotUserAgent } from './bots.js'
+import { isBotRequest } from './bots.js'
 
 
 function json(data, status = 200, extraHeaders) {
@@ -214,7 +214,7 @@ async function handleCollect(request, env, ctx) {
   // Robô (verificador de anúncios da Meta, Google, Ahrefs...): não manda pro
   // Facebook e não grava sessão no KV (cada gravação conta no limite da
   // Cloudflare). Só avisa o painel, que mostra quantos robôs foram ignorados.
-  if (isBotUserAgent(userAgent)) {
+  if (isBotRequest(userAgent, ip)) {
     const utmBot = body.utm || {}
     sendToIngest(ctx, env, {
       event_name: body.event_name,
@@ -384,7 +384,7 @@ async function handleMonitor(request, env, ctx) {
 
   const ip = request.headers.get('CF-Connecting-IP') || ''
   const geo = extractGeo(request)
-  if (isBotUserAgent(request.headers.get('User-Agent') || '')) return json({ ok: true, ignored: 'bot' }, 200, cors)
+  if (isBotRequest(request.headers.get('User-Agent') || '', ip)) return json({ ok: true, ignored: 'bot' }, 200, cors)
 
   sendToIngest(ctx, env, {
     event_name: body.event_name,
