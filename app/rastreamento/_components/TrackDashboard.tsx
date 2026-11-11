@@ -39,7 +39,9 @@ type Venda = {
   produto_id?: string | null
 }
 type Bloco = {
+  // funil = pessoas únicas por etapa (sessões); funil_eventos = total de eventos (a mesma pessoa pode abrir a página várias vezes)
   funil: Record<string, number>
+  funil_eventos?: Record<string, number>
   serie: { b: string; pv: number; ic: number; vendas: number }[]
   paises: { c: string; n: number }[]
   qualidade: {
@@ -99,7 +101,7 @@ function montarFunil(triggers: TrackTrigger[]): { ev: string; dica: string }[] {
     return (ix < 0 ? 6.5 : ix) - (iy < 0 ? 6.5 : iy)
   })
   return [
-    { ev: 'PageView', dica: 'abriu a página' },
+    { ev: 'PageView', dica: 'visitantes únicos que abriram a página' },
     ...meio.map(ev => ({ ev, dica: [...new Set(porEvento.get(ev))].join(' · ') })),
     { ev: 'Purchase', dica: 'venda aprovada (webhook)' },
   ]
@@ -695,7 +697,7 @@ export function TrackDashboard({ installationId, triggers, nome }: { installatio
           </p>
         </Kpi>
         <Kpi icon={<Percent size={14} />} label="Conversão" rodape={
-          <span className="text-[11px] text-slate-500">{inteiro(calc.visitas)} PageView · checkout→venda {pctTxt(calc.checkoutConv)}</span>
+          <span className="text-[11px] text-slate-500">{inteiro(calc.visitas)} visitantes únicos{a.funil_eventos?.PageView ? ` (${inteiro(a.funil_eventos.PageView)} PageView)` : ''} · checkout→venda {pctTxt(calc.checkoutConv)}</span>
         }>
           <p className="text-3xl font-bold tabular-nums text-slate-50">{pctTxt(calc.conv, 2)}</p>
         </Kpi>
@@ -709,8 +711,8 @@ export function TrackDashboard({ installationId, triggers, nome }: { installatio
         <Card className="lg:col-span-3">
           <Titulo extra={
             <div className="flex items-center gap-3 text-[11px] text-slate-500">
-              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-indigo-500/60" />PageView</span>
-              <span className="flex items-center gap-1"><span className="h-0.5 w-3 rounded bg-violet-400" />InitiateCheckout</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-indigo-500/60" />Visitantes únicos</span>
+              <span className="flex items-center gap-1"><span className="h-0.5 w-3 rounded bg-violet-400" />Iniciaram checkout</span>
               <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-400" />Purchase</span>
             </div>
           }>
@@ -724,8 +726,8 @@ export function TrackDashboard({ installationId, triggers, nome }: { installatio
                 <YAxis yAxisId="v" tick={{ fill: '#475569', fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
                 <YAxis yAxisId="s" orientation="right" hide allowDecimals={false} domain={[0, (max: number) => Math.max(max * 1.4, 2)]} />
                 <Tooltip content={<TooltipGrafico />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                <Bar yAxisId="v" dataKey="visitas" name="PageView" fill="rgba(99,102,241,0.55)" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                <Line yAxisId="v" type="monotone" dataKey="checkouts" name="InitiateCheckout" stroke="#a78bfa" strokeWidth={2} dot={false} />
+                <Bar yAxisId="v" dataKey="visitas" name="Visitantes únicos" fill="rgba(99,102,241,0.55)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                <Line yAxisId="v" type="monotone" dataKey="checkouts" name="Iniciaram checkout" stroke="#a78bfa" strokeWidth={2} dot={false} />
                 <Line yAxisId="s" type="monotone" dataKey="vendas" name="Purchase" stroke="#34d399" strokeWidth={0} dot={(p: { cx?: number; cy?: number; value?: number; index?: number }) => (
                   p.value ? <circle key={p.index} cx={p.cx} cy={p.cy} r={5} fill="#34d399" stroke="#0b0b14" strokeWidth={2} /> : <g key={p.index} />
                 )} activeDot={false} />
@@ -735,10 +737,11 @@ export function TrackDashboard({ installationId, triggers, nome }: { installatio
         </Card>
 
         <Card className="lg:col-span-2">
-          <Titulo extra={<span className="text-[11px] text-slate-600">% de quem passou da etapa anterior</span>}>Funil de eventos</Titulo>
+          <Titulo extra={<span className="text-[11px] text-slate-600">pessoas únicas · % de quem passou da etapa anterior</span>}>Funil de eventos</Titulo>
           <div className="space-y-3.5">
             {funil.map((f, i) => {
               const n = a.funil[f.ev] ?? 0
+              const eventos = a.funil_eventos?.[f.ev] ?? 0
               const anterior = i > 0 ? a.funil[funil[i - 1].ev] ?? 0 : null
               const passo = anterior !== null ? pct(n, anterior) : null
               const cor = f.ev === 'Purchase' ? '#22c55e' : FUNIL_COR[Math.min(i, FUNIL_COR.length - 1)]
@@ -748,6 +751,7 @@ export function TrackDashboard({ installationId, triggers, nome }: { installatio
                     <span className="min-w-0 truncate">
                       <span className="text-xs font-semibold text-slate-200">{f.ev}</span>
                       <span className="ml-1.5 text-[10.5px] text-slate-600">{f.dica}</span>
+                      {eventos > n && <span className="ml-1.5 text-[10.5px] text-slate-600" title="Total de eventos: a mesma pessoa pode abrir a página ou clicar mais de uma vez">· {inteiro(eventos)} eventos</span>}
                     </span>
                     <span className="flex shrink-0 items-baseline gap-2">
                       {passo !== null && <span className="text-[11px] text-slate-500">{pctTxt(passo)}</span>}
