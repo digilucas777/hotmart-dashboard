@@ -5,7 +5,7 @@ import { getAuthenticatedUser } from '@/app/api/meta/_utils'
 import { canManageTracking } from '@/app/api/track/_utils'
 import { decryptSecret } from '@/lib/crypto'
 import {
-  checkZoneNameservers, deployWorkerScript, ensureCustomDomain, ensureKvNamespace, getAccountId, getZoneId, verifyToken,
+  checkZoneNameservers, deployWorkerScript, ensureCustomDomain, ensureKvNamespace, ensureMetaBlockRule, getAccountId, getZoneId, verifyToken,
   type WorkerBinding,
 } from '@/lib/track/cloudflareApi'
 
@@ -149,6 +149,10 @@ export async function POST(request: Request) {
 
     await deployWorkerScript(token, accountId, scriptName, readWorkerModules(), bindings)
     await ensureCustomDomain(token, accountId, zoneId, installation.worker_subdomain, scriptName)
+    // Firewall contra o revisor de anúncio da Meta no rastreador (precisa de "WAF da zona:
+    // Editar" no token). Se o token não tiver, só avisa no log: a publicação não falha.
+    const waf = await ensureMetaBlockRule(token, zoneId, installation.worker_subdomain).catch(e => ({ ok: false, error: String(e) }))
+    if (!waf.ok) console.warn('[deploy] regra de firewall contra robôs da Meta não criada:', waf.error)
 
     await supabase.from('track_installations').update({
       status: 'deployed',

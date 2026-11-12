@@ -122,3 +122,38 @@ export async function ensureCustomDomain(
     throw new Error(result.errors?.[0]?.message ?? 'não foi possível criar o domínio customizado do Worker — confira a permissão Zone DNS: Edit no token')
   }
 }
+
+// Firewall: bloqueia a rede da Meta (AS32934) SÓ no endereço do rastreador. O revisor de
+// anúncio da Meta abre a página quase a cada minuto disfarçado de celular; sem isto ele
+// chega no Worker e conta no limite de 100 mil acessos/dia do plano grátis. A página do
+// anúncio não é afetada (outro endereço). Precisa da permissão "WAF da zona: Editar" no
+// token; sem ela devolve ok:false e a publicação segue normal (12/11/2026).
+const META_REDES = ['2a03:2880::/32', '2620:0:1c00::/40', '31.13.24.0/21', '31.13.64.0/18', '45.64.40.0/22', '66.220.144.0/20',
+  '69.63.176.0/20', '69.171.224.0/19', '74.119.76.0/22', '102.132.96.0/20', '103.4.96.0/22', '129.134.0.0/16',
+  '147.75.208.0/20', '157.240.0.0/16', '163.70.128.0/17', '173.252.64.0/18', '179.60.192.0/22', '185.60.216.0/22',
+  '185.89.216.0/22', '204.15.20.0/22']
+const REGRA_META_REF = 'bloqueia_meta_no_rastreador'
+
+export async function ensureMetaBlockRule(token: string, zoneId: string, hostname: string): Promise<{ ok: boolean; error?: string }> {
+  const rule = {
+    ref: REGRA_META_REF,
+    description: 'Rastreador: bloqueia o robô revisor de anúncio da Meta (não conta no limite do Worker)',
+    action: 'block',
+    enabled: true,
+    expression: `(http.host eq "${hostname}" and ip.src in {${META_REDES.join(' ')}})`,
+  }
+  const json = { 'Content-Type': 'application/json' }
+  const ep = await cfFetch<{ id: string; rules?: { id: string; ref?: string }[] }>(`/zones/${zoneId}/rulesets/phases/http_request_firewall_custom/entrypoint`, token)
+  let r: CfResult<unknown>
+  if (!ep.success) {
+    // 10003 = o domínio ainda não tem nenhuma regra: cria o conjunto já com esta
+    if (!ep.errors?.some(e => e.code === 10003)) return { ok: false, error: ep.errors?.[0]?.message ?? 'sem permissão de WAF no token' }
+    r = await cfFetch(`/zones/${zoneId}/rulesets/phases/http_request_firewall_custom/entrypoint`, token, { method: 'PUT', headers: json, body: JSON.stringify({ rules: [rule] }) })
+  } else {
+    const atual = (ep.result.rules ?? []).find(x => x.ref === REGRA_META_REF)
+    r = atual
+      ? await cfFetch(`/zones/${zoneId}/rulesets/${ep.result.id}/rules/${atual.id}`, token, { method: 'PATCH', headers: json, body: JSON.stringify(rule) })
+      : await cfFetch(`/zones/${zoneId}/rulesets/${ep.result.id}/rules`, token, { method: 'POST', headers: json, body: JSON.stringify(rule) })
+  }
+  return r.success ? { ok: true } : { ok: false, error: r.errors?.[0]?.message ?? 'não foi possível criar a regra de firewall' }
+}

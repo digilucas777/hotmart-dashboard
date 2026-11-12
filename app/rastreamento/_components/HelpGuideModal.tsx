@@ -33,7 +33,7 @@ const PARTS: Part[] = [
     steps: [
       {
         id: 'b1',
-        text: 'Clique em "Criar token" e use o modelo "Editar Cloudflare Workers". No cartão "Política de Zona", clique no lápis e, ao lado de "Incluir", escolha o seu domínio. No cartão "Política de Conta", clique no lápis e escolha a sua conta (não "Todas as contas"). Recomendado: ainda na Política de Conta, pesquise "Cobrança" e marque "Lido". No final da página, clique em "Continuar para o resumo" e em "Criar token".',
+        text: 'Clique em "Criar token" e use o modelo "Editar Cloudflare Workers". No cartão "Política de Zona", clique no lápis e, ao lado de "Incluir", escolha o seu domínio. Ainda nela, digite "WAF" em "Pesquisar grupos de permissão" e, na linha "WAF da zona", marque "Editar" (o sistema bloqueia os robôs da Meta antes de eles contarem no seu limite). No cartão "Política de Conta", clique no lápis e escolha a sua conta (não "Todas as contas"). Recomendado: ainda na Política de Conta, pesquise "Cobrança" e marque "Lido". No final da página, clique em "Continuar até o resumo" e em "Criar token".',
         links: [{ label: 'Criar token', url: 'https://dash.cloudflare.com/profile/api-tokens' }],
       },
       {
