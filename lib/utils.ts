@@ -282,8 +282,8 @@ export function computeCombinedFromDailyRollup(
   return Object.values(buckets)
 }
 
-// "Por País": 9 maiores + "Outros" somando o resto, pra porcentagem ser sobre o total
-// de vendas do período (antes cortava em 10 e a % saía só sobre esses 10).
+// "Por País" devolve TODOS os países (a % é sobre o total do período). Gráfico de barras
+// e a rosca usam isto: 9 maiores + "Outros" somando o resto.
 export function topPaisesComOutros(points: { label: string; value: number; valueBRL: number }[]) {
   const ord = [...points].sort((a, b) => b.value - a.value)
   if (ord.length <= 10) return ord
@@ -551,7 +551,7 @@ export function computeWidgetData(
         groups[key].count += 1
         groups[key].revenue += getOfficialSaleAmount(v) * (v.moeda === 'USD' ? exchangeRate : 1)
       })
-      return { kind: 'series', points: topPaisesComOutros(Object.entries(groups).map(([label, g]) => ({ label, value: g.count, valueBRL: g.revenue }))) }
+      return { kind: 'series', points: Object.entries(groups).map(([label, g]) => ({ label, value: g.count, valueBRL: g.revenue })).sort((a, b) => b.value - a.value) }
     }
     case 'by_status': {
       const statusMap: Record<string, string> = {

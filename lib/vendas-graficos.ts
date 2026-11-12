@@ -7,7 +7,7 @@
 // Períodos por hora (hoje/ontem/1 dia) continuam com as vendas cruas: são poucas.
 import { supabase } from '@/lib/supabase'
 import type { Period, Venda, WidgetDataSource } from '@/lib/types'
-import { getPeriodRange, normalizePagamento, topPaisesComOutros, type WidgetComputedData } from '@/lib/utils'
+import { getPeriodRange, normalizePagamento, type WidgetComputedData } from '@/lib/utils'
 
 export type GraficoRow = { tipo: 'dia' | 'produto' | 'pais' | 'pagamento' | 'status'; chave: string | null; moeda: string | null; cnt: number; total: number }
 
@@ -191,7 +191,7 @@ export function computeWidgetDataFromGraficos(
         g.revenue += r.total * (r.moeda === 'USD' ? exchangeRate : 1)
         groups[key] = g
       }
-      return { kind: 'series', points: topPaisesComOutros(Object.entries(groups).map(([label, g]) => ({ label, value: g.count, valueBRL: g.revenue }))) }
+      return { kind: 'series', points: Object.entries(groups).map(([label, g]) => ({ label, value: g.count, valueBRL: g.revenue })).sort((a, b) => b.value - a.value) }
     }
     case 'by_status': {
       const statusMap: Record<string, string> = {

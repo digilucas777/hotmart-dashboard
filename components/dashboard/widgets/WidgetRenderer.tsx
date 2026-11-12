@@ -3,7 +3,7 @@
 import { memo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Copy, Pencil, Trash2 } from 'lucide-react'
-import { computeWidgetData, formatPeriodComparisonLabel, getValueFormat } from '@/lib/utils'
+import { computeWidgetData, formatPeriodComparisonLabel, getValueFormat, topPaisesComOutros } from '@/lib/utils'
 import { computeComparableFromSummary, computeWidgetDataFromSummary, type SummaryRow } from '@/lib/vendas-aggregation'
 import type { Period, Venda, WidgetConfig, DiaRow } from '@/lib/types'
 import { SalesTable } from '@/components/dashboard/SalesTable'
@@ -323,7 +323,7 @@ function WidgetRendererBase({
       {config.type === 'bar' && data.kind === 'series' && (
         <BarChartWidget
           title={config.title}
-          points={data.points}
+          points={config.data_source === 'by_country' ? topPaisesComOutros(data.points.map(p => ({ ...p, valueBRL: p.valueBRL ?? 0 }))) : data.points}
           isBRL={isBRL}
           dualCurrency={data.dualCurrency}
           chartHeight={chartHeight}
