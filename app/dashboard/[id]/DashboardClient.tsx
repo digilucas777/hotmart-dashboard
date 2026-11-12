@@ -830,8 +830,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             primeiraVenda = pv ? new Date(pv as string).getTime() : null
           }
           if (primeiraVenda === null || desde <= primeiraVenda) break
-          // trava de segurança: no máximo 1 ano pra trás (oferta filtrada que quase não vende)
-          if (Date.now() - desde > 365 * DIA) break
+          // trava de segurança: no máximo 45 dias pra trás (pedido do Lucas)
+          if (Date.now() - desde >= 45 * DIA) break
           ate = desde
         }
         setRecentVendas(recentRows.slice(0, 8))
