@@ -53,6 +53,8 @@ import { EditWidgetModal } from '@/components/dashboard/EditWidgetModal'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
+import { VendasAgregadasContext, type VendasAgregadas } from '@/components/dashboard/VendasAgregadasContext'
+import { fetchGraficos, fetchTabela, isPeriodoPorHora, rankingPaisesDosGraficos, resumoAprovadasDosGraficos, totalVendasDosGraficos, TABELA_POR_VEZ, type GraficoRow } from '@/lib/vendas-graficos'
 
 const GRID_COLUMNS = 12
 const LAYOUT_STORAGE_PREFIX = 'dashboard-layout:'
@@ -407,6 +409,12 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [showDashboardSwitcher, setShowDashboardSwitcher] = useState(false)
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
   const [vendas, setVendas] = useState<Venda[]>([])
+  // Períodos maiores que 1 dia: gráficos já somados pelo banco + tabela 250 por vez
+  // (lib/vendas-graficos.ts). null = período por hora, tudo sai das vendas cruas.
+  const [graficos, setGraficos] = useState<GraficoRow[] | null>(null)
+  const [tabelaTemMais, setTabelaTemMais] = useState(false)
+  const [tabelaCarregandoMais, setTabelaCarregandoMais] = useState(false)
+  const tabelaRef = useRef<{ from: Date; to: Date; controller: AbortController } | null>(null)
   // Substituem o antigo array bruto de vendas do período anterior (previousVendas) — só
   // usado pra calcular a variação "vs período anterior" dos widgets de métrica, então um
   // agregado por status/moeda (get_vendas_summary) resolve sem baixar linha por linha.
@@ -533,6 +541,10 @@ export function DashboardClient({ projectId }: { projectId: string }) {
 
   const [afiliadosDisponiveis, setAfiliadosDisponiveis] = useState<string[]>([])
   const [afiliadosFilter, setAfiliadosFilter] = useState<string[]>([])
+  // fetchVendas lê os filtros por ref (não recria a busca toda a cada clique no filtro);
+  // a troca de filtro recarrega só gráficos + tabela, no efeito mais abaixo.
+  const filtrosRef = useRef<{ origens: string[]; afiliados: string[] }>({ origens: [], afiliados: [] })
+  useEffect(() => { filtrosRef.current = { origens: origensFilter, afiliados: afiliadosFilter } }, [origensFilter, afiliadosFilter])
   const [showAfiliadosDropdown, setShowAfiliadosDropdown] = useState(false)
   const afiliadosDropdownRef = useRef<HTMLDivElement>(null)
   const dashboardSwitcherRef = useRef<HTMLDivElement>(null)
@@ -726,6 +738,49 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       return allowedOffers.has(realCode)
     })
   }, [])
+
+  const carregarGraficosETabela = useCallback(async (from: Date, to: Date, controller: AbortController) => {
+    const { origens, afiliados } = filtrosRef.current
+    setVendasLoading(true)
+    try {
+      const [g, t] = await Promise.allSettled([
+        fetchGraficos(projectId, from, to, origens, afiliados, controller.signal),
+        fetchTabela(projectId, from, to, origens, afiliados, VENDA_COLUMNS, null, controller.signal),
+      ])
+      if (controller.signal.aborted || tabelaRef.current?.controller !== controller) return
+      if (g.status === 'fulfilled') setGraficos(g.value)
+      else if (!isAbortError(g.reason)) console.error('[vendas] falha ao carregar gráficos:', g.reason)
+      if (t.status === 'fulfilled') {
+        setVendas(t.value)
+        setTabelaTemMais(t.value.length === TABELA_POR_VEZ)
+      } else if (!isAbortError(t.reason)) console.error('[vendas] falha ao carregar a tabela:', t.reason)
+    } finally {
+      if (tabelaRef.current?.controller === controller) setVendasLoading(false)
+    }
+  }, [projectId])
+
+  const carregarMaisTabela = useCallback(async () => {
+    const ctx = tabelaRef.current
+    if (!ctx || tabelaCarregandoMais) return
+    const ultima = vendas[vendas.length - 1]
+    if (!ultima) return
+    setTabelaCarregandoMais(true)
+    try {
+      const { origens, afiliados } = filtrosRef.current
+      const mais = await fetchTabela(projectId, ctx.from, ctx.to, origens, afiliados, VENDA_COLUMNS,
+        { data: ultima.data_venda, id: ultima.id }, ctx.controller.signal)
+      if (tabelaRef.current !== ctx) return
+      setVendas(prev => [...prev, ...mais])
+      setTabelaTemMais(mais.length === TABELA_POR_VEZ)
+    } catch (err) {
+      if (!isAbortError(err)) {
+        console.error('[vendas] falha ao carregar mais vendas:', err)
+        setErrorToast('Não foi possível carregar mais vendas. Tente de novo.')
+      }
+    } finally {
+      setTabelaCarregandoMais(false)
+    }
+  }, [projectId, vendas, tabelaCarregandoMais])
 
   const fetchVendas = useCallback(async () => {
     // Cancela qualquer busca anterior ainda em voo antes de iniciar esta — evita que uma
@@ -942,18 +997,32 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       return all
     }
 
-    void (async () => {
-      setVendasLoading(true)
-      try {
-        const currentData = await fetchAllForPeriod(from.toISOString(), to.toISOString(), VENDA_COLUMNS)
-        setVendas(filterRowsByOfferSelection(currentData, cfg.products, cfg.productLinks, cfg.offerLinks))
-      } catch (err) {
-        if (isAbortError(err)) return
-        console.error('[fetchVendas] falha ao carregar vendas cruas (tabela/gráficos):', err)
-      } finally {
-        if (fetchAbortRef.current === controller) setVendasLoading(false)
-      }
-    })()
+    if (isPeriodoPorHora(period, customDateRange)) {
+      // Hoje/ontem/1 dia: poucas vendas, gráficos por hora saem das vendas cruas.
+      tabelaRef.current = null
+      setGraficos(null)
+      setTabelaTemMais(false)
+      void (async () => {
+        setVendasLoading(true)
+        try {
+          const currentData = await fetchAllForPeriod(from.toISOString(), to.toISOString(), VENDA_COLUMNS)
+          setVendas(filterRowsByOfferSelection(currentData, cfg.products, cfg.productLinks, cfg.offerLinks))
+        } catch (err) {
+          if (isAbortError(err)) return
+          console.error('[fetchVendas] falha ao carregar vendas cruas (tabela/gráficos):', err)
+        } finally {
+          if (fetchAbortRef.current === controller) setVendasLoading(false)
+        }
+      })()
+    } else {
+      // Períodos maiores: o banco soma os gráficos e manda a tabela 250 por vez. Antes
+      // isso baixava todas as vendas do período (49 mil no período máximo do Pedro).
+      // Controller próprio (filho do da busca principal): trocar o filtro cancela só isto.
+      const tabelaCtl = new AbortController()
+      controller.signal.addEventListener('abort', () => tabelaCtl.abort(), { once: true })
+      tabelaRef.current = { from, to, controller: tabelaCtl }
+      void carregarGraficosETabela(from, to, tabelaCtl)
+    }
 
     // Gráfico combinado: busca independente da tabela de Transações acima — uma falha ou
     // demora aqui não pode mais travar a outra (e vice-versa). "Hoje"/"Ontem" (o widget
@@ -981,7 +1050,22 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         console.error('[fetchVendas] falha ao carregar dados do gráfico combinado:', err)
       }
     })()
-  }, [projectId, period, customDateRange, filterRowsByOfferSelection])
+  }, [projectId, period, customDateRange, filterRowsByOfferSelection, carregarGraficosETabela])
+
+  // Troca de filtro de origem/afiliado: no modo do banco, os gráficos e a tabela já vêm
+  // filtrados de lá, então recarrega só essas duas buscas (os cards seguem iguais).
+  const filtrosChave = `${origensFilter.join('|')}#${afiliadosFilter.join('|')}`
+  const filtrosChaveAnterior = useRef(filtrosChave)
+  useEffect(() => {
+    if (filtrosChaveAnterior.current === filtrosChave) return
+    filtrosChaveAnterior.current = filtrosChave
+    const ctx = tabelaRef.current
+    if (!ctx) return
+    const controller = new AbortController()
+    ctx.controller.abort()
+    tabelaRef.current = { ...ctx, controller }
+    void carregarGraficosETabela(ctx.from, ctx.to, controller)
+  }, [filtrosChave, carregarGraficosETabela])
 
   useEffect(() => {
     fetchVendas().catch(() => {
@@ -1837,6 +1921,8 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
   }
   const countryRanking = useMemo(() => {
+    // Modo do banco: a tabela só tem 250 vendas, o ranking sai das somas por país.
+    if (graficos) return rankingPaisesDosGraficos(graficos, exchangeRate).slice(0, 5)
     const groups = new Map<string, { label: string; count: number; revenue: number }>()
     for (const venda of displayVendas.filter(v => v.status === 'approved')) {
       const code = (venda.pais || '').trim().toUpperCase()
@@ -1848,8 +1934,17 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       groups.set(label, current)
     }
     return Array.from(groups.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 5)
-  }, [displayVendas, exchangeRate])
+  }, [displayVendas, exchangeRate, graficos])
   const insights = useMemo(() => {
+    if (graficos) {
+      const r = resumoAprovadasDosGraficos(graficos, exchangeRate)
+      const topCountry = countryRanking[0]?.label
+      return [
+        r.aprovadas > 0 ? `${r.aprovadas} vendas aprovadas no período.` : 'Aguardando vendas aprovadas no período.',
+        topCountry ? `${topCountry} lidera em receita entre os países.` : 'Mapa de países pronto para novas vendas.',
+        r.topProduto ? `${r.topProduto} lidera o faturamento.` : 'Produtos aparecerão aqui assim que houver dados.',
+      ]
+    }
     const approved = displayVendas.filter(v => v.status === 'approved')
     const topCountry = countryRanking[0]?.label
     const topProduct = Object.entries(approved.reduce<Record<string, number>>((acc, venda) => {
@@ -1863,7 +1958,14 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       topCountry ? `${topCountry} lidera em receita entre os países.` : 'Mapa de países pronto para novas vendas.',
       topProduct ? `${topProduct} lidera o faturamento.` : 'Produtos aparecerão aqui assim que houver dados.',
     ]
-  }, [countryRanking, displayVendas, exchangeRate])
+  }, [countryRanking, displayVendas, exchangeRate, graficos])
+  const vendasAgregadas = useMemo<VendasAgregadas>(() => ({
+    graficos,
+    totalVendas: graficos ? totalVendasDosGraficos(graficos) : null,
+    temMais: tabelaTemMais,
+    carregandoMais: tabelaCarregandoMais,
+    carregarMais: graficos ? () => { void carregarMaisTabela() } : null,
+  }), [graficos, tabelaTemMais, tabelaCarregandoMais, carregarMaisTabela])
   void nowTick
   const filteredProducts = useMemo(() => {
     let list = allProducts
@@ -2336,6 +2438,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
               </div>
             )
           })()}
+          <VendasAgregadasContext.Provider value={vendasAgregadas}>
           <DashboardGrid
             key={projectId}
             widgets={widgets}
@@ -2376,6 +2479,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
             metaAds={null}
             metaCampaigns={null}
           />
+          </VendasAgregadasContext.Provider>
           <aside className="dashboard-panel fixed right-4 top-28 z-20 hidden max-h-[calc(100vh-8rem)] w-56 overflow-y-auto rounded-xl p-2 xl:block">
             <div className="mb-2 flex items-center gap-2 rounded-lg border border-emerald-400/12 bg-emerald-400/[0.04] px-2 py-1.5">
               <span className="relative flex h-2.5 w-2.5">

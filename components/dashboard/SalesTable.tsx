@@ -40,11 +40,20 @@ export function SalesTable({
   exchangeRate,
   initialStatusFilter = 'approved',
   heightMode = 'viewport',
+  totalVendas = null,
+  temMais = false,
+  carregandoMais = false,
+  onCarregarMais = null,
 }: {
   vendas: Venda[]
   exchangeRate: number
   initialStatusFilter?: string
   heightMode?: 'viewport' | 'fill'
+  // Tabela paginada pelo banco (250 por vez): total do período e botão "carregar mais".
+  totalVendas?: number | null
+  temMais?: boolean
+  carregandoMais?: boolean
+  onCarregarMais?: (() => void) | null
 }) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
@@ -210,10 +219,23 @@ export function SalesTable({
         </table>
       </div>
 
-      <div className="relative z-[1] shrink-0 border-t border-[var(--dash-border)] px-4 py-2">
+      <div className="relative z-[1] flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-[var(--dash-border)] px-4 py-2">
         <p className="text-xs text-[var(--dash-faint)]">
           {filtered.length} transaç{filtered.length === 1 ? 'ão' : 'ões'}
+          {totalVendas != null && totalVendas > vendas.length && (
+            <> · carregadas as {vendas.length.toLocaleString('pt-BR')} mais recentes de {totalVendas.toLocaleString('pt-BR')} no período</>
+          )}
         </p>
+        {temMais && onCarregarMais && (
+          <button
+            type="button"
+            onClick={onCarregarMais}
+            disabled={carregandoMais}
+            className="rounded-lg bg-white/5 px-3 py-1 text-xs font-medium text-[var(--dash-text)] ring-1 ring-[var(--dash-border)] transition-colors hover:bg-white/10 disabled:opacity-60"
+          >
+            {carregandoMais ? 'carregando...' : 'carregar mais 250'}
+          </button>
+        )}
       </div>
     </div>
   )

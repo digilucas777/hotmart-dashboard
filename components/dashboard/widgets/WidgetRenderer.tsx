@@ -7,6 +7,8 @@ import { computeWidgetData, formatPeriodComparisonLabel, getValueFormat } from '
 import { computeComparableFromSummary, computeWidgetDataFromSummary, type SummaryRow } from '@/lib/vendas-aggregation'
 import type { Period, Venda, WidgetConfig, DiaRow } from '@/lib/types'
 import { SalesTable } from '@/components/dashboard/SalesTable'
+import { useVendasAgregadas } from '@/components/dashboard/VendasAgregadasContext'
+import { computeWidgetDataFromGraficos, FONTES_GRAFICO, isPeriodoPorHora } from '@/lib/vendas-graficos'
 import { computeMetaWidgetData } from '@/lib/meta-ads-mock'
 import type { MetaCreativeResult, MetaCampaignResult } from '@/lib/meta-ads-mock'
 import { BarChartWidget } from './BarChartWidget'
@@ -110,6 +112,7 @@ function WidgetRendererBase({
   onEdit?: (id: string) => void
 }) {
   const [chartPeriod, setChartPeriod] = useState<Period>(period)
+  const agregadas = useVendasAgregadas()
 
   const isMetaWidget = config.type.startsWith('meta-')
   const isChartWidget = config.type === 'line' || config.type === 'bar' || config.type === 'meta-chart'
@@ -148,9 +151,14 @@ function WidgetRendererBase({
             return { ...mock, value: custoManualTotal, valueUsd: custoManualTotal / exchangeRate, change: 0 }
           }
           if (config.data_source === 'meta_roas_geral') {
-            const totalBRL = vendas
-              .filter(v => v.status === 'approved')
-              .reduce((sum, v) => sum + (v.moeda === 'BRL' ? (v.valor_operacional_final ?? 0) : (v.valor_operacional_final ?? 0) * exchangeRate), 0)
+            // Faturamento aprovado vem do resumo (a tabela agora só carrega 250 vendas por vez).
+            const totalBRL = summaryCurrent
+              ? summaryCurrent
+                  .filter(r => r.status === 'approved')
+                  .reduce((sum, r) => sum + (r.moeda === 'BRL' ? r.total : r.total * exchangeRate), 0)
+              : vendas
+                  .filter(v => v.status === 'approved')
+                  .reduce((sum, v) => sum + (v.moeda === 'BRL' ? (v.valor_operacional_final ?? 0) : (v.valor_operacional_final ?? 0) * exchangeRate), 0)
             return { ...mock, value: custoManualTotal > 0 ? totalBRL / custoManualTotal : 0, change: 0 }
           }
         }
@@ -162,7 +170,15 @@ function WidgetRendererBase({
     : config.type === 'metric' && summaryCurrent
       ? (computeWidgetDataFromSummary(summaryCurrent, config.data_source, exchangeRate, effectiveCusto, effectiveCustoUSD)
         ?? computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, effectiveCusto, effectiveCustoUSD, customRange))
-      : computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, effectiveCusto, effectiveCustoUSD, customRange)
+      // Gráficos: quando o banco já mandou as somas (períodos maiores que 1 dia), usa elas.
+      // Gráfico de linha trocado pra "hoje/ontem" no seletor dele usa as vendas cruas de
+      // hoje+ontem (combinedVendas), que vêm completas.
+      : agregadas.graficos && FONTES_GRAFICO.includes(config.data_source)
+        ? (isPeriodoPorHora(effectivePeriod, customRange)
+            ? computeWidgetData(combinedVendas ?? [], config.data_source, effectivePeriod, exchangeRate, effectiveCusto, effectiveCustoUSD, customRange)
+            : (computeWidgetDataFromGraficos(agregadas.graficos, config.data_source, effectivePeriod, exchangeRate, customRange)
+              ?? computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, effectiveCusto, effectiveCustoUSD, customRange)))
+        : computeWidgetData(vendas, config.data_source, effectivePeriod, exchangeRate, effectiveCusto, effectiveCustoUSD, customRange)
 
   // "Taxa: R$X/USD" (widget total_converted) some sem aviso se essa taxa for o
   // valor de emergência do /api/exchange-rate — sem isso, o mesmo período
@@ -328,7 +344,15 @@ function WidgetRendererBase({
         />
       )}
       {config.type === 'table' && data.kind === 'table' && (
-        <SalesTable vendas={data.vendas} exchangeRate={exchangeRate} heightMode="fill" />
+        <SalesTable
+          vendas={data.vendas}
+          exchangeRate={exchangeRate}
+          heightMode="fill"
+          totalVendas={agregadas.graficos ? agregadas.totalVendas : null}
+          temMais={agregadas.temMais}
+          carregandoMais={agregadas.carregandoMais}
+          onCarregarMais={agregadas.carregarMais}
+        />
       )}
       {config.type === 'meta-metric' && data.kind === 'meta-metric' && (
         <MetaMetricWidget
