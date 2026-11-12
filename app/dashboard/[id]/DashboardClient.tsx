@@ -567,15 +567,11 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     async function loadMaxPeriodFrom() {
       const hotmartIds = await fetchHotmartIdsForProjetos([projectId])
       if (hotmartIds.length === 0) return
-      const { data, error } = await supabase
-        .from('vendas')
-        .select('data_venda')
-        .in('hotmart_produto_id', hotmartIds)
-        .order('data_venda', { ascending: true })
-        .limit(1)
-        .maybeSingle()
-      if (cancelled || error || !data?.data_venda) return
-      setMaxPeriodFrom(new Date(data.data_venda))
+      // RPC busca a 1ª venda produto por produto (ms); o .order().limit(1) direto
+      // varria o índice de data inteiro e levava 15s (migration 118).
+      const { data, error } = await supabase.rpc('get_primeira_venda', { p_hotmart_ids: hotmartIds })
+      if (cancelled || error || !data) return
+      setMaxPeriodFrom(new Date(data as string))
     }
     void loadMaxPeriodFrom()
     return () => { cancelled = true }
@@ -801,25 +797,42 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         // Sempre com limite de data: sem ele o Postgres lia TODAS as vendas aprovadas do
         // projeto (30 mil no tráfego do Pedro) pra achar as 80 mais novas, levava 25s e
         // estourava o statement_timeout (8s), derrubando o "atualizar" (12/11/2026).
-        // Começa nos últimos 30 dias; só volta mais (até 1 ano) se o projeto vende pouco.
-        const fetchRecent = (dias: number) =>
-          supabase
+        // Regra do Lucas: busca só os últimos 3 dias; se não achar as 8 vendas do quadro,
+        // volta mais 3 dias por vez até completar (cada busca é uma fatia pequena de 3 dias,
+        // nunca o histórico todo). Para quando passa da 1ª venda do projeto (sem loop infinito
+        // em projeto parado ou sem venda).
+        const DIA = 86_400_000
+        const JANELA = 3 * DIA
+        let recentRows: Venda[] = []
+        let ate = Date.now() + DIA
+        let primeiraVenda: number | null | undefined
+        while (recentRows.length < 8) {
+          const desde = ate - JANELA
+          const { data: recentData, error: recentError } = await supabase
             .from('vendas')
             .select(VENDA_COLUMNS)
             .in('hotmart_produto_id', hotmartIds)
             .eq('status', 'approved')
-            .gte('data_venda', new Date(Date.now() - dias * 86_400_000).toISOString())
+            .gte('data_venda', new Date(desde).toISOString())
+            .lt('data_venda', new Date(ate).toISOString())
             .order('data_venda', { ascending: false })
             .limit(80)
             .abortSignal(controller.signal)
-        let recentRows: Venda[] = []
-        for (const dias of [30, 365]) {
-          const { data: recentData, error: recentError } = await fetchRecent(dias)
           if (recentError) throw recentError
-          recentRows = filterRowsByOfferSelection(
+          recentRows = recentRows.concat(filterRowsByOfferSelection(
             (recentData ?? []) as Venda[], products, productLinks, offerLinks,
-          )
+          ))
           if (recentRows.length >= 8) break
+          if (primeiraVenda === undefined) {
+            const { data: pv } = await supabase
+              .rpc('get_primeira_venda', { p_hotmart_ids: hotmartIds })
+              .abortSignal(controller.signal)
+            primeiraVenda = pv ? new Date(pv as string).getTime() : null
+          }
+          if (primeiraVenda === null || desde <= primeiraVenda) break
+          // trava de segurança: no máximo 1 ano pra trás (oferta filtrada que quase não vende)
+          if (Date.now() - desde > 365 * DIA) break
+          ate = desde
         }
         setRecentVendas(recentRows.slice(0, 8))
       }

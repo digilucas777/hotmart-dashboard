@@ -134,15 +134,11 @@ export function ComboClient({ comboId }: { comboId: string }) {
     async function loadMaxPeriodFrom() {
       const hotmartIds = await fetchHotmartIdsForProjetos(combo!.projeto_ids)
       if (hotmartIds.length === 0) return
-      const { data, error } = await supabase
-        .from('vendas')
-        .select('data_venda')
-        .in('hotmart_produto_id', hotmartIds)
-        .order('data_venda', { ascending: true })
-        .limit(1)
-        .maybeSingle()
-      if (cancelled || error || !data?.data_venda) return
-      setMaxPeriodFrom(new Date(data.data_venda))
+      // RPC busca a 1ª venda produto por produto (ms); o .order().limit(1) direto
+      // varria o índice de data inteiro e levava 15s (migration 118).
+      const { data, error } = await supabase.rpc('get_primeira_venda', { p_hotmart_ids: hotmartIds })
+      if (cancelled || error || !data) return
+      setMaxPeriodFrom(new Date(data as string))
     }
     void loadMaxPeriodFrom()
     return () => { cancelled = true }
