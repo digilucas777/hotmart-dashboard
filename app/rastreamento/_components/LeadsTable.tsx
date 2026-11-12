@@ -158,6 +158,10 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
   end: string
   refreshTick: number
 }) {
+  // relógio pra marcar 'agora' (menos de 2 min) ao vivo, sem esperar recarregar
+  const [agoraMs, setAgoraMs] = useState(() => Date.now())
+  useEffect(() => { const t = window.setInterval(() => setAgoraMs(Date.now()), 15_000); return () => window.clearInterval(t) }, [])
+
   const [status, setStatus] = useState<Status | null>(null)
   const [busca, setBusca] = useState('')
   const [buscaAplicada, setBuscaAplicada] = useState('')
@@ -306,6 +310,7 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
               const st = STATUS_MAP.get(l.status) ?? STATUS[STATUS.length - 1]
               const pos = posicionamento(l.utm_term, l.utm_source)
               const dh = dataHora(l.ultimo)
+              const aoVivo = agoraMs - new Date(l.ultimo).getTime() < 2 * 60_000
               const camp = semId(l.utm_campaign)
               const conj = semId(l.utm_medium)
               const ad = semId(l.utm_content)
@@ -318,7 +323,14 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
                 <tr key={l.lead} className="border-t transition-colors hover:bg-white/[0.02]" style={{ borderColor: 'rgba(255,255,255,0.05)', boxShadow: `inset 3px 0 0 ${st.cor}` }}>
                   <td className="py-2.5 pl-3 pr-1.5 align-top sm:pl-4">
                     <p className="tabular-nums text-slate-200">{dh.data}</p>
-                    <p className="tabular-nums text-[10.5px] text-slate-500">{dh.hora.slice(0, 5)}</p>
+                    {aoVivo ? (
+                      <p className="mt-0.5 inline-flex items-center gap-1 text-[10.5px] font-semibold text-emerald-400" title={`última atividade às ${dh.hora}`}>
+                        <span className="relative flex h-1.5 w-1.5"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" /></span>
+                        agora
+                      </p>
+                    ) : (
+                      <p className="tabular-nums text-[10.5px] text-slate-500">{dh.hora.slice(0, 5)}</p>
+                    )}
                   </td>
                   <td className="px-1.5 py-2.5 align-top">
                     {l.nome || l.email ? (
