@@ -12,10 +12,13 @@ export type VendasAgregadas = {
   temMais: boolean
   carregandoMais: boolean
   carregarMais: (() => void) | null
+  // "carregar todas": busca o resto do período de 1.000 em 1.000 (pode demorar)
+  carregarTudo: (() => void) | null
+  progressoTudo: number | null
 }
 
 export const VendasAgregadasContext = createContext<VendasAgregadas>({
-  graficos: null, totalVendas: null, temMais: false, carregandoMais: false, carregarMais: null,
+  graficos: null, totalVendas: null, temMais: false, carregandoMais: false, carregarMais: null, carregarTudo: null, progressoTudo: null,
 })
 
 export const useVendasAgregadas = () => useContext(VendasAgregadasContext)

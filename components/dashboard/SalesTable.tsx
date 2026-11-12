@@ -44,6 +44,8 @@ export function SalesTable({
   temMais = false,
   carregandoMais = false,
   onCarregarMais = null,
+  onCarregarTudo = null,
+  progressoTudo = null,
 }: {
   vendas: Venda[]
   exchangeRate: number
@@ -54,6 +56,8 @@ export function SalesTable({
   temMais?: boolean
   carregandoMais?: boolean
   onCarregarMais?: (() => void) | null
+  onCarregarTudo?: (() => void) | null
+  progressoTudo?: number | null
 }) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
@@ -227,14 +231,36 @@ export function SalesTable({
           )}
         </p>
         {temMais && onCarregarMais && (
-          <button
-            type="button"
-            onClick={onCarregarMais}
-            disabled={carregandoMais}
-            className="rounded-lg bg-white/5 px-3 py-1 text-xs font-medium text-[var(--dash-text)] ring-1 ring-[var(--dash-border)] transition-colors hover:bg-white/10 disabled:opacity-60"
-          >
-            {carregandoMais ? 'carregando...' : 'carregar mais 250'}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {progressoTudo != null ? (
+              <span className="text-xs tabular-nums text-[var(--dash-faint)]">
+                carregando todas: {progressoTudo.toLocaleString('pt-BR')}
+                {totalVendas != null && ` de ${totalVendas.toLocaleString('pt-BR')}`}...
+              </span>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={onCarregarMais}
+                  disabled={carregandoMais}
+                  className="rounded-lg bg-white/5 px-3 py-1 text-xs font-medium text-[var(--dash-text)] ring-1 ring-[var(--dash-border)] transition-colors hover:bg-white/10 disabled:opacity-60"
+                >
+                  {carregandoMais ? 'carregando...' : 'carregar mais 250'}
+                </button>
+                {onCarregarTudo && (
+                  <button
+                    type="button"
+                    onClick={onCarregarTudo}
+                    disabled={carregandoMais}
+                    title="Busca todas as vendas do período selecionado. Em períodos grandes pode levar alguns minutos."
+                    className="rounded-lg px-3 py-1 text-xs font-medium text-[var(--dash-faint)] ring-1 ring-[var(--dash-border)] transition-colors hover:bg-white/10 hover:text-[var(--dash-text)] disabled:opacity-60"
+                  >
+                    carregar todas{totalVendas != null ? ` (${totalVendas.toLocaleString('pt-BR')})` : ''} · pode demorar
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         )}
       </div>
     </div>

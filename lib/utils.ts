@@ -282,6 +282,19 @@ export function computeCombinedFromDailyRollup(
   return Object.values(buckets)
 }
 
+// "Por País": 9 maiores + "Outros" somando o resto, pra porcentagem ser sobre o total
+// de vendas do período (antes cortava em 10 e a % saía só sobre esses 10).
+export function topPaisesComOutros(points: { label: string; value: number; valueBRL: number }[]) {
+  const ord = [...points].sort((a, b) => b.value - a.value)
+  if (ord.length <= 10) return ord
+  const resto = ord.slice(9)
+  return [...ord.slice(0, 9), {
+    label: 'Outros',
+    value: resto.reduce((s, p) => s + p.value, 0),
+    valueBRL: resto.reduce((s, p) => s + p.valueBRL, 0),
+  }]
+}
+
 export function getValueFormat(source: WidgetDataSource): 'brl' | 'count' {
   const brlSources: WidgetDataSource[] = ['revenue_by_day']
   return brlSources.includes(source) ? 'brl' : 'count'
@@ -538,13 +551,7 @@ export function computeWidgetData(
         groups[key].count += 1
         groups[key].revenue += getOfficialSaleAmount(v) * (v.moeda === 'USD' ? exchangeRate : 1)
       })
-      return {
-        kind: 'series',
-        points: Object.entries(groups)
-          .map(([label, g]) => ({ label, value: g.count, valueBRL: g.revenue }))
-          .sort((a, b) => b.value - a.value)
-          .slice(0, 10),
-      }
+      return { kind: 'series', points: topPaisesComOutros(Object.entries(groups).map(([label, g]) => ({ label, value: g.count, valueBRL: g.revenue }))) }
     }
     case 'by_status': {
       const statusMap: Record<string, string> = {

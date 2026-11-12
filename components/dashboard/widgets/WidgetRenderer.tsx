@@ -16,6 +16,7 @@ import { CombinedChartWidget } from './CombinedChartWidget'
 import { LineChartWidget } from './LineChartWidget'
 import { MetricWidget } from './MetricWidget'
 import { PieWidget } from './PieWidget'
+import { CountryPieWidget } from './CountryPieWidget'
 import { MetaCampaignWidget } from './meta/MetaCampaignWidget'
 import { MetaChartWidget } from './meta/MetaChartWidget'
 import { MetaCreativeWidget } from './meta/MetaCreativeWidget'
@@ -331,7 +332,10 @@ function WidgetRendererBase({
           rotateLabels={isProductChart}
         />
       )}
-      {config.type === 'pie' && data.kind === 'series' && (
+      {config.type === 'pie' && data.kind === 'series' && config.data_source === 'by_country' && (
+        <CountryPieWidget title={config.title} points={data.points} chartHeight={chartHeight} />
+      )}
+      {config.type === 'pie' && data.kind === 'series' && config.data_source !== 'by_country' && (
         <PieWidget title={config.title} points={data.points} chartHeight={chartHeight} />
       )}
       {config.type === 'combined' && data.kind === 'combined' && (
@@ -352,6 +356,8 @@ function WidgetRendererBase({
           temMais={agregadas.temMais}
           carregandoMais={agregadas.carregandoMais}
           onCarregarMais={agregadas.carregarMais}
+          onCarregarTudo={agregadas.carregarTudo}
+          progressoTudo={agregadas.progressoTudo}
         />
       )}
       {config.type === 'meta-metric' && data.kind === 'meta-metric' && (

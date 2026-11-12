@@ -7,7 +7,7 @@
 // Períodos por hora (hoje/ontem/1 dia) continuam com as vendas cruas: são poucas.
 import { supabase } from '@/lib/supabase'
 import type { Period, Venda, WidgetDataSource } from '@/lib/types'
-import { getPeriodRange, normalizePagamento, type WidgetComputedData } from '@/lib/utils'
+import { getPeriodRange, normalizePagamento, topPaisesComOutros, type WidgetComputedData } from '@/lib/utils'
 
 export type GraficoRow = { tipo: 'dia' | 'produto' | 'pais' | 'pagamento' | 'status'; chave: string | null; moeda: string | null; cnt: number; total: number }
 
@@ -43,11 +43,11 @@ export async function fetchGraficos(
 
 export async function fetchTabela(
   projetoId: string, from: Date, to: Date, origens: string[], afiliados: string[], columns: string,
-  cursor: { data: string; id: string } | null, signal?: AbortSignal,
+  cursor: { data: string; id: string } | null, signal?: AbortSignal, limite = TABELA_POR_VEZ,
 ): Promise<Venda[]> {
   let q = supabase.rpc('get_vendas_tabela', {
     p_projeto_id: projetoId, p_from: from.toISOString(), p_to: to.toISOString(), ...filtros(origens, afiliados),
-    p_limit: TABELA_POR_VEZ, p_cursor_data: cursor?.data ?? null, p_cursor_id: cursor?.id ?? null,
+    p_limit: limite, p_cursor_data: cursor?.data ?? null, p_cursor_id: cursor?.id ?? null,
   }).select(columns)
   if (signal) q = q.abortSignal(signal)
   const { data, error } = await q
@@ -191,10 +191,7 @@ export function computeWidgetDataFromGraficos(
         g.revenue += r.total * (r.moeda === 'USD' ? exchangeRate : 1)
         groups[key] = g
       }
-      return {
-        kind: 'series',
-        points: Object.entries(groups).map(([label, g]) => ({ label, value: g.count, valueBRL: g.revenue })).sort((a, b) => b.value - a.value).slice(0, 10),
-      }
+      return { kind: 'series', points: topPaisesComOutros(Object.entries(groups).map(([label, g]) => ({ label, value: g.count, valueBRL: g.revenue }))) }
     }
     case 'by_status': {
       const statusMap: Record<string, string> = {

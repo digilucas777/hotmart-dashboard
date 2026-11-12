@@ -414,6 +414,7 @@ export function DashboardClient({ projectId }: { projectId: string }) {
   const [graficos, setGraficos] = useState<GraficoRow[] | null>(null)
   const [tabelaTemMais, setTabelaTemMais] = useState(false)
   const [tabelaCarregandoMais, setTabelaCarregandoMais] = useState(false)
+  const [tabelaProgressoTudo, setTabelaProgressoTudo] = useState<number | null>(null)
   const tabelaRef = useRef<{ from: Date; to: Date; controller: AbortController } | null>(null)
   // Substituem o antigo array bruto de vendas do período anterior (previousVendas) — só
   // usado pra calcular a variação "vs período anterior" dos widgets de métrica, então um
@@ -779,6 +780,38 @@ export function DashboardClient({ projectId }: { projectId: string }) {
       }
     } finally {
       setTabelaCarregandoMais(false)
+    }
+  }, [projectId, vendas, tabelaCarregandoMais])
+
+  // "carregar todas": busca o resto do período de 1.000 em 1.000 até acabar, mostrando
+  // quantas já chegaram. Pedido do Lucas: opção pra ver o período inteiro, mesmo demorando.
+  const carregarTudoTabela = useCallback(async () => {
+    const ctx = tabelaRef.current
+    if (!ctx || tabelaCarregandoMais) return
+    let lista = vendas
+    setTabelaCarregandoMais(true)
+    setTabelaProgressoTudo(lista.length)
+    try {
+      const { origens, afiliados } = filtrosRef.current
+      while (true) {
+        const ultima = lista[lista.length - 1]
+        const lote = await fetchTabela(projectId, ctx.from, ctx.to, origens, afiliados, VENDA_COLUMNS,
+          ultima ? { data: ultima.data_venda, id: ultima.id } : null, ctx.controller.signal, 1000)
+        if (tabelaRef.current !== ctx) return
+        lista = [...lista, ...lote]
+        setVendas(lista)
+        setTabelaProgressoTudo(lista.length)
+        if (lote.length < 1000) break
+      }
+      setTabelaTemMais(false)
+    } catch (err) {
+      if (!isAbortError(err)) {
+        console.error('[vendas] falha ao carregar todas as vendas:', err)
+        setErrorToast('Parou no meio ao carregar todas as vendas. O que já chegou continua na tabela; tente de novo.')
+      }
+    } finally {
+      setTabelaCarregandoMais(false)
+      setTabelaProgressoTudo(null)
     }
   }, [projectId, vendas, tabelaCarregandoMais])
 
@@ -1965,7 +1998,9 @@ export function DashboardClient({ projectId }: { projectId: string }) {
     temMais: tabelaTemMais,
     carregandoMais: tabelaCarregandoMais,
     carregarMais: graficos ? () => { void carregarMaisTabela() } : null,
-  }), [graficos, tabelaTemMais, tabelaCarregandoMais, carregarMaisTabela])
+    carregarTudo: graficos ? () => { void carregarTudoTabela() } : null,
+    progressoTudo: tabelaProgressoTudo,
+  }), [graficos, tabelaTemMais, tabelaCarregandoMais, carregarMaisTabela, carregarTudoTabela, tabelaProgressoTudo])
   void nowTick
   const filteredProducts = useMemo(() => {
     let list = allProducts
