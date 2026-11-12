@@ -6,8 +6,8 @@
 // Conferido com dados reais em 07/11/2026 (DashSpeed): 10 mil acessos de robô
 // em 30 dias, 9.354 só do meta-externalads.
 //  - "(?<!cu)bot": Cubot é marca de celular (gente real no Instagram).
-//  - IP da Meta (rede AS32934): só conta como robô quando o navegador NÃO é o
-//    app do Instagram/Facebook (ver isBotRequest). Conferido em 11/11/2026:
+//  - IP da Meta (rede AS32934): sempre robô, mesmo com navegador do app (ver
+//    isBotRequest, mudado em 12/11/2026). Conferido em 11/11/2026:
 //    585 sessões em 7 dias vindas da Meta com navegador de celular genérico
 //    ("Android 10; K"), 1% de checkout e nenhuma venda: é o verificador de
 //    anúncio da Meta disfarçado de celular, que gastava a cota do KV.
@@ -40,11 +40,13 @@ export function isMetaInfraIp(ip) {
   return META_V4.some(([b, size]) => n >= b && n < b + size)
 }
 
-// App do Instagram/Facebook: gente de verdade, mesmo se a rede for da Meta.
-const IN_APP_RE = /FBAN|FBAV|FB_IAB|FBIOS|Instagram/i
-
-// Robô = user-agent de robô, ou IP da Meta com navegador que não é o app.
+// Robô = user-agent de robô, ou qualquer acesso vindo da rede da Meta.
+// Até a v1.7.1 o app do Instagram/Facebook (FBAN/FBIOS...) na rede da Meta passava
+// como gente. Conferido em 12/11/2026: em 30 dias foram 78 sessões assim no DashSpeed,
+// todas de data center da Meta (Prineville, Forest City, Luleå, Clonee...), 0 checkout
+// e 0 venda: é o revisor de anúncio disfarçado de app (ex: iPad FBIOS/494). Gente de
+// verdade no app usa a internet da operadora dela, nunca a rede da Meta.
 export function isBotRequest(userAgent, ip) {
   if (isBotUserAgent(userAgent)) return true
-  return isMetaInfraIp(ip) && !IN_APP_RE.test(userAgent || '')
+  return isMetaInfraIp(ip)
 }

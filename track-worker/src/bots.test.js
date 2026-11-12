@@ -36,10 +36,17 @@ test('IP da Meta com celular genérico é robô (verificador de anúncio)', () =
   assert.equal(isBotRequest(ua, '157.240.1.1'), true)
 })
 
-test('app do Instagram/Facebook na rede da Meta continua sendo gente', () => {
-  assert.equal(isBotRequest('Mozilla/5.0 (Linux; Android 14) [FBAN/FB4A;FBAV/586.0.0.52.53;]', '2a03:2880:ff:49::'), false)
-  assert.equal(isBotRequest('Mozilla/5.0 (iPhone) Instagram 400.0.0', '31.13.70.1'), false)
+test('app do Instagram/Facebook na rede da Meta é o revisor de anúncio disfarçado', () => {
+  assert.equal(isBotRequest('Mozilla/5.0 (iPad; CPU OS 15_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/19G82 [FBAN/FBIOS;FBAV/494.0.0.50.98;FBBV/67', '2a03:2880:11ff:56::'), true)
+  assert.equal(isBotRequest('Mozilla/5.0 (Linux; Android 14) [FBAN/FB4A;FBAV/586.0.0.52.53;]', '2a03:2880:ff:49::'), true)
+  assert.equal(isBotRequest('Mozilla/5.0 (iPhone) Instagram 400.0.0', '31.13.70.1'), true)
 })
+
+test('app do Instagram/Facebook na internet da pessoa continua sendo gente', () => {
+  assert.equal(isBotRequest('Mozilla/5.0 (Linux; Android 14) [FBAN/FB4A;FBAV/586.0.0.52.53;]', '2804:1b3:c403:d098::1'), false)
+  assert.equal(isBotRequest('Mozilla/5.0 (iPhone) Instagram 400.0.0', '177.10.2.3'), false)
+})
+
 
 test('IP comum não é da Meta', () => {
   assert.equal(isMetaInfraIp('2804:1b3:c403:d098::1'), false)
