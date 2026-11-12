@@ -797,21 +797,31 @@ export function DashboardClient({ projectId }: { projectId: string }) {
         config = { hotmartIds, products, productLinks, offerLinks }
         hotmartCacheRef.current = config
 
-        // recentVendas não depende do período — busca apenas na primeira carga e após refresh
-        const { data: recentData, error: recentError } = await supabase
-          .from('vendas')
-          .select(VENDA_COLUMNS)
-          .in('hotmart_produto_id', hotmartIds)
-          .eq('status', 'approved')
-          .order('data_venda', { ascending: false })
-          .limit(80)
-          .abortSignal(controller.signal)
-        if (recentError) throw recentError
-        setRecentVendas(
-          filterRowsByOfferSelection(
+        // recentVendas não depende do período — busca apenas na primeira carga e após refresh.
+        // Sempre com limite de data: sem ele o Postgres lia TODAS as vendas aprovadas do
+        // projeto (30 mil no tráfego do Pedro) pra achar as 80 mais novas, levava 25s e
+        // estourava o statement_timeout (8s), derrubando o "atualizar" (12/11/2026).
+        // Começa nos últimos 30 dias; só volta mais (até 1 ano) se o projeto vende pouco.
+        const fetchRecent = (dias: number) =>
+          supabase
+            .from('vendas')
+            .select(VENDA_COLUMNS)
+            .in('hotmart_produto_id', hotmartIds)
+            .eq('status', 'approved')
+            .gte('data_venda', new Date(Date.now() - dias * 86_400_000).toISOString())
+            .order('data_venda', { ascending: false })
+            .limit(80)
+            .abortSignal(controller.signal)
+        let recentRows: Venda[] = []
+        for (const dias of [30, 365]) {
+          const { data: recentData, error: recentError } = await fetchRecent(dias)
+          if (recentError) throw recentError
+          recentRows = filterRowsByOfferSelection(
             (recentData ?? []) as Venda[], products, productLinks, offerLinks,
-          ).slice(0, 8),
-        )
+          )
+          if (recentRows.length >= 8) break
+        }
+        setRecentVendas(recentRows.slice(0, 8))
       }
 
       // Fase rápida: só o resumo agregado (get_vendas_summary, no máx. ~14 linhas) — é o que
