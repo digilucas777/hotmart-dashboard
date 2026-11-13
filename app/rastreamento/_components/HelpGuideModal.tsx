@@ -76,7 +76,7 @@ const PARTS: Part[] = [
         id: 'e1b',
         text: 'Copie também o script "repassar fbclid/UTM pro checkout" (logo abaixo do snippet da head, na seção 2) e cole em TODAS as páginas do funil, pressel, black/white, obrigado, etc., mesmo nas que não têm botão de checkout. Sem isso, botões com link fixo pro checkout (comum em pressel/cloaker) perdem o fbclid/UTM do clique original e a venda não conta pro Meta, mesmo aparecendo certinha no seu faturamento.',
       },
-      { id: 'e2', text: 'Configure o webhook na Hotmart (Ferramentas → Webhook → Cadastrar Webhook) com a URL mostrada na edição da instalação, evento "Compra Aprovada".' },
+      { id: 'e2', text: 'Configure o webhook na Hotmart: menu "Navegue" (9 quadradinhos) › Ferramentas › "Webhook (API e notificações)" › "Cadastrar Webhook". Dê um nome, selecione todos os produtos do funil, cole a URL mostrada na edição da instalação, deixe a versão 2.0.0 e marque os eventos Compra aprovada, Compra reembolsada e Chargeback. Aceite o termo e clique em Salvar. O hottok fica na aba "Autenticação" dessa mesma tela.' },
     ],
   },
   {

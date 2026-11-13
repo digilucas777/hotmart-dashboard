@@ -620,7 +620,7 @@ export function InstallationModal({ open, installation, onClose, onSaved, onDepl
               type="password"
               value={hottok}
               onChange={e => setHottok(e.target.value)}
-              placeholder={hasHottok ? '•••• já salvo, deixe em branco pra manter' : 'Hotmart → Ferramentas → Webhook → copie o hottok'}
+              placeholder={hasHottok ? '•••• já salvo, deixe em branco pra manter' : 'Hotmart → Ferramentas → Webhook (API e notificações) → aba Autenticação → copie o hottok'}
               className={inputClass}
               style={inputStyle}
               autoComplete="new-password"
