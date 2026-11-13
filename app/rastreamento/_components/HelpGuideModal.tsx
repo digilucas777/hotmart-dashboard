@@ -20,7 +20,7 @@ const PARTS: Part[] = [
       },
       {
         id: 'a2',
-        text: 'No painel, clique em "Adicionar um domínio" (Add a site), digite o domínio da sua página e escolha o plano Free. Faça isso antes de trocar os nameservers: só assim a Cloudflare importa os registros do site. Confira se todos os registros DNS foram importados, comparando com o painel onde o domínio está hoje (o do site, normalmente do tipo "A", e os de e-mail MX/TXT, se houver). Deixe o registro principal (@ e www) como "DNS only" (nuvem cinza) pra não alterar o site.',
+        text: 'No menu da esquerda, vá em "Domínios" › "Visão geral", clique em "Adicionar domínio" e escolha "Conectar um domínio". Digite o domínio da sua página em "Nome do domínio", deixe marcado "Importar registros de DNS automaticamente", clique em "Continuar" e escolha o plano Free. Faça isso antes de trocar os nameservers: só assim a Cloudflare importa os registros do site. Confira se todos os registros DNS foram importados, comparando com o painel onde o domínio está hoje (o do site, normalmente do tipo "A", e os de e-mail MX/TXT, se houver). Deixe o registro principal (@ e www) como "DNS only" (nuvem cinza) pra não alterar o site.',
       },
       {
         id: 'a3',
@@ -33,7 +33,7 @@ const PARTS: Part[] = [
     steps: [
       {
         id: 'b1',
-        text: 'Clique em "Criar token" e use o modelo "Editar Cloudflare Workers". No cartão "Política de Zona", clique no lápis e, ao lado de "Incluir", escolha o seu domínio. Ainda nela, digite "WAF" em "Pesquisar grupos de permissão" e, na linha "WAF da zona", marque "Editar" (o sistema bloqueia os robôs da Meta antes de eles contarem no seu limite). No cartão "Política de Conta", clique no lápis e escolha a sua conta (não "Todas as contas"). Recomendado: ainda na Política de Conta, pesquise "Cobrança" e marque "Lido". No final da página, clique em "Continuar até o resumo" e em "Criar token".',
+        text: 'Clique em "Criar token" e, na lista de modelos, clique no cartão "Editar Cloudflare Workers". Em "Nome do token", digite um nome (ex: DashSpeed); sem nome a Cloudflare não deixa continuar. No cartão "Política de Zona", clique no lápis e, no campo "Selecionar..." (ao lado de "Zona específica"), escolha o seu domínio. Ainda nela, digite "WAF" em "Pesquisar grupos de permissão" e, na linha "WAF da zona", marque "Editar" (o sistema bloqueia os robôs da Meta antes de eles contarem no seu limite). No cartão "Política de Conta", clique no lápis e escolha a sua conta (não "Todas as contas"). Recomendado: ainda na Política de Conta, pesquise "Cobrança" e marque "Lido". No final da página, clique em "Continuar até o resumo" e em "Criar token".',
         links: [{ label: 'Criar token', url: 'https://dash.cloudflare.com/profile/api-tokens' }],
       },
       {
