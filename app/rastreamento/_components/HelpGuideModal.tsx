@@ -52,7 +52,7 @@ const PARTS: Part[] = [
       },
       {
         id: 'c2',
-        text: 'Com o Pixel selecionado, vá em Configurações → Conversions API → "Gerar token de acesso". Copie e guarde com cuidado.',
+        text: 'Com o Pixel selecionado, abra a aba "Configurações", desça até "Configurar integração direta" e clique em "Gerar token de acesso". Marque o seu pixel em "Selecionar conjunto de dados" e clique em "Gerar token de acesso" de novo. Copie e guarde com cuidado (a Meta mostra só uma vez). Se der "Falha ao gerar o token de acesso", troque no topo para o portfólio (empresa) dono do pixel.',
       },
       {
         id: 'c3',
