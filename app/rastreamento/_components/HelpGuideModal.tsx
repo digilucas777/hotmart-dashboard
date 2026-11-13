@@ -20,11 +20,11 @@ const PARTS: Part[] = [
       },
       {
         id: 'a2',
-        text: 'No menu da esquerda, vá em "Domínios" › "Visão geral", clique em "Adicionar domínio" e escolha "Conectar um domínio". Digite o domínio da sua página em "Nome do domínio", deixe marcado "Importar registros de DNS automaticamente", clique em "Continuar" e escolha o plano Free. Faça isso antes de trocar os nameservers: só assim a Cloudflare importa os registros do site. Confira se todos os registros DNS foram importados, comparando com o painel onde o domínio está hoje (o do site, normalmente do tipo "A", e os de e-mail MX/TXT, se houver). Deixe o registro principal (@ e www) como "DNS only" (nuvem cinza) pra não alterar o site.',
+        text: 'No menu da esquerda, vá em "Domínios" › "Visão geral", clique em "Adicionar domínio" e escolha "Conectar um domínio". Digite o domínio da sua página em "Nome do domínio", deixe marcado "Importar registros de DNS automaticamente", clique em "Continuar" e, no cartão "Gratuito" (US$ 0), clique em "Selecione o plano" (o botão azul em destaque é do Pro, que é pago). Faça isso antes de trocar os nameservers: só assim a Cloudflare importa os registros do site. Confira se todos os registros DNS foram importados, comparando com o painel onde o domínio está hoje (o do site, normalmente do tipo "A", e os de e-mail MX/TXT, se houver). Deixe o registro principal (@ e www) como "Somente DNS" (nuvem cinza) pra não alterar o site. Depois clique em "Continue para ativação".',
       },
       {
         id: 'a3',
-        text: 'Copie os 2 nameservers exatamente como a Cloudflare mostrar (eles podem mudar de uma conta pra outra) e troque no site onde o domínio foi registrado, apagando os antigos. A propagação leva de minutos a algumas horas. Quando o domínio aparecer como "Ativo" na Cloudflare, está pronto.',
+        text: 'Copie os 2 nameservers exatamente como a Cloudflare mostrar (eles podem mudar de uma conta pra outra) e troque no site onde o domínio foi registrado, apagando os antigos (se o DNSSEC estiver ligado lá, desative). Volte na Cloudflare e clique em "Atualizei meus nameservers". A propagação leva de minutos a algumas horas. Quando o domínio aparecer como "Ativo" na Cloudflare, está pronto.',
       },
     ],
   },
