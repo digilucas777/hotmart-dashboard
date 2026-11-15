@@ -218,6 +218,8 @@ export async function notifySale(params: {
           await webpush.sendNotification(
             { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth_key } },
             JSON.stringify({ title, body, icon: '/icon-192.png', url: `/dashboard/${params.projetoId}`, tag: `venda-${params.hotmartId}` }),
+            // entrega imediata: sem isso o celular pode segurar a notificação em economia de bateria
+            { urgency: 'high', TTL: 60 * 60 * 24 },
           )
           return 'ok'
         } catch (err: unknown) {
@@ -269,6 +271,7 @@ async function sendPushToUser(userId: string, payload: { title: string; body: st
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth_key } },
           JSON.stringify({ title: payload.title, body: payload.body, icon: '/icon-192.png', url: payload.url, tag: payload.tag }),
+          { urgency: 'high', TTL: 60 * 60 * 24 },
         )
       } catch (err: unknown) {
         const statusCode = (err as { statusCode?: number } | null)?.statusCode
