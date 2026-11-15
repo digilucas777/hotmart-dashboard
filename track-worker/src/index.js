@@ -1,7 +1,7 @@
 import { sha256Hex } from './hash.js'
 import { WORKER_VERSION } from './version.js'
 import { buildSnippet } from './snippet.js'
-import { normalizePhone } from './phone.js'
+import { normalizePhone, resolveBuyerCountry } from './phone.js'
 import { isBotRequest } from './bots.js'
 
 
@@ -429,7 +429,7 @@ async function handleHotmartWebhook(request, env, ctx) {
   // buyer.address.country vem por extenso ("France") — tem que ser o
   // country_iso, senão a busca do DDI nunca bate e o telefone sai sem
   // prefixo pra ninguém.
-  const buyerCountry = buyer.address?.country_iso || null
+  const platformCountry = buyer.address?.country_iso || null
 
   const pixels = parseEnvJson(env.PIXELS_JSON, [])
   if (pixels.length === 0) return json({ error: 'no pixels configured' }, 500)
@@ -462,10 +462,6 @@ async function handleHotmartWebhook(request, env, ctx) {
   const firstName = buyer.first_name || String(buyer.name || '').split(' ')[0]
   if (firstName) userData.fn = await sha256Hex(firstName)
   if (buyer.last_name) userData.ln = await sha256Hex(buyer.last_name)
-  if (buyer.checkout_phone) {
-    const normalizedPhone = normalizePhone(buyer.checkout_phone, buyerCountry)
-    if (normalizedPhone) userData.ph = await sha256Hex(normalizedPhone)
-  }
   // external_id devia ser um identificador estável do cliente — o CPF
   // (buyer.document) só existe pra comprador brasileiro; pra o resto do
   // mundo (a maioria do público francês/internacional) vem vazio. Nesse
@@ -548,11 +544,21 @@ async function handleHotmartWebhook(request, env, ctx) {
   // endereço real) — sobrescreve só os campos que vierem preenchidos aqui,
   // sem mexer no que já veio da sessão (a Hotmart não expõe "estado" no
   // endereço do comprador, então "st" continua vindo só da sessão/IP).
+  // País do comprador: a Hotmart pode mandar o país padrão do checkout
+  // (mandou "Brasil" pra mexicano com IP e telefone do México, 15/11/2026).
+  // Confere com o IP da visita e com o telefone antes de usar; o telefone só
+  // é normalizado depois disso, pra não colar o DDI do país errado.
+  const buyerCountry = resolveBuyerCountry({ platformCountry, ipCountry: matchedSession?.geo?.country, phone: buyer.checkout_phone })
+  const countryFromPlatform = !!platformCountry && buyerCountry === String(platformCountry).toUpperCase()
+  if (buyer.checkout_phone) {
+    const normalizedPhone = normalizePhone(buyer.checkout_phone, buyerCountry)
+    if (normalizedPhone) userData.ph = await sha256Hex(normalizedPhone)
+  }
   const billingAddress = buyer.address || {}
   Object.assign(userData, await buildGeoUserData({
-    city: billingAddress.city || null,
-    postalCode: billingAddress.zipcode || null,
-    country: billingAddress.country_iso || null,
+    city: countryFromPlatform ? billingAddress.city || null : null,
+    postalCode: countryFromPlatform ? billingAddress.zipcode || null : null,
+    country: buyerCountry,
   }))
 
   // event_time o mais próximo possível do momento real da aprovação (a
