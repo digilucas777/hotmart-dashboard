@@ -29,6 +29,8 @@ type Lead = {
   valor: string | null
   moeda: string | null
   dados_abandono?: boolean
+  // cada compra do lead (principal, order bump, upsell) com o seu próprio envio à Meta
+  compras?: { produto: string | null; valor: string | null; moeda: string | null; enviada: boolean }[]
 }
 type Status = 'comprou' | 'checkout' | 'abandonou' | 'carrinho' | 'engajou' | 'visitou'
 type Resposta = { contagem: Partial<Record<Status, number>> | null; total: number; leads: Lead[] }
@@ -355,12 +357,31 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
                       <span className="truncate">{st.label}</span>
                     </span>
                     {st.ev && <p className="mt-1 truncate text-[10px] text-slate-600" title={st.ev}>{st.ev}</p>}
-                    {l.status === 'comprou' && (
-                      <p className={`truncate text-[10px] ${l.enviada_fb ? 'text-emerald-500/80' : 'text-amber-400/80'}`}>{l.enviada_fb ? '✓ enviada à Meta' : 'não enviada à Meta'}</p>
-                    )}
+                    {l.status === 'comprou' && (() => {
+                      const cs = l.compras ?? []
+                      if (cs.length > 1) {
+                        const env = cs.filter(c => c.enviada).length
+                        const cor = env === cs.length ? 'text-emerald-500/80' : env === 0 ? 'text-amber-400/80' : 'text-slate-400'
+                        return <p className={`truncate text-[10px] ${cor}`}>{env === 0 ? 'nenhuma enviada à Meta' : `✓ ${env} de ${cs.length} enviada${env > 1 ? 's' : ''} à Meta`}</p>
+                      }
+                      const enviada = cs.length === 1 ? cs[0].enviada : l.enviada_fb
+                      return <p className={`truncate text-[10px] ${enviada ? 'text-emerald-500/80' : 'text-amber-400/80'}`}>{enviada ? '✓ enviada à Meta' : 'não enviada à Meta'}</p>
+                    })()}
                   </td>
                   <td className="px-1.5 py-2.5 text-right align-top">
-                    {valor ? (
+                    {l.status === 'comprou' && (l.compras?.length ?? 0) > 1 ? (
+                      <div className="space-y-1">
+                        {l.compras!.map((c, i) => (
+                          <div key={i} className="min-w-0">
+                            <p className="truncate font-bold tabular-nums text-emerald-300">{dinheiro(c.valor, c.moeda) ?? '-'}</p>
+                            {c.produto && <p className="truncate text-[10px] text-slate-500" title={c.produto}>{c.produto}</p>}
+                            <p className={`truncate text-[9.5px] ${c.enviada ? 'text-emerald-500/80' : 'text-amber-400/80'}`} title={c.enviada ? 'Purchase enviado à Meta' : 'Fora da lista de produtos enviados à Meta (order bump/upsell)'}>
+                              {c.enviada ? '✓ Meta' : 'não vai à Meta'}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : valor ? (
                       <>
                         <p className="truncate font-bold tabular-nums text-emerald-300">{valor}</p>
                         {l.produto && <p className="truncate text-[10px] text-slate-500" title={l.produto}>{l.produto}</p>}
