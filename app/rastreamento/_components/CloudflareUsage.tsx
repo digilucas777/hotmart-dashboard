@@ -249,18 +249,10 @@ export function UsageBar({ installationId, start, end, periodoLabel }: {
             {!paid && acima > 0 && (
               <p className="text-rose-300">Em {acima} dia(s) {multi ? 'o total geral passou' : 'passou'} de 1.000 visitantes. Se a conta estava no plano gratuito nesses dias, as vendas depois do limite chegaram no Facebook sem a origem do anúncio.</p>
             )}
-            {per.robosAntesDaCorrecao > 0 && (
-              <p>🤖 Outros {n(per.robosAntesDaCorrecao)} acessos de robô chegaram antes da correção de 07/11 e foram contados no plano.</p>
-            )}
             {per.cortadoEm && <p>A Cloudflare guarda o uso só dos últimos 90 dias: o gráfico começa em {diaCurto(per.cortadoEm)}.</p>}
-            {per.horarioLocal
-              ? !paid && <p>Os dias seguem o seu horário. O limite grátis é contado pelo dia da Cloudflare, que vira às 21h de Brasília.</p>
-              : <p>Os dias seguem o horário da Cloudflare, que vira à meia-noite de Londres (21h de Brasília).</p>}
-            <p>
-              {u.detected === null
-                ? <label className="inline-flex cursor-pointer items-center gap-1.5"><input type="checkbox" checked={paid} onChange={e => void setPaid(e.target.checked)} />minha conta já está no Workers Paid</label>
-                : 'Plano reconhecido automaticamente.'}
-            </p>
+            {u.detected === null && (
+              <p><label className="inline-flex cursor-pointer items-center gap-1.5"><input type="checkbox" checked={paid} onChange={e => void setPaid(e.target.checked)} />minha conta já está no Workers Paid</label></p>
+            )}
           </div>
         </div>
       )}
