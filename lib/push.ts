@@ -1,5 +1,6 @@
 import webpush from 'web-push'
 import { createClient } from '@supabase/supabase-js'
+import { virtualOfferSuffix } from './vendas-aggregation'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -108,6 +109,8 @@ export function resolveNotifCategory(
 export async function resolveProjetos(
   hotmartProdutoId: string | null,
   ofertaCodigo: string | null,
+  origem?: string | null,
+  dataVenda?: string | null,
 ): Promise<{ id: string; nome: string }[]> {
   if (!hotmartProdutoId) return []
   const { data: produto } = await supabase
@@ -125,13 +128,26 @@ export async function resolveProjetos(
 
   const rows = links as { projeto_id: string; todas_ofertas: boolean | null; projetos?: { nome?: string } | null }[]
 
+  // Mesma reclassificação por origem que o resto do sistema aplica (migrations
+  // 084/086/088/090/094, replicada em JS em virtualOfferSuffix) — sem isso, uma
+  // venda de recuperação/app notificava o projeto de Tráfego (que ainda tem o
+  // código de oferta CRU cadastrado) em vez do projeto de Recuperação/App certo
+  // (que só tem o código com sufixo __rec/__app), e esse último projeto não
+  // recebia notificação nenhuma dessa venda (achado 17/11/2026, venda ES
+  // HP1400027311: notificação saiu como "[Es] Lucas" em vez de "[Es]RECUPERAÇÃO").
+  const suffix = virtualOfferSuffix(hotmartProdutoId, origem ?? null, dataVenda ?? null)
+
   // Um mesmo produto pode estar vinculado a vários projetos, cada um com sua
   // própria seleção de ofertas (todas_ofertas=false + projeto_produto_ofertas)
-  // — mesma regra que o dashboard já aplica (filterRowsByOfferSelection, em
-  // DashboardClient.tsx). Sem isso, um projeto configurado pra só contar
+  // — mesma regra que o dashboard já aplica (filterVendasByOfferAllowlist, em
+  // lib/vendas-aggregation.ts). Sem isso, um projeto configurado pra só contar
   // ofertas específicas recebia notificação de QUALQUER venda do produto,
   // mesmo de ofertas que ele explicitamente não seleciona.
-  const restritos = rows.filter(r => r.todas_ofertas === false)
+  // Quando a venda cai num bucket virtual (suffix não vazio), o atalho de
+  // todas_ofertas não vale pra nenhum projeto — só conta se o código SUFIXADO
+  // estiver explicitamente liberado — por isso busca as ofertas de TODOS os
+  // projetos vinculados nesse caso, não só os com todas_ofertas=false.
+  const restritos = suffix ? rows : rows.filter(r => r.todas_ofertas === false)
   const ofertasPermitidas = new Map<string, Set<string>>()
   if (restritos.length > 0) {
     const { data: ofertas } = await supabase
@@ -147,6 +163,10 @@ export async function resolveProjetos(
 
   return rows
     .filter(r => {
+      if (suffix) {
+        const permitidas = ofertasPermitidas.get(r.projeto_id)
+        return !!ofertaCodigo && !!permitidas?.has(ofertaCodigo + suffix)
+      }
       if (r.todas_ofertas !== false) return true
       const permitidas = ofertasPermitidas.get(r.projeto_id)
       return !!ofertaCodigo && !!permitidas?.has(ofertaCodigo)

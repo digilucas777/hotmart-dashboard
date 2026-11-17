@@ -332,7 +332,7 @@ function dataVendaBrasilia(dataVenda: string | null | undefined): string | null 
 // projeto_produto_ofertas. Precisa espelhar EXATAMENTE a ordem de checagem da
 // função SQL, senão um produto cai no ramo errado (ex: um bordeless ® também
 // está na lista de ES, mas o corte full-rec tem que vencer, incondicional).
-function virtualOfferSuffix(hotmartProdutoId: string | null | undefined, origem: string | null | undefined, dataVenda: string | null | undefined): string {
+export function virtualOfferSuffix(hotmartProdutoId: string | null | undefined, origem: string | null | undefined, dataVenda: string | null | undefined): string {
   const produtoId = hotmartProdutoId ?? ''
   const o = (origem ?? '').toLowerCase()
   const dataLocal = dataVendaBrasilia(dataVenda)
