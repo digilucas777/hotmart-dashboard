@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Search, Users, Copy, Check } from 'lucide-react'
+import { Search, Users, Copy, Check, ChevronDown } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
 
 type Lead = {
@@ -61,6 +61,40 @@ function dinheiro(v: string | null, moeda: string | null) {
   const n = Number(v)
   if (!Number.isFinite(n)) return null
   try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: moeda || 'BRL' }).format(n) } catch { return `${moeda ?? ''} ${n.toFixed(2)}` }
+}
+// Lead que comprou vários produtos: mostra o principal (o que vai à Meta) e
+// recolhe o resto num "+N produtos", que abre a lista com o valor de cada um.
+type Compra = { produto: string | null; valor: string | null; moeda: string | null; enviada: boolean; reembolsada?: boolean }
+function LinhaCompra({ c }: { c: Compra }) {
+  return (
+    <div className="min-w-0">
+      <p className="truncate font-bold tabular-nums text-emerald-300">{dinheiro(c.valor, c.moeda) ?? '-'}</p>
+      {c.produto && <p className="truncate text-[10px] text-slate-500" title={c.produto}>{c.produto}</p>}
+      <p className={`truncate text-[9.5px] ${c.enviada ? 'text-emerald-500/80' : 'text-amber-400/80'}`} title={c.enviada ? 'Purchase enviado à Meta' : 'Fora da lista de produtos enviados à Meta (order bump/upsell)'}>
+        {c.enviada ? '✓ Meta' : 'não vai à Meta'}
+      </p>
+    </div>
+  )
+}
+function ComprasLead({ compras }: { compras: Compra[] }) {
+  const [aberto, setAberto] = useState(false)
+  const iPrinc = Math.max(0, compras.findIndex(c => c.enviada))
+  const principal = compras[iPrinc]
+  const outras = compras.filter((_, i) => i !== iPrinc)
+  const moedas = new Set(compras.map(c => c.moeda ?? ''))
+  const total = moedas.size === 1 ? compras.reduce((t, c) => t + (Number(c.valor) || 0), 0) : null
+  const totalTxt = total != null ? dinheiro(String(total), compras[0].moeda) : null
+  return (
+    <div className="space-y-1">
+      <LinhaCompra c={principal} />
+      {aberto && outras.map((c, i) => <LinhaCompra key={i} c={c} />)}
+      <button type="button" onClick={() => setAberto(a => !a)} className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-indigo-300 hover:underline" title={aberto ? 'Recolher' : 'Ver cada produto comprado e o valor'}>
+        {aberto ? 'recolher' : `+${outras.length} produto${outras.length > 1 ? 's' : ''}`}
+        <ChevronDown className={`h-3 w-3 transition-transform ${aberto ? 'rotate-180' : ''}`} />
+      </button>
+      {totalTxt && <p className="text-[9.5px] tabular-nums text-emerald-500/70">total {totalTxt}</p>}
+    </div>
+  )
 }
 function nomePais(iso: string | null) {
   if (!iso) return null
@@ -370,17 +404,7 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
                   </td>
                   <td className="px-1.5 py-2.5 text-right align-top">
                     {l.status === 'comprou' && (l.compras?.length ?? 0) > 1 ? (
-                      <div className="space-y-1">
-                        {l.compras!.map((c, i) => (
-                          <div key={i} className="min-w-0">
-                            <p className="truncate font-bold tabular-nums text-emerald-300">{dinheiro(c.valor, c.moeda) ?? '-'}</p>
-                            {c.produto && <p className="truncate text-[10px] text-slate-500" title={c.produto}>{c.produto}</p>}
-                            <p className={`truncate text-[9.5px] ${c.enviada ? 'text-emerald-500/80' : 'text-amber-400/80'}`} title={c.enviada ? 'Purchase enviado à Meta' : 'Fora da lista de produtos enviados à Meta (order bump/upsell)'}>
-                              {c.enviada ? '✓ Meta' : 'não vai à Meta'}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
+                      <ComprasLead compras={l.compras!} />
                     ) : valor ? (
                       <>
                         <p className="truncate font-bold tabular-nums text-emerald-300">{valor}</p>
