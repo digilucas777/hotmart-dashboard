@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { Search, Users, Copy, Check, ChevronDown } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
 
@@ -62,38 +62,67 @@ function dinheiro(v: string | null, moeda: string | null) {
   if (!Number.isFinite(n)) return null
   try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: moeda || 'BRL' }).format(n) } catch { return `${moeda ?? ''} ${n.toFixed(2)}` }
 }
-// Lead que comprou vários produtos: mostra o principal (o que vai à Meta) e
-// recolhe o resto num "+N produtos", que abre a lista com o valor de cada um.
-type Compra = { produto: string | null; valor: string | null; moeda: string | null; enviada: boolean; reembolsada?: boolean }
-function LinhaCompra({ c }: { c: Compra }) {
+// Lead que comprou vários produtos: a célula mostra só o principal (o que vai à
+// Meta) e um "+N produtos"; ao abrir, uma faixa embaixo da linha mostra cada
+// compra num cartão (3 por linha) com horário, src e parâmetros.
+type Compra = {
+  produto: string | null; valor: string | null; moeda: string | null; enviada: boolean; reembolsada?: boolean
+  t?: string | null; src?: string | null; utm_source?: string | null; utm_campaign?: string | null
+  utm_medium?: string | null; utm_content?: string | null; utm_term?: string | null
+}
+function totalCompras(compras: Compra[]) {
+  if (new Set(compras.map(c => c.moeda ?? '')).size !== 1) return null
+  return dinheiro(String(compras.reduce((t, c) => t + (Number(c.valor) || 0), 0)), compras[0].moeda)
+}
+function ResumoCompras({ compras, aberto, onToggle }: { compras: Compra[]; aberto: boolean; onToggle: () => void }) {
+  const principal = compras.find(c => c.enviada) ?? compras[0]
+  const total = totalCompras(compras)
   return (
     <div className="min-w-0">
-      <p className="truncate font-bold tabular-nums text-emerald-300">{dinheiro(c.valor, c.moeda) ?? '-'}</p>
-      {c.produto && <p className="truncate text-[10px] text-slate-500" title={c.produto}>{c.produto}</p>}
-      <p className={`truncate text-[9.5px] ${c.enviada ? 'text-emerald-500/80' : 'text-amber-400/80'}`} title={c.enviada ? 'Purchase enviado à Meta' : 'Fora da lista de produtos enviados à Meta (order bump/upsell)'}>
-        {c.enviada ? '✓ Meta' : 'não vai à Meta'}
-      </p>
+      <p className="truncate font-bold tabular-nums text-emerald-300">{dinheiro(principal.valor, principal.moeda) ?? '-'}</p>
+      {principal.produto && <p className="truncate text-[10px] text-slate-500" title={principal.produto}>{principal.produto}</p>}
+      <button type="button" onClick={onToggle} className="mt-0.5 inline-flex items-center gap-0.5 rounded px-1 py-px text-[10px] font-semibold text-indigo-300 hover:underline" title={aberto ? 'Fechar detalhes' : 'Ver cada produto comprado'}>
+        {aberto ? 'fechar' : `+${compras.length - 1} produto${compras.length > 2 ? 's' : ''}`}
+        <ChevronDown className={`h-3 w-3 transition-transform ${aberto ? 'rotate-180' : ''}`} />
+      </button>
+      {total && <p className="text-[9.5px] tabular-nums text-emerald-500/70">total {total}</p>}
     </div>
   )
 }
-function ComprasLead({ compras }: { compras: Compra[] }) {
-  const [aberto, setAberto] = useState(false)
-  const iPrinc = Math.max(0, compras.findIndex(c => c.enviada))
-  const principal = compras[iPrinc]
-  const outras = compras.filter((_, i) => i !== iPrinc)
-  const moedas = new Set(compras.map(c => c.moeda ?? ''))
-  const total = moedas.size === 1 ? compras.reduce((t, c) => t + (Number(c.valor) || 0), 0) : null
-  const totalTxt = total != null ? dinheiro(String(total), compras[0].moeda) : null
+function CartaoCompra({ c, n }: { c: Compra; n: number }) {
+  const dh = c.t ? dataHora(c.t) : null
+  const linhas: [string, string | null][] = [
+    ['campanha', semId(c.utm_campaign ?? null)], ['conjunto', semId(c.utm_medium ?? null)],
+    ['anúncio', semId(c.utm_content ?? null)], ['posição', c.utm_term ?? null],
+  ]
   return (
-    <div className="space-y-1">
-      <LinhaCompra c={principal} />
-      {aberto && outras.map((c, i) => <LinhaCompra key={i} c={c} />)}
-      <button type="button" onClick={() => setAberto(a => !a)} className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-indigo-300 hover:underline" title={aberto ? 'Recolher' : 'Ver cada produto comprado e o valor'}>
-        {aberto ? 'recolher' : `+${outras.length} produto${outras.length > 1 ? 's' : ''}`}
-        <ChevronDown className={`h-3 w-3 transition-transform ${aberto ? 'rotate-180' : ''}`} />
-      </button>
-      {totalTxt && <p className="text-[9.5px] tabular-nums text-emerald-500/70">total {totalTxt}</p>}
+    <div className="min-w-0 rounded-lg p-2.5" style={{ background: 'rgba(255,255,255,0.03)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.06)' }}>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="truncate font-bold tabular-nums text-emerald-300">{dinheiro(c.valor, c.moeda) ?? '-'}</p>
+        <span className="shrink-0 text-[9.5px] tabular-nums text-slate-600">#{n}{dh ? ` · ${dh.data} ${dh.hora}` : ''}</span>
+      </div>
+      <p className="truncate text-[11px] font-medium text-slate-100" title={c.produto ?? ''}>{c.produto ?? 'Produto sem nome'}</p>
+      <p className={`truncate text-[9.5px] ${c.enviada ? 'text-emerald-500/80' : 'text-amber-400/80'}`} title={c.enviada ? 'Purchase enviado à Meta' : 'Fora da lista de produtos enviados à Meta (order bump/upsell)'}>
+        {c.enviada ? '✓ enviada à Meta (principal)' : 'não vai à Meta (order bump/upsell)'}
+      </p>
+      <div className="mt-1.5 space-y-0.5 border-t pt-1.5 text-[10px]" style={{ borderColor: 'rgba(127,127,127,0.15)' }}>
+        <p className="flex min-w-0 gap-1"><span className="w-14 shrink-0 text-slate-600">src</span><span className="truncate font-mono text-teal-300" title={c.src ?? ''}>{c.src || '-'}</span></p>
+        {linhas.map(([k, v]) => (
+          <p key={k} className="flex min-w-0 gap-1"><span className="w-14 shrink-0 text-slate-600">{k}</span><span className="truncate text-slate-400" title={v ?? ''}>{v || '-'}</span></p>
+        ))}
+      </div>
     </div>
+  )
+}
+function FaixaCompras({ compras, cor }: { compras: Compra[]; cor: string }) {
+  return (
+    <tr className="border-t" style={{ borderColor: 'rgba(255,255,255,0.05)', boxShadow: `inset 3px 0 0 ${cor}` }}>
+      <td colSpan={10} className="px-3 pb-3 pt-2 sm:px-4">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {compras.map((c, i) => <CartaoCompra key={i} c={c} n={i + 1} />)}
+        </div>
+      </td>
+    </tr>
   )
 }
 function nomePais(iso: string | null) {
@@ -205,6 +234,8 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
   const [chaveCarregada, setChaveCarregada] = useState<string | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [maisCarregando, setMaisCarregando] = useState(false)
+  const [abertos, setAbertos] = useState<Set<string>>(() => new Set())
+  const alternar = (id: string) => setAbertos(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const pedido = useRef(0)
   const qtdRef = useRef(POR_PAGINA)
 
@@ -355,8 +386,10 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
               const local = [l.cidade, nomePais(l.pais)].filter(Boolean).join(', ')
               const valor = l.status === 'comprou' ? dinheiro(l.valor, l.moeda) : null
               const semUtm = !l.utm_source && !camp && !conj && !ad && !l.utm_term
+              const multi = l.status === 'comprou' && (l.compras?.length ?? 0) > 1
               return (
-                <tr key={l.lead} className="border-t transition-colors hover:bg-white/[0.02]" style={{ borderColor: 'rgba(255,255,255,0.05)', boxShadow: `inset 3px 0 0 ${st.cor}` }}>
+                <Fragment key={l.lead}>
+                <tr className="border-t transition-colors hover:bg-white/[0.02]" style={{ borderColor: 'rgba(255,255,255,0.05)', boxShadow: `inset 3px 0 0 ${st.cor}` }}>
                   <td className="py-2.5 pl-3 pr-1.5 align-top sm:pl-4">
                     <p className="tabular-nums text-slate-200">{dh.data}</p>
                     {aoVivo ? (
@@ -404,7 +437,7 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
                   </td>
                   <td className="px-1.5 py-2.5 text-right align-top">
                     {l.status === 'comprou' && (l.compras?.length ?? 0) > 1 ? (
-                      <ComprasLead compras={l.compras!} />
+                      <ResumoCompras compras={l.compras!} aberto={abertos.has(l.lead)} onToggle={() => alternar(l.lead)} />
                     ) : valor ? (
                       <>
                         <p className="truncate font-bold tabular-nums text-emerald-300">{valor}</p>
@@ -444,6 +477,8 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
                     })()}
                   </td>
                 </tr>
+                {multi && abertos.has(l.lead) && <FaixaCompras compras={l.compras!} cor={st.cor} />}
+                </Fragment>
               )
             })}
           </tbody>
