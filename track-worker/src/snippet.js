@@ -257,15 +257,51 @@ export function buildSnippet({ sessionTtlDays, triggers, checkoutDomains, worker
   var MONITOR_URL = ${jsString(workerOrigin || '')} + '/monitor';
   var SESSION_TTL_SECONDS = ${sessionTtlSeconds};
 ${pixelLoaderCode}
-  function getCookie(name){
+  // Guarda cada dado da visita em 3 lugares (cookie, sessionStorage e
+  // localStorage). Achado real (22/11/2026): no navegador interno do
+  // Facebook/Instagram no iPhone, ao trocar de página por botão via JS
+  // (pressel com link em base64), os cookies chegavam apagados mas a memória
+  // da aba não. Lendo dos 3, a visita, as UTMs e o fbc sobrevivem.
+  function readCookie(name){
     var m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]+)'));
     return m ? decodeURIComponent(m[1]) : null;
   }
+  function readStore(store, name){
+    try {
+      var raw = store.getItem(name);
+      if (!raw) return null;
+      var o = JSON.parse(raw);
+      if (!o || (o.e && o.e < Date.now())) { store.removeItem(name); return null; }
+      return o.v == null ? null : String(o.v);
+    } catch (e) { return null; }
+  }
+  function setVal(name, value, maxAge){
+    document.cookie = name + '=' + encodeURIComponent(value) + ';path=/;max-age=' + maxAge + ';SameSite=Lax';
+    var item = JSON.stringify({ v: value, e: Date.now() + maxAge * 1000 });
+    try { sessionStorage.setItem(name, item); } catch (e) {}
+    try { localStorage.setItem(name, item); } catch (e) {}
+  }
+  function getCookie(name){
+    var v = readCookie(name);
+    if (v) {
+      // espelha na memória da aba e do aparelho, pra sobreviver se o cookie sumir na próxima página
+      try { if (!sessionStorage.getItem(name)) { var it = JSON.stringify({ v: v, e: Date.now() + SESSION_TTL_SECONDS * 1000 }); sessionStorage.setItem(name, it); localStorage.setItem(name, it); } } catch (e) {}
+      return v;
+    }
+    var s = null;
+    try { s = readStore(sessionStorage, name); } catch (e) {}
+    if (!s) { try { s = readStore(localStorage, name); } catch (e) {} }
+    return s;
+  }
   function getOrCreateSid(){
     var existing = getCookie('_ht_sid');
-    if (existing) return existing;
+    if (existing) {
+      // veio da memória (cookie apagado): recria o cookie
+      if (!readCookie('_ht_sid')) { try { setVal('_ht_sid', existing, SESSION_TTL_SECONDS); } catch (e) {} }
+      return existing;
+    }
     var id = (crypto.randomUUID ? crypto.randomUUID() : (String(Date.now()) + Math.random().toString(16).slice(2)));
-    document.cookie = '_ht_sid=' + id + ';path=/;max-age=' + SESSION_TTL_SECONDS + ';SameSite=Lax';
+    setVal('_ht_sid', id, SESSION_TTL_SECONDS);
     return id;
   }
   // A ideia é usar SÓ esse script (sem o pixel nativo da Meta na página), então
@@ -277,7 +313,7 @@ ${pixelLoaderCode}
     var existing = getCookie('_fbp');
     if (existing) return existing;
     var id = 'fb.1.' + Date.now() + '.' + Math.floor(Math.random() * 2147483647);
-    document.cookie = '_fbp=' + id + ';path=/;max-age=7776000;SameSite=Lax';
+    setVal('_fbp', id, 7776000);
     return id;
   }
   function getOrCreateFbc(){
@@ -287,7 +323,7 @@ ${pixelLoaderCode}
     var fbclid = params.get('fbclid');
     if (!fbclid) return null;
     var id = 'fb.1.' + Date.now() + '.' + fbclid;
-    document.cookie = '_fbc=' + id + ';path=/;max-age=7776000;SameSite=Lax';
+    setVal('_fbc', id, 7776000);
     return id;
   }
   // UTM só vem na URL da página de entrada (o clique no anúncio) — páginas
@@ -303,7 +339,7 @@ ${pixelLoaderCode}
       if (v) { current[k] = v; hasAny = true; }
     });
     if (hasAny) {
-      document.cookie = '_ht_utm=' + encodeURIComponent(JSON.stringify(current)) + ';path=/;max-age=' + SESSION_TTL_SECONDS + ';SameSite=Lax';
+      setVal('_ht_utm', JSON.stringify(current), SESSION_TTL_SECONDS);
       return current;
     }
     var stored = getCookie('_ht_utm');
@@ -319,7 +355,7 @@ ${pixelLoaderCode}
   function getOrCreateSrc(){
     var current = new URLSearchParams(location.search).get('src');
     if (current) {
-      document.cookie = '_ht_src=' + encodeURIComponent(current) + ';path=/;max-age=' + SESSION_TTL_SECONDS + ';SameSite=Lax';
+      setVal('_ht_src', current, SESSION_TTL_SECONDS);
       return current;
     }
     return getCookie('_ht_src');
@@ -330,8 +366,11 @@ ${pixelLoaderCode}
   // 1ª chamada da sessão inteira, não a 1ª de cada página.
   function isNewSession(){
     try {
-      if (sessionStorage.getItem('_ht_registered')) return false;
-      sessionStorage.setItem('_ht_registered', '1');
+      // Marca QUAL visita já foi registrada, não só "já registrou": se o
+      // código da visita mudar (cookie apagado), a nova precisa ser gravada,
+      // senão a venda chega com um sck que o robô não conhece.
+      if (sessionStorage.getItem('_ht_registered') === sid) return false;
+      sessionStorage.setItem('_ht_registered', sid);
       return true;
     } catch (e) {
       return true;

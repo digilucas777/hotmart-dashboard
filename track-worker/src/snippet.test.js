@@ -70,9 +70,9 @@ test('buildSnippet manda o evento via fetch com keepalive, não sendBeacon (send
 test('buildSnippet gera _fbp e _fbc sozinho (sem depender do pixel nativo da Meta)', () => {
   const code = buildSnippet({ sessionTtlDays: 7, triggers: [] })
   assert.match(code, /function getOrCreateFbp\(\)/)
-  assert.match(code, /_fbp=' \+ id/)
+  assert.match(code, /setVal\('_fbp', id/)
   assert.match(code, /function getOrCreateFbc\(\)/)
-  assert.match(code, /_fbc=' \+ id/)
+  assert.match(code, /setVal\('_fbc', id/)
 })
 
 test('buildSnippet marca new_session via sessionStorage (1x por sessão, não por página)', () => {
@@ -166,4 +166,13 @@ test('buildSnippet manda event_id no PageView e dispara o mesmo ID no pixel nati
   assert.match(code, /var eventId = \(eventName === 'PageView' && crypto\.randomUUID\)/)
   assert.match(code, /event_id: eventId/)
   assert.match(code, /window\.fbq\('track', 'PageView', \{\}, eventId \? \{ eventID: eventId \} : undefined\)/)
+})
+
+test('buildSnippet guarda a visita tambem na memoria da aba/aparelho e registra visita nova se o codigo mudar', () => {
+  const code = buildSnippet({ sessionTtlDays: 7, triggers: [] })
+  assert.match(code, /sessionStorage\.setItem\(name, item\)/)
+  assert.match(code, /localStorage\.setItem\(name, item\)/)
+  assert.match(code, /getItem\('_ht_registered'\) === sid/)
+  // o codigo gerado precisa ser JS valido
+  assert.doesNotThrow(() => new Function(code))
 })

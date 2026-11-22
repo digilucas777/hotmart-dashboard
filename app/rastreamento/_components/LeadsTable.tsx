@@ -30,6 +30,7 @@ type Lead = {
   moeda: string | null
   dados_abandono?: boolean
   // cada compra do lead (principal, order bump, upsell) com o seu próprio envio à Meta
+  recuperada?: boolean
   compras?: { produto: string | null; valor: string | null; moeda: string | null; enviada: boolean }[]
 }
 type Status = 'comprou' | 'checkout' | 'abandonou' | 'carrinho' | 'engajou' | 'visitou'
@@ -449,6 +450,7 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
                     {l.utm_source
                       ? <p className="truncate text-[11px] font-medium text-slate-200" title={l.utm_source}>{l.utm_source}</p>
                       : <p className="text-slate-600">{semUtm ? 'sem UTM' : '-'}</p>}
+                    {l.recuperada && <span className="mt-0.5 inline-block rounded px-1.5 py-px text-[9px] font-semibold text-sky-300" style={{ background: 'rgba(56,189,248,0.12)' }} title="A página seguinte abriu sem UTM (ex: botão da pressel em código, cookies apagados no iPhone). A origem foi completada pela visita anterior do mesmo aparelho e internet, antes de mandar pra Meta.">origem recuperada</span>}
                     {pos && (
                       <div className="mt-0.5 flex min-w-0 items-center gap-1" title={l.utm_term ?? ''}>
                         <span className="shrink-0 scale-[0.8]"><IconePlataforma tipo={pos.tipo} /></span>

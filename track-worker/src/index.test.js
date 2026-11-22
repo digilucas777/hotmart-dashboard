@@ -207,7 +207,7 @@ test('POST /collect salva sessão e e-mail no KV quando enriquecimento está lig
   }
 })
 
-test('POST /collect NÃO grava a sessão de novo se new_session não vier true (economiza a cota do KV)', async () => {
+test('POST /collect grava a sessão 1 vez se ela não está no KV mesmo sem new_session (cookie apagado entre páginas), e não regrava depois', async () => {
   const originalFetch = globalThis.fetch
   globalThis.fetch = async () => new Response('{}', { status: 200 })
   try {
@@ -218,7 +218,16 @@ test('POST /collect NÃO grava a sessão de novo se new_session não vier true (
       body: JSON.stringify({ event_name: 'ViewContent', session_id: 'sess1', url: 'https://minhalp.com.br/produto' }),
     })
     await worker.fetch(req, env)
-    assert.equal(env.SESSIONS._store.has('sid:sess1'), false)
+    assert.equal(env.SESSIONS._store.has('sid:sess1'), true)
+    let puts = 0
+    const put0 = env.SESSIONS.put
+    env.SESSIONS.put = async (k, v, o) => { puts++; return put0(k, v, o) }
+    await worker.fetch(new Request('https://sinal.teste.com/collect', {
+      method: 'POST',
+      headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: 'ViewContent', session_id: 'sess1', url: 'https://minhalp.com.br/produto' }),
+    }), env)
+    assert.equal(puts, 0)
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -1501,4 +1510,75 @@ test('GET /t.js sai antes de carregar o pixel quando é robô', async () => {
   assert.match(js, /navigator\.webdriver/)
   assert.ok(js.indexOf("fbq('init'") > 0)
   assert.ok(js.indexOf('navigator.webdriver') < js.indexOf("fbq('init'"))
+})
+
+
+// ---- recuperação de visita perdida (pressel com botão em JS no iPhone, 22/11/2026) ----
+function reqColeta(body, ua = 'Mozilla/5.0 (iPhone) FBAN/FBIOS', ip = '203.0.113.7') {
+  return new Request('https://sinal.teste.com/collect', {
+    method: 'POST',
+    headers: { Origin: 'https://minhalp.com.br', 'Content-Type': 'application/json', 'User-Agent': ua, 'CF-Connecting-IP': ip },
+    body: JSON.stringify(body),
+  })
+}
+const UTM_PRESSEL = { utm_source: 'facebook', utm_campaign: '[IT] PRESSEL|123', utm_medium: 'IT 30+|456', utm_content: 'IT-MAIO1|789', utm_term: 'Facebook_Mobile_Reels' }
+
+test('recuperação: página 2 sem cookie (visita nova sem UTM/fbc) herda a origem da pressel do mesmo aparelho, e a venda vai pra Meta com fbc', async () => {
+  const originalFetch = globalThis.fetch
+  const metaBodies = []
+  const ingest = []
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes('graph.facebook.com')) metaBodies.push(JSON.parse(init.body))
+    if (String(url).includes('/ingest')) ingest.push(JSON.parse(init.body))
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const env = makeEnvWithIngest()
+    const ctx = makeCtx()
+    await worker.fetch(reqColeta({ event_name: 'PageView', session_id: 'pressel1', url: 'https://minhalp.com.br/pr/?fbclid=abc', new_session: true, fbc: 'fb.1.1.abc', fbp: 'fb.1.1.111', utm: UTM_PRESSEL }), env, ctx)
+    await worker.fetch(reqColeta({ event_name: 'PageView', session_id: 'pagina2', url: 'https://minhalp.com.br/bienvenido/', new_session: true, fbp: 'fb.1.2.222', utm: {} }), env, ctx)
+    await Promise.all(ctx._tasks)
+    const salva = JSON.parse(env.SESSIONS._store.get('sid:pagina2'))
+    assert.equal(salva.fbc, 'fb.1.1.abc')
+    assert.equal(salva.utm.utm_campaign, '[IT] PRESSEL|123')
+    assert.equal(salva.recuperada_de, 'pressel1')
+    const ev2 = ingest.find(e => e.session_id === 'pagina2')
+    assert.equal(ev2.utm_campaign, '[IT] PRESSEL|123')
+    assert.equal(ev2.fbc, 'fb.1.1.abc')
+    assert.equal(ev2.recuperada_de, 'pressel1')
+    // o PageView da página 2 já vai pra Meta com o fbc do clique
+    assert.equal(metaBodies[metaBodies.length - 1].data[0].user_data.fbc, 'fb.1.1.abc')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('recuperação: NÃO herda quando duas visitas diferentes com origem vieram do mesmo aparelho/internet nos 30 min (ambíguo)', async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response('{}', { status: 200 })
+  try {
+    const env = makeEnvWithIngest()
+    await worker.fetch(reqColeta({ event_name: 'PageView', session_id: 'a1', url: 'https://minhalp.com.br/pr/', new_session: true, fbc: 'fb.1.1.aaa', utm: UTM_PRESSEL }), env, makeCtx())
+    await worker.fetch(reqColeta({ event_name: 'PageView', session_id: 'b1', url: 'https://minhalp.com.br/pr/', new_session: true, fbc: 'fb.1.1.bbb', utm: UTM_PRESSEL }), env, makeCtx())
+    await worker.fetch(reqColeta({ event_name: 'PageView', session_id: 'c1', url: 'https://minhalp.com.br/bienvenido/', new_session: true, utm: {} }), env, makeCtx())
+    const salva = JSON.parse(env.SESSIONS._store.get('sid:c1'))
+    assert.equal(salva.fbc, null)
+    assert.equal(salva.recuperada_de, undefined)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('recuperação: NÃO herda de outro aparelho (navegador diferente na mesma internet)', async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response('{}', { status: 200 })
+  try {
+    const env = makeEnvWithIngest()
+    await worker.fetch(reqColeta({ event_name: 'PageView', session_id: 'x1', url: 'https://minhalp.com.br/pr/', new_session: true, fbc: 'fb.1.1.xxx', utm: UTM_PRESSEL }, 'Mozilla/5.0 (Android 14) Instagram'), env, makeCtx())
+    await worker.fetch(reqColeta({ event_name: 'PageView', session_id: 'y1', url: 'https://minhalp.com.br/bienvenido/', new_session: true, utm: {} }, 'Mozilla/5.0 (iPhone) FBAN/FBIOS'), env, makeCtx())
+    const salva = JSON.parse(env.SESSIONS._store.get('sid:y1'))
+    assert.equal(salva.fbc, null)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })

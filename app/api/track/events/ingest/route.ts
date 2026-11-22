@@ -22,6 +22,7 @@ type IngestBody = {
   ip?: string | null
   session_id?: string | null
   session_hit?: boolean
+  recuperada_de?: string | null
   geo_city?: string | null
   geo_region?: string | null
   geo_country?: string | null
@@ -74,6 +75,7 @@ export async function POST(request: Request) {
     ip: clip(body.ip, 64),
     session_id: clip(body.session_id, 128),
     session_hit: !!body.session_hit,
+    recuperada_de: clip(body.recuperada_de, 128),
     geo_city: clip(body.geo_city, 100),
     geo_region: clip(body.geo_region, 100),
     geo_country: clip(body.geo_country, 8),

@@ -3,6 +3,7 @@ import { WORKER_VERSION } from './version.js'
 import { buildSnippet } from './snippet.js'
 import { normalizePhone, resolveBuyerCountry } from './phone.js'
 import { isBotRequest } from './bots.js'
+import { buscarOrigemDoAparelho, registrarOrigemDoAparelho, temOrigem } from './recover.js'
 
 
 function json(data, status = 200, extraHeaders) {
@@ -242,6 +243,8 @@ async function handleCollect(request, env, ctx) {
   const eventId = body.event_id || `${body.session_id}:${body.event_name}:${Math.floor(Date.now() / 60000)}`
 
   const sessionEnrichment = env.SESSION_ENRICHMENT_ENABLED === 'true'
+  // Visita que herdou a origem de outra visita do mesmo aparelho (recover.js)
+  let recuperadaDe = null
   if (sessionEnrichment && env.SESSIONS) {
     // Uma falha aqui (ex: cota de gravação do KV estourada) nunca pode impedir
     // o envio do evento principal pra Meta — por isso fica isolada num try/catch
@@ -274,9 +277,37 @@ async function handleCollect(request, env, ctx) {
         src: existing?.src || body.src || null,
       }
 
-      const shouldWrite = body.new_session || (existing && !existing.fbc && body.fbc)
+      // Visita sem origem de anúncio (sem fbc e sem UTM): herda a da visita
+      // do mesmo aparelho nos últimos 30 min, se houver uma só. Caso real:
+      // pressel com botão em JS no iPhone apagava os cookies na troca de página.
+      let herdou = false
+      if (existing?.recuperada_de) recuperadaDe = existing.recuperada_de
+      if (!temOrigem(sessionData)) {
+        const achada = await buscarOrigemDoAparelho(env.SESSIONS, { ip, userAgent, sessionId: body.session_id })
+        if (achada) {
+          const d = achada.data
+          sessionData.fbc = d.fbc || sessionData.fbc
+          sessionData.fbp = d.fbp || sessionData.fbp
+          sessionData.utm = d.utm || sessionData.utm
+          sessionData.src = sessionData.src || d.src || null
+          sessionData.recuperada_de = achada.sid
+          recuperadaDe = achada.sid
+          herdou = true
+        }
+      }
+      // Eventos seguintes da mesma visita (outra página, checkout): levam o
+      // fbc/UTM que a visita já tem, mesmo que a página atual não tenha mais.
+      if (!body.fbc && sessionData.fbc) body.fbc = sessionData.fbc
+      if (!body.fbp && sessionData.fbp) body.fbp = sessionData.fbp
+      if (!temOrigem({ utm: body.utm }) && sessionData.utm) body.utm = sessionData.utm
+      if (!body.src && sessionData.src) body.src = sessionData.src
+
+      const shouldWrite = body.new_session || herdou || !existing || (existing && !existing.fbc && body.fbc)
       if (shouldWrite) {
         await env.SESSIONS.put(sessionKey, JSON.stringify(sessionData), { expirationTtl: ttlSeconds })
+        if (!herdou && temOrigem(sessionData)) {
+          await registrarOrigemDoAparelho(env.SESSIONS, { ip, userAgent, sessionId: body.session_id, data: sessionData })
+        }
       }
 
       const email = body.params && body.params.email
@@ -362,6 +393,7 @@ async function handleCollect(request, env, ctx) {
     utm_content: utm.utm_content || null,
     utm_term: utm.utm_term || null,
     src: body.src || null,
+    recuperada_de: recuperadaDe,
     raw_payload: env.DIAGNOSTICO_ATIVO === 'true' ? body : null,
   })
 
@@ -475,6 +507,7 @@ async function handleHotmartWebhook(request, env, ctx) {
   let sessionHit = false
   let matchedSessionId = null
   let matchedSession = null
+  let compraRecuperadaDe = null
   if (sessionEnrichment && env.SESSIONS) {
     // Uma falha aqui (ex: KV fora do ar) nunca pode impedir o envio do
     // Purchase — nesse caso ele só sai sem o bônus de fbp/fbc/geo.
@@ -498,6 +531,17 @@ async function handleHotmartWebhook(request, env, ctx) {
         const emailHash = await sha256Hex(buyer.email)
         const stored = await env.SESSIONS.get(`email:${emailHash}`)
         if (stored) session = JSON.parse(stored)
+      }
+
+      // Visita achada, mas sem origem de anúncio: antes de mandar pra Meta,
+      // tenta completar com a visita do mesmo aparelho (recover.js).
+      if (session && session.recuperada_de) compraRecuperadaDe = session.recuperada_de
+      if (session && !temOrigem(session) && session.ip && session.userAgent) {
+        const achada = await buscarOrigemDoAparelho(env.SESSIONS, { ip: session.ip, userAgent: session.userAgent, sessionId: matchedSessionId })
+        if (achada) {
+          session = { ...session, fbc: achada.data.fbc || session.fbc, fbp: achada.data.fbp || session.fbp, utm: achada.data.utm || session.utm, src: session.src || achada.data.src }
+          compraRecuperadaDe = achada.sid
+        }
       }
 
       if (session) {
@@ -613,6 +657,7 @@ async function handleHotmartWebhook(request, env, ctx) {
     ip: userData.client_ip_address || null,
     session_id: matchedSessionId,
     session_hit: sessionHit,
+    recuperada_de: compraRecuperadaDe,
     geo_city: matchedGeo.city || null,
     geo_region: matchedGeo.region || null,
     geo_country: matchedGeo.country || null,
