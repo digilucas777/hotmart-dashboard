@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
-import { RefreshCw, ShoppingBag, Wallet, Receipt, Percent, CalendarDays, Unlink, SendHorizontal, Banknote, TrendingUp, PiggyBank, Undo2, PlusCircle, MessageCircle } from 'lucide-react'
+import { Info, RefreshCw, ShoppingBag, Wallet, Receipt, Percent, CalendarDays, Unlink, SendHorizontal, Banknote, TrendingUp, PiggyBank, Undo2, PlusCircle, MessageCircle } from 'lucide-react'
 import { Spinner } from '@/components/ui/Spinner'
 import { getPeriodRange } from '@/lib/utils'
 import type { Period } from '@/lib/types'
@@ -242,24 +242,42 @@ function Titulo({ children, extra }: { children: React.ReactNode; extra?: React.
   )
 }
 
+// Variação vs. período anterior: só aparece quando existe comparação de verdade.
 function Variacao({ atual, anterior }: { atual: number; anterior: number | null | undefined }) {
-  if (anterior === null || anterior === undefined) return null
-  if (anterior === 0) {
-    if (atual === 0) return <span className="text-[11px] text-slate-600">igual ao período anterior</span>
-    return <span className="text-[11px] text-emerald-400">antes: 0</span>
-  }
+  if (!anterior) return null
   const d = ((atual - anterior) / anterior) * 100
-  const up = d >= 0
+  if (Math.abs(d) < 0.05) return null
+  const up = d > 0
   return (
-    <span className={`text-[11px] font-medium ${up ? 'text-emerald-400' : 'text-rose-400'}`}>
+    <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ${up ? 'text-emerald-400' : 'text-rose-400'}`}
+      style={{ background: up ? 'rgba(52,211,153,0.12)' : 'rgba(251,113,133,0.12)' }} title="vs. período anterior">
       {up ? '▲' : '▼'} {Math.abs(d).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%
-      <span className="font-normal text-slate-600"> vs anterior</span>
     </span>
   )
 }
 
-function Kpi({ icon, label, children, rodape, destaque, alerta }: {
-  icon: React.ReactNode; label: string; children: React.ReactNode; rodape?: React.ReactNode; destaque?: boolean; alerta?: boolean
+// "i" de informação: abre a explicação ao passar o mouse (computador) ou ao tocar (celular).
+function InfoTip({ texto }: { texto: string }) {
+  const [aberto, setAberto] = useState(false)
+  return (
+    <span className="relative ml-auto flex shrink-0" onMouseEnter={() => setAberto(true)} onMouseLeave={() => setAberto(false)}>
+      <button type="button" aria-label="O que é este número" onClick={() => setAberto(a => !a)} onBlur={() => setAberto(false)}
+        className="flex h-5 w-5 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200">
+        <Info size={13} />
+      </button>
+      {aberto && (
+        <span role="tooltip" className="absolute right-0 top-6 z-30 w-max max-w-[220px] rounded-lg px-2.5 py-2 text-[11px] font-normal normal-case leading-snug tracking-normal text-slate-200 shadow-xl"
+          style={{ background: '#0b1220', border: '1px solid rgba(255,255,255,0.14)' }}>
+          {texto}
+        </span>
+      )}
+    </span>
+  )
+}
+const Nota = ({ children }: { children: React.ReactNode }) => <span className="truncate text-[11px] text-slate-500">{children}</span>
+
+function Kpi({ icon, label, children, rodape, destaque, alerta, tip }: {
+  icon: React.ReactNode; label: string; children: React.ReactNode; rodape?: React.ReactNode; destaque?: boolean; alerta?: boolean; tip?: string
 }) {
   return (
     <div
@@ -272,10 +290,11 @@ function Kpi({ icon, label, children, rodape, destaque, alerta }: {
     >
       <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-slate-500">
         <span className={destaque ? 'text-emerald-400' : alerta ? 'text-amber-400' : 'text-indigo-400'}>{icon}</span>
-        {label}
+        <span className="truncate">{label}</span>
+        {tip && <InfoTip texto={tip} />}
       </div>
       <div className="min-w-0">{children}</div>
-      {rodape && <div className="mt-auto">{rodape}</div>}
+      {rodape && <div className="mt-auto flex min-w-0 flex-wrap items-center gap-1.5">{rodape}</div>}
     </div>
   )
 }
@@ -623,7 +642,7 @@ export function TrackDashboard({ installationId, triggers, nome }: { installatio
 
       {/* ---------- indicadores ---------- */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-        <Kpi icon={<Wallet size={14} />} label="Faturamento" destaque rodape={calc.antMoedas.length > 0 && calc.moedas.length > 0
+        <Kpi icon={<Wallet size={14} />} label="Faturamento" destaque tip="Vendas aprovadas no período, em cada moeda" rodape={calc.antMoedas.length > 0 && calc.moedas.length > 0
           ? <Variacao atual={calc.moedas[0].total} anterior={calc.antMoedas.find(m => m.moeda === calc.moedas[0].moeda)?.total ?? 0} />
           : undefined}>
           {calc.moedas.length === 0 ? (
@@ -638,32 +657,26 @@ export function TrackDashboard({ installationId, triggers, nome }: { installatio
             </div>
           )}
         </Kpi>
-        <Kpi icon={<Banknote size={14} />} label="Gasto total" rodape={
-          <span className="text-[11px] text-slate-500">
-            {custos.length ? `${custos.length} lançamento(s)` : 'nenhum custo lançado'}
-            {calc.moedaPrincipal === 'USD' && usdBrl && calc.gasto > 0 ? ` · ≈ ${dinheiro(calc.gasto * usdBrl, 'BRL')}` : ''}
-          </span>
+        <Kpi icon={<Banknote size={14} />} label="Gasto total" tip={`Custos lançados neste painel (${custos.length ? `${custos.length} lançamento(s)` : 'nenhum ainda'})`} rodape={
+          calc.moedaPrincipal === 'USD' && usdBrl && calc.gasto > 0 ? <Nota>≈ {dinheiro(calc.gasto * usdBrl, 'BRL')}</Nota> : undefined
         }>
           <p className="truncate text-2xl font-bold tabular-nums text-slate-50">{dinheiro(calc.gasto, calc.moedaPrincipal)}</p>
           {calc.gastoSemCotacao && <p className="text-[10.5px] text-amber-300">sem cotação do dólar agora, parte do gasto ficou de fora</p>}
         </Kpi>
-        <Kpi icon={<PiggyBank size={14} />} label="Lucro" destaque={calc.gasto > 0 && calc.lucro >= 0} alerta={calc.gasto > 0 && calc.lucro < 0} rodape={
-          <span className="text-[11px] text-slate-500">faturamento menos gasto{calc.moedaPrincipal === 'USD' && usdBrl && calc.gasto > 0 ? ` · ≈ ${dinheiro(calc.lucro * usdBrl, 'BRL')}` : ''}</span>
+        <Kpi icon={<PiggyBank size={14} />} label="Lucro" destaque={calc.gasto > 0 && calc.lucro >= 0} alerta={calc.gasto > 0 && calc.lucro < 0} tip="Faturamento − gasto" rodape={
+          calc.moedaPrincipal === 'USD' && usdBrl && calc.gasto > 0 ? <Nota>≈ {dinheiro(calc.lucro * usdBrl, 'BRL')}</Nota> : undefined
         }>
           <p className={`truncate text-2xl font-bold tabular-nums ${calc.lucro < 0 ? 'text-rose-300' : 'text-slate-50'}`}>{calc.gasto > 0 ? dinheiro(calc.lucro, calc.moedaPrincipal) : '-'}</p>
         </Kpi>
-        <Kpi icon={<TrendingUp size={14} />} label="ROAS" rodape={<span className="text-[11px] text-slate-500">{calc.roas === null ? 'lance um custo pra calcular' : 'faturamento ÷ gasto'}</span>}>
+        <Kpi icon={<TrendingUp size={14} />} label="ROAS" tip="Faturamento ÷ gasto" rodape={calc.roas === null ? <Nota>lance um custo pra calcular</Nota> : undefined}>
           <p className={`text-3xl font-bold tabular-nums ${calc.roas !== null && calc.roas < 1 ? 'text-rose-300' : 'text-slate-50'}`}>{calc.roas === null ? '-' : calc.roas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
         </Kpi>
-        <Kpi icon={<ShoppingBag size={14} />} label="Vendas" rodape={
-          <span className="flex flex-col gap-0.5">
-            <Variacao atual={calc.nVendas} anterior={calc.antVendas} />
-            {calc.extrasFunil > 0 && <span className="text-[11px] text-slate-500">{inteiro(calc.nVendas)} do produto principal + {inteiro(calc.extrasFunil)} de bump/upsell</span>}
-          </span>
-        }>
+        <Kpi icon={<ShoppingBag size={14} />} label="Vendas"
+          tip={calc.extrasFunil > 0 ? `${inteiro(calc.nVendas)} do produto principal + ${inteiro(calc.extrasFunil)} de bump/upsell` : 'Vendas aprovadas no período'}
+          rodape={<Variacao atual={calc.nVendas} anterior={calc.antVendas} />}>
           <p className="text-3xl font-bold tabular-nums text-slate-50">{inteiro(calc.aprovadas)}</p>
         </Kpi>
-        <Kpi icon={<Receipt size={14} />} label="Ticket médio">
+        <Kpi icon={<Receipt size={14} />} label="Ticket médio" tip="Faturamento ÷ vendas">
           {ticket.length === 0 ? (
             <p className="text-2xl font-bold text-slate-600">-</p>
           ) : (
@@ -674,31 +687,27 @@ export function TrackDashboard({ installationId, triggers, nome }: { installatio
             </div>
           )}
         </Kpi>
-        <Kpi icon={<Undo2 size={14} />} label="Reembolso" alerta={calc.reembolsos > 0} rodape={<span className="text-[11px] text-slate-500">{inteiro(calc.reembolsos)} venda(s) reembolsada(s) ou chargeback</span>}>
+        <Kpi icon={<Undo2 size={14} />} label="Reembolso" alerta={calc.reembolsos > 0} tip="Valor das vendas reembolsadas ou com chargeback no período" rodape={calc.reembolsos > 0 ? <Nota>{inteiro(calc.reembolsos)} venda(s)</Nota> : undefined}>
           <p className="truncate text-2xl font-bold tabular-nums text-slate-50">{dinheiro(calc.valorReemb, calc.moedaPrincipal)}</p>
         </Kpi>
-        <Kpi icon={<Percent size={14} />} label="Taxa de reembolso" alerta={(calc.taxaReemb ?? 0) >= 5} rodape={<span className="text-[11px] text-slate-500">{inteiro(calc.reembolsos)} de {inteiro(calc.vendas.length)} vendas</span>}>
+        <Kpi icon={<Percent size={14} />} label="Taxa de reembolso" alerta={(calc.taxaReemb ?? 0) >= 5} tip={`Reembolsos ÷ vendas: ${inteiro(calc.reembolsos)} de ${inteiro(calc.vendas.length)}`}>
           <p className="text-3xl font-bold tabular-nums text-slate-50">{pctTxt(calc.taxaReemb, 1)}</p>
         </Kpi>
-        <Kpi icon={<SendHorizontal size={14} />} label="Enviadas à Meta" rodape={
-          <span className="text-[11px] text-slate-500">{pctTxt(calc.sessao, 0)} com a origem do anúncio{calc.extrasFunil > 0 ? ` · bump/upsell ficam só no painel` : ''}</span>
-        }>
+        <Kpi icon={<SendHorizontal size={14} />} label="Enviadas à Meta"
+          tip={`${pctTxt(calc.sessao, 0)} com a origem do anúncio${calc.extrasFunil > 0 ? ' · bump/upsell ficam só no painel' : ''}`}>
           <p className="text-3xl font-bold tabular-nums text-slate-50">
             {inteiro(calc.nVendas - calc.naoEnviadas)}<span className="text-base font-medium text-slate-500"> / {inteiro(calc.nVendas)}</span>
           </p>
         </Kpi>
-        <Kpi icon={<Unlink size={14} />} label="Vendas sem rastreio" alerta={calc.semUtm > 0 || calc.naoEnviadas > 0} rodape={
-          <span className="text-[11px] text-slate-500">
-            sem UTM do anúncio · {calc.naoEnviadas > 0 ? <b className="font-semibold text-amber-300">{inteiro(calc.naoEnviadas)} não enviada(s) ao Facebook</b> : 'todas enviadas ao Facebook'}
-          </span>
-        }>
+        <Kpi icon={<Unlink size={14} />} label="Vendas sem rastreio" alerta={calc.semUtm > 0 || calc.naoEnviadas > 0}
+          tip={`Sem UTM do anúncio · ${calc.naoEnviadas > 0 ? `${inteiro(calc.naoEnviadas)} não enviada(s) ao Facebook` : 'todas enviadas ao Facebook'}`}>
           <p className="text-3xl font-bold tabular-nums text-slate-50">
             {inteiro(calc.semUtm)}<span className="text-base font-medium text-slate-500"> / {inteiro(calc.nVendas)}</span>
           </p>
         </Kpi>
-        <Kpi icon={<Percent size={14} />} label="Conversão" rodape={
-          <span className="text-[11px] text-slate-500">{inteiro(calc.visitas)} visitantes únicos{a.funil_eventos?.PageView ? ` (${inteiro(a.funil_eventos.PageView)} PageView)` : ''} · checkout→venda {pctTxt(calc.checkoutConv)}</span>
-        }>
+        <Kpi icon={<Percent size={14} />} label="Conversão"
+          tip={`Vendas ÷ visitantes únicos${a.funil_eventos?.PageView ? ` (${inteiro(a.funil_eventos.PageView)} PageView)` : ''} · checkout→venda ${pctTxt(calc.checkoutConv)}`}
+          rodape={<Nota>{inteiro(calc.visitas)} visitantes</Nota>}>
           <p className="text-3xl font-bold tabular-nums text-slate-50">{pctTxt(calc.conv, 2)}</p>
         </Kpi>
       </div>
