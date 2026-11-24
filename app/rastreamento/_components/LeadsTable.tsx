@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { Search, Users, Copy, Check, ChevronDown } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { Spinner } from '@/components/ui/Spinner'
 
 type Lead = {
@@ -185,7 +186,7 @@ function BotaoCopiar({ texto, visivel }: { texto: string; visivel?: boolean }) {
 function Param({ valor, bruto, className = '' }: { valor: string | null; bruto?: string | null; className?: string }) {
   const ref = useRef<HTMLSpanElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [pos, setPos] = useState<{ x: number; y: number; cima: boolean } | null>(null)
+  const [pos, setPos] = useState<{ x: number; y: number; cima: boolean; alvo: HTMLElement } | null>(null)
   useEffect(() => {
     if (!pos) return
     const fechar = () => setPos(null)
@@ -198,7 +199,9 @@ function Param({ valor, bruto, className = '' }: { valor: string | null; bruto?:
     const r = ref.current?.getBoundingClientRect()
     if (!r) return
     const cima = r.bottom + 120 > window.innerHeight
-    setPos({ x: Math.max(8, Math.min(r.left, window.innerWidth - 348)), y: cima ? r.top - 4 : r.bottom + 4, cima })
+    // balão vai pra raiz do painel (fora do card arrastável, que desloca o 'fixed'), mantendo as cores do tema
+    const alvo = (ref.current?.closest('.ts-app') as HTMLElement | null) ?? document.body
+    setPos({ x: Math.max(8, Math.min(r.left, window.innerWidth - 348)), y: cima ? r.top - 4 : r.bottom + 4, cima, alvo })
   }
   const sair = () => { timer.current = setTimeout(() => setPos(null), 180) }
   // nome "Campanha X|123456": o ID também fica disponível pra copiar
@@ -207,7 +210,7 @@ function Param({ valor, bruto, className = '' }: { valor: string | null; bruto?:
     <span ref={ref} className="group/p flex min-w-0 items-center gap-0.5" onMouseEnter={abrir} onMouseLeave={sair}>
       <span className={`truncate ${className}`}>{valor}</span>
       <BotaoCopiar texto={valor} />
-      {pos && (
+      {pos && createPortal(
         <span
           role="tooltip"
           onMouseEnter={abrir}
@@ -217,7 +220,8 @@ function Param({ valor, bruto, className = '' }: { valor: string | null; bruto?:
         >
           <span className="flex items-start gap-1.5"><span className="break-all">{valor}</span><BotaoCopiar texto={valor} visivel /></span>
           {id && <span className="flex items-center gap-1.5 opacity-70"><span className="break-all font-mono text-[10px]">ID {id}</span><BotaoCopiar texto={id} visivel /></span>}
-        </span>
+        </span>,
+        pos.alvo,
       )}
     </span>
   )
