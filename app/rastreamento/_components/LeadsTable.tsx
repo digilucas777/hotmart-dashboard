@@ -183,7 +183,7 @@ function BotaoCopiar({ texto, visivel }: { texto: string; visivel?: boolean }) {
     </button>
   )
 }
-function Param({ valor, bruto, className = '' }: { valor: string | null; bruto?: string | null; className?: string }) {
+function Param({ valor, bruto, href, className = '' }: { valor: string | null; bruto?: string | null; href?: string | null; className?: string }) {
   const ref = useRef<HTMLSpanElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [pos, setPos] = useState<{ x: number; y: number; cima: boolean; alvo: HTMLElement } | null>(null)
@@ -208,8 +208,10 @@ function Param({ valor, bruto, className = '' }: { valor: string | null; bruto?:
   const id = bruto && bruto.includes('|') ? bruto.split('|').slice(1).join('|').trim() || null : null
   return (
     <span ref={ref} className="group/p flex min-w-0 items-center gap-0.5" onMouseEnter={abrir} onMouseLeave={sair}>
-      <span className={`truncate ${className}`}>{valor}</span>
-      <BotaoCopiar texto={valor} />
+      {href
+        ? <a href={href} target="_blank" rel="noreferrer" className={`truncate hover:underline ${className}`}>{valor}</a>
+        : <span className={`truncate ${className}`}>{valor}</span>}
+      <BotaoCopiar texto={href || valor} />
       {pos && createPortal(
         <span
           role="tooltip"
@@ -218,7 +220,7 @@ function Param({ valor, bruto, className = '' }: { valor: string | null; bruto?:
           className="fixed z-[60] flex w-max max-w-[340px] flex-col gap-1.5 rounded-lg px-2.5 py-2 text-left text-[11px] font-normal leading-snug shadow-xl"
           style={{ left: pos.x, top: pos.y, transform: pos.cima ? 'translateY(-100%)' : undefined, ...({ background: '#0b1220', border: '1px solid rgba(255,255,255,0.14)', color: '#e2e8f0' }) }}
         >
-          <span className="flex items-start gap-1.5"><span className="break-all">{valor}</span><BotaoCopiar texto={valor} visivel /></span>
+          <span className="flex items-start gap-1.5"><span className="break-all">{href || valor}</span><BotaoCopiar texto={href || valor} visivel /></span>
           {id && <span className="flex items-center gap-1.5 opacity-70"><span className="break-all font-mono text-[10px]">ID {id}</span><BotaoCopiar texto={id} visivel /></span>}
         </span>,
         pos.alvo,
@@ -530,14 +532,14 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
                   </td>
                   <td className="py-2.5 pl-1.5 pr-3 align-top sm:pr-4">
                     {pag ? (
-                      <a href={primeira ?? undefined} target="_blank" rel="noreferrer" className="block truncate text-[11px] text-indigo-300 hover:underline" title={primeira ?? ''}>{pag.replace(/^[^/]+/, '') || pag}</a>
+                      <Param valor={pag.replace(/^[^/]+/, '') || pag} href={primeira} className="text-[11px] text-indigo-300" />
                     ) : <p className="text-slate-600">-</p>}
                     {(() => {
                       // demais páginas que o lead abriu, além da primeira
                       const outras = (l.paginas_lista ?? []).slice(1)
                       if (outras.length === 0) return l.paginas > 1 ? <p className="truncate text-[10px] text-slate-600">{l.paginas} visualizações</p> : null
                       return <>
-                        {outras.map(u => <a key={u} href={u} target="_blank" rel="noreferrer" className="block truncate text-[11px] text-indigo-300 hover:underline" title={u}>{(pagina(u) ?? u).replace(/^[^/]+/, '') || u}</a>)}
+                        {outras.map(u => <Param key={u} valor={(pagina(u) ?? u).replace(/^[^/]+/, '') || u} href={u} className="text-[11px] text-indigo-300" />)}
                         <p className="truncate text-[10px] text-slate-600">{outras.length + 1} páginas</p>
                       </>
                     })()}
