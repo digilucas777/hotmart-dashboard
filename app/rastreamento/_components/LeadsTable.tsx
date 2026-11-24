@@ -107,9 +107,9 @@ function CartaoCompra({ c, n }: { c: Compra; n: number }) {
         {c.enviada ? '✓ enviada à Meta (principal)' : 'não vai à Meta (order bump/upsell)'}
       </p>
       <div className="mt-1.5 space-y-0.5 border-t pt-1.5 text-[10px]" style={{ borderColor: 'rgba(127,127,127,0.15)' }}>
-        <p className="flex min-w-0 gap-1"><span className="w-14 shrink-0 text-slate-600">src</span><span className="truncate font-mono text-teal-300" title={c.src ?? ''}>{c.src || '-'}</span></p>
+        <p className="flex min-w-0 gap-1"><span className="w-14 shrink-0 text-slate-600">src</span><Param valor={c.src ?? null} className="font-mono text-teal-300" /></p>
         {linhas.map(([k, v]) => (
-          <p key={k} className="flex min-w-0 gap-1"><span className="w-14 shrink-0 text-slate-600">{k}</span><span className="truncate text-slate-400" title={v ?? ''}>{v || '-'}</span></p>
+          <p key={k} className="flex min-w-0 gap-1"><span className="w-14 shrink-0 text-slate-600">{k}</span><Param valor={v} className="text-slate-400" /></p>
         ))}
       </div>
     </div>
@@ -162,9 +162,69 @@ function Th({ children, param, className = '' }: { children: React.ReactNode; pa
   )
 }
 
-function Celula({ valor, destaque }: { valor: string | null; destaque?: boolean }) {
+// Parâmetro (campanha, conjunto, anúncio, src...): na tabela fica cortado,
+// mas ao passar o mouse abre um balão com o valor completo e botão copiar.
+// O balão é "fixed" pra não ser cortado pela rolagem da tabela.
+function BotaoCopiar({ texto, visivel }: { texto: string; visivel?: boolean }) {
+  const [ok, setOk] = useState(false)
+  return (
+    <button
+      type="button"
+      title="Copiar"
+      aria-label="Copiar"
+      onClick={async e => {
+        e.stopPropagation()
+        try { await navigator.clipboard.writeText(texto); setOk(true); setTimeout(() => setOk(false), 1500) } catch { /* sem permissão: o texto continua selecionável */ }
+      }}
+      className={`inline-flex shrink-0 items-center justify-center rounded p-0.5 transition-opacity hover:bg-white/10 ${visivel || ok ? 'opacity-80' : 'opacity-0 group-hover/p:opacity-60'}`}
+    >
+      {ok ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+    </button>
+  )
+}
+function Param({ valor, bruto, className = '' }: { valor: string | null; bruto?: string | null; className?: string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [pos, setPos] = useState<{ x: number; y: number; cima: boolean } | null>(null)
+  useEffect(() => {
+    if (!pos) return
+    const fechar = () => setPos(null)
+    window.addEventListener('scroll', fechar, true)
+    return () => window.removeEventListener('scroll', fechar, true)
+  }, [pos])
   if (!valor) return <span className="text-slate-600">-</span>
-  return <p className={`truncate ${destaque ? 'font-medium text-slate-100' : 'text-slate-300'}`} title={valor}>{valor}</p>
+  const abrir = () => {
+    if (timer.current) clearTimeout(timer.current)
+    const r = ref.current?.getBoundingClientRect()
+    if (!r) return
+    const cima = r.bottom + 120 > window.innerHeight
+    setPos({ x: Math.max(8, Math.min(r.left, window.innerWidth - 348)), y: cima ? r.top - 4 : r.bottom + 4, cima })
+  }
+  const sair = () => { timer.current = setTimeout(() => setPos(null), 180) }
+  // nome "Campanha X|123456": o ID também fica disponível pra copiar
+  const id = bruto && bruto.includes('|') ? bruto.split('|').slice(1).join('|').trim() || null : null
+  return (
+    <span ref={ref} className="group/p flex min-w-0 items-center gap-0.5" onMouseEnter={abrir} onMouseLeave={sair}>
+      <span className={`truncate ${className}`}>{valor}</span>
+      <BotaoCopiar texto={valor} />
+      {pos && (
+        <span
+          role="tooltip"
+          onMouseEnter={abrir}
+          onMouseLeave={sair}
+          className="fixed z-[60] flex w-max max-w-[340px] flex-col gap-1.5 rounded-lg px-2.5 py-2 text-left text-[11px] font-normal leading-snug shadow-xl"
+          style={{ left: pos.x, top: pos.y, transform: pos.cima ? 'translateY(-100%)' : undefined, ...({ background: '#0b1220', border: '1px solid rgba(255,255,255,0.14)', color: '#e2e8f0' }) }}
+        >
+          <span className="flex items-start gap-1.5"><span className="break-all">{valor}</span><BotaoCopiar texto={valor} visivel /></span>
+          {id && <span className="flex items-center gap-1.5 opacity-70"><span className="break-all font-mono text-[10px]">ID {id}</span><BotaoCopiar texto={id} visivel /></span>}
+        </span>
+      )}
+    </span>
+  )
+}
+
+function Celula({ valor, bruto, destaque }: { valor: string | null; bruto?: string | null; destaque?: boolean }) {
+  return <Param valor={valor} bruto={bruto} className={destaque ? 'font-medium text-slate-100' : 'text-slate-300'} />
 }
 
 function IconeFacebook() {
@@ -454,15 +514,15 @@ export function LeadsTable({ installationId, start, end, refreshTick }: {
                     {pos && (
                       <div className="mt-0.5 flex min-w-0 items-center gap-1" title={l.utm_term ?? ''}>
                         <span className="shrink-0 scale-[0.8]"><IconePlataforma tipo={pos.tipo} /></span>
-                        <span className="truncate text-[10.5px] text-slate-400">{pos.label}</span>
+                        <Param valor={pos.label} className="text-[10.5px] text-slate-400" />
                       </div>
                     )}
                   </td>
-                  <td className="px-1.5 py-2.5 align-top"><Celula valor={camp} destaque /></td>
-                  <td className="px-1.5 py-2.5 align-top"><Celula valor={conj} /></td>
-                  <td className="px-1.5 py-2.5 align-top"><Celula valor={ad} destaque /></td>
+                  <td className="px-1.5 py-2.5 align-top"><Celula valor={camp} bruto={l.utm_campaign} destaque /></td>
+                  <td className="px-1.5 py-2.5 align-top"><Celula valor={conj} bruto={l.utm_medium} /></td>
+                  <td className="px-1.5 py-2.5 align-top"><Celula valor={ad} bruto={l.utm_content} destaque /></td>
                   <td className="px-1.5 py-2.5 align-top">
-                    {l.src ? <span className="block truncate font-mono text-[10.5px] text-teal-300" title={l.src}>{l.src}</span> : <span className="text-slate-600">-</span>}
+                    <Param valor={l.src} className="font-mono text-[10.5px] text-teal-300" />
                   </td>
                   <td className="py-2.5 pl-1.5 pr-3 align-top sm:pr-4">
                     {pag ? (
