@@ -40,15 +40,28 @@ export async function fetchKvWrites(token: string, accountId: string, namespaceI
   const query = `query($a:String!,$s:Date!,$u:Date!){viewer{accounts(filter:{accountTag:$a}){
     kv: kvOperationsAdaptiveGroups(limit:5000, filter:{date_geq:$s,date_leq:$u,actionType:"write"}){dimensions{date actionType namespaceId} sum{requests}}
   }}}`
-  try {
+  // Período longo (o mês inteiro) a Cloudflare devolve por AMOSTRA (números
+  // redondos, até ~25% abaixo do real: em 25/11/2026 lia 400 com 505 de
+  // verdade). Por isso os últimos 7 dias (hoje, que é o que o limite grátis
+  // usa) vêm numa consulta curta, exata, e o mês numa segunda, só pros dias antes.
+  const buscar = async (s: string, u: string) => {
     const r = await fetch('https://api.cloudflare.com/client/v4/graphql', {
       method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, variables: { a: accountId, s: since < monthStart ? since : monthStart, u: today } }),
+      body: JSON.stringify({ query, variables: { a: accountId, s, u } }),
       signal: AbortSignal.timeout(8000),
     })
     const j = await r.json()
     if (!r.ok || j?.errors) return null
-    const groups = (j?.data?.viewer?.accounts?.[0]?.kv ?? []) as KvGroup[]
+    return (j?.data?.viewer?.accounts?.[0]?.kv ?? []) as KvGroup[]
+  }
+  try {
+    const ontemDoInicio = new Date(Date.parse(`${since}T00:00:00Z`) - 86400000).toISOString().slice(0, 10)
+    const [recentes, antigos] = await Promise.all([
+      buscar(since, today),
+      monthStart < since ? buscar(monthStart, ontemDoInicio) : Promise.resolve([] as KvGroup[]),
+    ])
+    if (!recentes) return null
+    const groups = [...recentes, ...(antigos ?? [])]
     const byDay = new Map<string, number>(), instDay = new Map<string, number>()
     for (const g of groups) {
       if (g.dimensions.actionType.toLowerCase() !== 'write') continue
